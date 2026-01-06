@@ -1,0 +1,20 @@
+<h3>Asignar rentas a ruta</h3>
+<p><strong>Cargador:</strong> {{ ruta.cargador }}</p>
+<p><strong>Fecha:</strong> {{ ruta.fecha }}</p>
+
+<form method="post">
+  {% csrf_token %}
+
+  {% for renta in rentas %}
+    <div>
+      <label>
+        <input type="checkbox" name="rentas" value="{{ renta.id }}">
+        {{ renta.folio }} – {{ renta.cliente }}
+      </label>
+    </div>
+  {% empty %}
+    <p>No hay rentas disponibles.</p>
+  {% endfor %}
+
+  <button class="btn btn-primary">Asignar a ruta</button>
+</form>

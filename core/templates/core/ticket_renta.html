@@ -1,0 +1,95 @@
+{% load static %}
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Ticket Renta {{ renta.id }}</title>
+    <style>
+        body {
+            font-family: Courier, monospace;
+            font-size: 12px;
+            margin: 5mm;
+        }
+        h2, h3 {
+            text-align: center;
+            margin: 5px 0;
+        }
+        hr {
+            border: 1px dashed #444;
+        }
+        .totales {
+            text-align: right;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 5px;
+        }
+        th, td {
+            border-bottom: 1px dotted #444;
+            padding: 2px 0;
+            text-align: left;
+        }
+        .logo {
+            display: block;
+            margin: 0 auto 5px auto;
+            height: 50px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Logo de la empresa -->
+    <img src="{{ logo_url }}" alt="Logo Empresa" class="logo">
+
+    <h2>Ticket de Renta</h2>
+    <h3>Domicilio: Av. Josefa Ortiz De Dominguez 165-c</h3>
+    <h3>Villa de Alvarez, Colima Cel: 3121529952</h3>
+    <h3>Folio: {{ renta.folio }}</h3>
+
+    <hr>
+
+    <p>Cliente: {{ renta.cliente.nombre }}</p>
+    <p>Fecha: {{ renta.fecha_renta }} {{ renta.hora_inicio }} - {{ renta.hora_fin }}</p>
+    <p>Dirección: {{ renta.calle_y_numero }}, {{ renta.colonia }}, {{ renta.ciudad_o_municipio }}</p>
+
+    <hr>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Producto</th>
+                <th>Cant</th>
+                <th>Precio</th>
+                <th>Subtotal</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for p in productos %}
+            <tr>
+                <td>{{ p.nombre }}</td>
+                <td>{{ p.cantidad }}</td>
+                <td>${{ p.precio|floatformat:2 }}</td>
+                <td>${{ p.subtotal|floatformat:2 }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <hr>
+
+    <p class="totales">Total: ${{ total|floatformat:2 }}</p>
+    <p class="totales">Anticipo: ${{ anticipo|floatformat:2 }}</p>
+    <p class="totales">Restante: ${{ restante|floatformat:2 }}</p>
+
+    <hr>
+
+    {% if renta.comentarios %}
+    <hr>
+    <p><strong>Comentarios:</strong></p>
+    <p>{{ renta.comentarios }}</p>
+    {% endif %}
+
+    <p style="text-align:center;">¡Gracias por tu preferencia!</p>
+</body>
+</html>

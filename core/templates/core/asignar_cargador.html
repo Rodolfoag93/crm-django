@@ -1,0 +1,25 @@
+<h3>Asignar cargador</h3>
+
+<p><strong>Folio:</strong> {{ renta.folio }}</p>
+
+<form method="post">
+    {% csrf_token %}
+
+    <label>Selecciona cargador:</label>
+    <select name="cargador" class="form-control" required>
+        <option value="">-- Seleccionar --</option>
+        {% for c in cargadores %}
+            <option value="{{ c.id }}">{{ c.get_full_name|default:c.username }}</option>
+        {% endfor %}
+    </select>
+
+    <br>
+
+    <button type="submit" class="btn btn-success">
+        Asignar
+    </button>
+
+    <a href="{% url 'lista_rentas' %}" class="btn btn-secondary">
+        Cancelar
+    </a>
+</form>

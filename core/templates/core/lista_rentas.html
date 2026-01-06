@@ -1,0 +1,168 @@
+{% extends 'core/base.html' %}
+{% block content %}
+
+<h2>Lista de Rentas</h2>
+
+<!-- Botón Nueva Renta -->
+<div style="margin-bottom: 20px;">
+    <a href="{% url 'nueva_renta' %}"
+   style="
+        display: inline-block;
+        width: 50px;
+        height: 50px;
+        background-color: #FF9800;
+        color: white;
+        font-size: 28px;
+        font-weight: bold;
+        text-align: center;
+        line-height: 50px;
+        border-radius: 8px;
+        text-decoration: none;
+        transition: background-color 0.3s;
+   "
+   onmouseover="this.style.backgroundColor='#fb8c00';"
+   onmouseout="this.style.backgroundColor='#FF9800';"
+   title="Nueva Renta">
+    +
+</a>
+    <a href="{% url 'crear_ruta' %}"
+   style="
+        display: inline-block;
+        width: 50px;
+        height: 50px;
+        background-color: #4CAF50;
+        color: white;
+        font-size: 28px;
+        font-weight: bold;
+        text-align: center;
+        line-height: 50px;
+        border-radius: 8px;
+        text-decoration: none;
+        transition: background-color 0.3s;
+   "
+   onmouseover="this.style.backgroundColor='#45a049';"
+   onmouseout="this.style.backgroundColor='#4CAF50';"
+   title="Crear Ruta">
+    +
+</a>
+</div>
+
+<form method="get" style="margin-bottom: 20px; display: flex; gap: 10px; align-items: center;">
+    <input type="text" name="q" placeholder="Buscar por cliente o folio..." value="{{ query }}">
+    <input type="date" name="fecha" value="{{ fecha }}">
+    <button type="submit">Buscar</button>
+    <a href="{% url 'lista_rentas' %}">Limpiar</a>
+</form>
+
+<table border="1" width="100%">
+    <thead>
+        <tr>
+            <th><a href="?orden=folio{% if query %}&q={{ query }}{% endif %}{% if fecha %}&fecha={{ fecha }}{% endif %}">Folio</a></th>
+            <th><a href="?orden=cliente__nombre{% if query %}&q={{ query }}{% endif %}{% if fecha %}&fecha={{ fecha }}{% endif %}">Cliente</a></th>
+            <th><a href="?orden=fecha_renta{% if query %}&q={{ query }}{% endif %}{% if fecha %}&fecha={{ fecha }}{% endif %}">Fecha</a></th>
+            <th>Hora inicio</th>
+            <th>Hora fin</th>
+            <th><a href="?orden=precio_total{% if query %}&q={{ query }}{% endif %}{% if fecha %}&fecha={{ fecha }}{% endif %}">Total</a></th>
+            <th>Acciones</th>
+            <th>Estatus</th>
+            <th>Cargador</th>
+            <th>Estado</th>
+        </tr>
+    </thead>
+    <tbody>
+{% for renta in rentas %}
+<tr>
+
+<td>
+    <a href="{% url 'ticket_pdf' renta.id %}" target="_blank">
+        {{ renta.folio }}
+    </a>
+</td>
+
+<td>{{ renta.cliente.nombre }}</td>
+<td>{{ renta.fecha_renta }}</td>
+<td>{{ renta.hora_inicio }}</td>
+<td>{{ renta.hora_fin }}</td>
+<td>{{ renta.precio_total }}</td>
+
+<!-- ACCIONES -->
+<td>
+
+    {% if not renta.pagado %}
+        <a href="{% url 'editar_renta' renta.id %}"
+           style="background:#2196F3;color:white;padding:5px 8px;border-radius:3px;">
+           ✏️
+        </a>
+    {% endif %}
+
+    {% if renta.estado_entrega != 'ENTREGADO' and renta.estado_entrega != 'CANCELADO' %}
+    <form method="post"
+          action="{% url 'cancelar_renta' renta.id %}"
+          style="display:inline;"
+          onsubmit="return confirm('¿Deseas cancelar esta renta?');">
+        {% csrf_token %}
+        <button class="btn btn-danger btn-sm">
+            ❌ Cancelar
+        </button>
+    </form>
+{% endif %}
+
+    {# BOTONES DEL CARGADOR #}
+    {% if es_cargador and renta.cargador == user %}
+        {% if renta.estado_entrega == 'ASIGNADO' %}
+            <a href="{% url 'marcar_en_ruta' renta.id %}"
+               style="background:#ff9800;color:white;padding:5px 8px;border-radius:4px;">
+               🚚
+            </a>
+        {% elif renta.estado_entrega == 'EN_RUTA' %}
+            <a href="{% url 'marcar_entregado' renta.id %}"
+               style="background:#4caf50;color:white;padding:5px 8px;border-radius:4px;">
+               ✅
+            </a>
+        {% endif %}
+    {% endif %}
+
+</td>
+
+<!-- ESTATUS ADMIN -->
+<td>
+{% if renta.status == 'ACTIVO' %}
+    <span style="color:green;font-weight:bold;">ACTIVO</span>
+{% else %}
+    <span style="color:red;font-weight:bold;">CANCELADO</span>
+{% endif %}
+</td>
+
+<!-- CARGADOR -->
+<td>
+{% if not renta.cargador %}
+    <a href="{% url 'asignar_cargador' renta.id %}"
+       style="background:#2196F3;color:white;padding:5px 8px;border-radius:4px;text-decoration:none;">
+       Asignar cargador
+    </a>
+{% else %}
+    {{ renta.cargador.username }}
+{% endif %}
+</td>
+
+<!-- ESTADO ENTREGA -->
+<td>
+{% if renta.cargador %}
+    {% if renta.estado_entrega == 'ASIGNADO' %}
+        🟡 Asignado
+    {% elif renta.estado_entrega == 'EN_RUTA' %}
+        🔵 En ruta
+    {% elif renta.estado_entrega == 'ENTREGADO' %}
+        🟢 Entregado
+    {% endif %}
+{% else %}
+    <span style="color:#999;">Pendiente</span>
+{% endif %}
+</td>
+
+</tr>
+{% endfor %}
+</tbody>
+</table>
+
+{% endblock %}

@@ -1,0 +1,25 @@
+{% if ruta %}
+  <h3>Ruta del {{ ruta.fecha }}</h3>
+
+  {% if ruta.estado == 'CREADA' %}
+    <form method="post" action="{% url 'iniciar_ruta' ruta.id %}">
+      {% csrf_token %}
+      <button class="btn btn-warning">Iniciar ruta</button>
+    </form>
+  {% endif %}
+
+  {% if ruta.estado == 'EN_RUTA' %}
+    <form method="post" action="{% url 'finalizar_ruta' ruta.id %}">
+      {% csrf_token %}
+      <button class="btn btn-success">Finalizar ruta</button>
+    </form>
+  {% endif %}
+
+  <ul>
+    {% for renta in ruta.rentas.all %}
+      <li>{{ renta.folio }} - {{ renta.cliente }}</li>
+    {% endfor %}
+  </ul>
+{% else %}
+  <p>No tienes ruta asignada.</p>
+{% endif %}

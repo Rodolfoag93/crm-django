@@ -1,0 +1,17 @@
+<h2>Crear ruta</h2>
+
+<form method="post">
+  {% csrf_token %}
+
+  <label>Fecha</label>
+  <input type="date" name="fecha" required>
+
+  <label>Cargador</label>
+  <select name="cargador" required>
+    {% for cargador in cargadores %}
+      <option value="{{ cargador.id }}">{{ cargador.get_full_name|default:cargador.username }}</option>
+    {% endfor %}
+  </select>
+
+  <button class="btn btn-primary">Crear ruta</button>
+</form>

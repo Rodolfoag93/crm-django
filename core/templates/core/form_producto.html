@@ -1,0 +1,86 @@
+{% extends 'core/base.html' %}
+{% block content %}
+
+<h2>
+    {% if form.instance.pk %}
+        Editar Producto
+    {% else %}
+        Nuevo Producto
+    {% endif %}
+</h2>
+
+<style>
+    .form-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+        margin-top: 20px;
+    }
+
+    .form-grid p {
+        margin: 0;
+        padding: 10px;
+        background: #f8f8f8;
+        border-radius: 5px;
+    }
+
+    .form-grid label {
+        font-weight: bold;
+    }
+
+    .full-width {
+        grid-column: span 2;
+    }
+
+    .btn-right {
+        display: flex;
+        justify-content: flex-end;
+        margin-top: 20px;
+    }
+
+    .btn-right button {
+        background-color: #4CAF50;
+        border: none;
+        color: white;
+        padding: 12px 25px;
+        font-size: 16px;
+        font-weight: bold;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: background-color 0.3s;
+    }
+
+    .btn-right button:hover {
+        background-color: #45a049;
+    }
+</style>
+
+<form method="POST">
+    {% csrf_token %}
+
+    <div class="form-grid">
+
+        {% for field in form %}
+            <p class="{% if field.field.widget.input_type == 'textarea' %}full-width{% endif %}">
+                {{ field.label_tag }}<br>
+                {{ field }}
+
+                {% if field.help_text %}
+                    <small style="color: gray;">{{ field.help_text }}</small>
+                {% endif %}
+
+                {% for error in field.errors %}
+                    <span style="color: red;">{{ error }}</span>
+                {% endfor %}
+            </p>
+        {% endfor %}
+
+    </div>
+
+    <div class="btn-right">
+        <button type="submit">Guardar</button>
+    </div>
+
+</form>
+
+{% endblock %}

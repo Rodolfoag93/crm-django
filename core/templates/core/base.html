@@ -1,0 +1,113 @@
+{% load static %}
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>{% block title %}Mi Empresa{% endblock %}</title>
+    <link rel="stylesheet" href="{% static 'css/styles.css' %}">
+
+    <style>
+
+    html, body {
+        height: 100%;
+        margin: 0;
+        padding: 0;
+    }
+
+    body {
+        display: flex;
+        flex-direction: column;
+        min-height: 100vh;
+        font-family: Arial, sans-serif;
+        background: linear-gradient(to bottom, #ffffff, #e8ffe8, #b2ffb2);
+        background-repeat: no-repeat;
+        background-attachment: fixed;
+    }
+
+    header {
+        text-align: left;
+        margin: 20px 20px 0 20px;
+    }
+
+    header img {
+        width: 12%;
+        max-width: 180px;
+        min-width: 100px;
+        height: auto;
+    }
+
+    /* NAVBAR LOGIN */
+    nav {
+        display: flex;
+        justify-content: flex-end;
+        align-items: center;
+        gap: 15px;
+        background: #004d00;
+        padding: 10px 20px;
+        color: white;
+        font-size: 15px;
+    }
+
+    nav a {
+        color: white;
+        text-decoration: none;
+        font-weight: bold;
+    }
+
+    nav a:hover {
+        text-decoration: underline;
+    }
+
+    .content {
+        flex: 1;
+        padding: 20px;
+        padding-bottom: 80px;
+    }
+
+    footer {
+        text-align: center;
+        padding: 15px 0;
+        font-size: 14px;
+        color: #ffffff;
+        background-color: #003400;
+        width: 100%;
+        margin-top: auto;
+    }
+    </style>
+
+</head>
+<body>
+
+<header>
+    <a href="{% url 'home' %}">
+        <img src="{% static 'img/trota_logo.jpeg' %}" alt="Logo Empresa" style="cursor:pointer;">
+    </a>
+    <hr style="border: none; height: 4px; background-color: #98ff96; margin-top: 5px;">
+</header>
+
+<!-- NAVBAR  -->
+<nav>
+    {% if user.is_authenticated %}
+        <span>Hola, {{ user.get_full_name|default:user.username }}</span>
+        <<form method="post" action="{% url 'logout' %}" style="display:inline;">
+    {% csrf_token %}
+    <button type="submit" style="background:none;border:none;color:white;cursor:pointer;">
+        Cerrar sesión
+    </button>
+</form>
+    {% else %}
+        <a href="{% url 'login' %}">Iniciar sesión</a>
+    {% endif %}
+</nav>
+
+<div class="content">
+    {% block content %}{% endblock %}
+</div>
+
+<footer>
+    © 2025 Trotamundos — Todos los derechos reservados
+</footer>
+
+</body>
+</html>

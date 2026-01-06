@@ -1,0 +1,92 @@
+{% extends 'core/base.html' %}
+{% block content %}
+
+<h2 style="text-align:center; margin-top:20px;">Módulo de Contabilidad</h2>
+
+<hr style="border:none; background:#5ccb5f; height:4px; width:60%; margin:auto;">
+
+<br>
+
+<h3>📦 Pedidos</h3>
+
+<table border="1" cellpadding="10" style="width:100%; background:white;">
+    <tr>
+        <th>ID Pedido</th>
+        <th>Total</th>
+        <th>Estado</th>
+        <th>Acción</th>
+    </tr>
+
+    {% for p in pedidos %}
+    <tr>
+        <td>{{ p.renta.id }}</td>
+        <td>${{ p.total }}</td>
+        <td>
+            {% if p.pagado %}
+            <span style="color:green; font-weight:bold;">Pagado</span>
+            {% else %}
+            <span style="color:red; font-weight:bold;">Pendiente</span>
+            {% endif %}
+        </td>
+        <td>
+            {% if p.pagado %}
+            <a href="{% url 'cont_pendiente' p.id %}">Marcar Pendiente</a>
+            {% else %}
+            <a href="{% url 'cont_pagar' p.id %}">Marcar Pagado</a>
+            {% endif %}
+        </td>
+    </tr>
+    {% endfor %}
+</table>
+
+<br><br>
+
+<h3>💸 Gastos</h3>
+
+<table border="1" cellpadding="10" style="width:100%; background:white;">
+    <tr>
+        <th>Categoría</th>
+        <th>Monto</th>
+        <th>Fecha</th>
+    </tr>
+    {% for g in gastos %}
+    <tr>
+        <td>{{ g.categoria }}</td>
+        <td>${{ g.monto }}</td>
+        <td>{{ g.fecha }}</td>
+    </tr>
+    {% endfor %}
+</table>
+
+<br><br>
+
+<h3>🧾 Compras</h3>
+
+<table border="1" cellpadding="10" style="width:100%; background:white;">
+    <tr>
+        <th>Proveedor</th>
+        <th>Monto</th>
+        <th>Fecha</th>
+    </tr>
+    {% for c in compras %}
+    <tr>
+        <td>{{ c.proveedor }}</td>
+        <td>${{ c.monto }}</td>
+        <td>{{ c.fecha }}</td>
+    </tr>
+    {% endfor %}
+</table>
+
+<br><br>
+
+<h3>📊 Resumen</h3>
+<ul>
+    <li>Total pedidos: ${{ total_pedidos }}</li>
+    <li>Total pagado: <b>${{ total_pagado }}</b></li>
+    <li>Pendiente por cobrar: <b>${{ total_pendiente }}</b></li>
+    <li>Total gastos: ${{ total_gastos }}</li>
+    <li>Total compras: ${{ total_compras }}</li>
+    <li><b>Saldo final: ${{ saldo }}</b></li>
+</ul>
+
+{% endblock %}

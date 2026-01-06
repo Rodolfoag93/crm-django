@@ -1,0 +1,53 @@
+{% extends 'core/base.html' %}
+
+{% block content %}
+
+<h2>Lista de Productos</h2>
+
+<div style="margin-bottom: 20px;">
+    <a href="{% url 'nuevo_producto' %}"
+       style="padding: 10px 15px; background-color: #4CAF50; color: white; text-decoration: none; border-radius: 3px;">
+        + Nuevo Producto
+    </a>
+</div>
+
+<table border="1" cellspacing="0" cellpadding="10" style="width: 100%; border-collapse: collapse;">
+    <thead>
+        <tr style="background-color: #f0f0f0;">
+            <th>Nombre</th>
+            <th>Tipo</th>
+            <th>Precio</th>
+            <th>Disponible</th>
+            <th>Acciones</th>
+        </tr>
+    </thead>
+
+    <tbody>
+        {% for producto in productos %}
+        <tr>
+            <td>{{ producto.nombre }}</td>
+            <td>{{ producto.tipo }}</td>
+            <td>${{ producto.precio }}</td>
+            <td>
+                {% if producto.disponible %}
+                    ✔ Sí
+                {% else %}
+                    ✖ No
+                {% endif %}
+            </td>
+            <td>
+                <a href="{% url 'editar_producto' producto.id %}"
+                   style="padding: 5px 10px; background-color: #2196F3; color: white; text-decoration: none; border-radius: 3px;">
+                    Editar
+                </a>
+            </td>
+        </tr>
+        {% empty %}
+        <tr>
+            <td colspan="5" style="text-align: center;">No hay productos registrados</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+{% endblock %}

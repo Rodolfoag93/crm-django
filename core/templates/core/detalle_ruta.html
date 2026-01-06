@@ -1,0 +1,13 @@
+<h2>Ruta {{ ruta.fecha }} – {{ ruta.cargador }}</h2>
+
+<a href="{% url 'asignar_rentas_ruta' ruta.id %}" class="btn btn-secondary">
+  Asignar rentas
+</a>
+
+<ul>
+  {% for renta in ruta.rentas.all %}
+    <li>{{ renta.folio }} – {{ renta.cliente }}</li>
+  {% empty %}
+    <li>No hay rentas en esta ruta</li>
+  {% endfor %}
+</ul>
