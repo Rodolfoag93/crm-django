@@ -1,10 +1,10 @@
 {% extends 'core/base.html' %}
 {% block content %}
- <h2 style="margin-top: 10px; font-size: 24px; font-weight: bold; text-align: center;">
-        Panel Principal
-    </h2>
+<h2 style="margin-top: 10px; font-size: 24px; font-weight: bold; text-align: center;">
+    Panel Principal
+</h2>
 
-    <hr style="border: none; height: 4px; background-color: #5ccb5f; margin-top: 5px;">
+<hr style="border: none; height: 4px; background-color: #5ccb5f; margin-top: 5px;">
 
 <div style="display: flex; gap: 20px; flex-wrap: wrap; justify-content: center; margin-top: 20px;">
 
@@ -36,17 +36,37 @@
         <a href="{% url 'pedidos_semana' %}" style="display: inline-block; margin-top: 10px; padding: 10px 15px; background-color: white; color: #9C27B0; text-decoration: none; border-radius: 5px; font-weight: bold;">Ir</a>
     </div>
 
+    <!-- Nómina -->
+    <div style="background-color: #43a047; color: white; padding: 20px; border-radius: 10px; width: 200px; text-align: center; box-shadow: 0 4px 8px rgba(0,0,0,0.2);">
+        <h3>Nómina</h3>
+        <p>Gestiona pagos de empleados</p>
+        <a href="{% url 'lista_nomina' %}" style="display: inline-block; margin-top: 10px; padding: 10px 15px; background-color: white; color: #43a047; text-decoration: none; border-radius: 5px; font-weight: bold;">Ir</a>
+    </div>
+
+    <!-- Empleados -->
+    <div style="background-color: #FF5722; color: white; padding: 20px; border-radius: 10px; width: 200px; text-align: center; box-shadow: 0 4px 8px rgba(0,0,0,0.2);">
+        <h3>Empleados</h3>
+        <p>Gestiona tus empleados</p>
+        <a href="{% url 'lista_empleados' %}" style="display: inline-block; margin-top: 10px; padding: 10px 15px; background-color: white; color: #FF5722; text-decoration: none; border-radius: 5px; font-weight: bold;">Ir</a>
+    </div>
+
     <!-- Rutas -->
     {% if not es_cargador %}
     <div style="background-color: #2196F3; color: white; padding: 20px; border-radius: 10px; width: 200px; text-align: center; box-shadow: 0 4px 8px rgba(0,0,0,0.2);">
         <h3>Rutas</h3>
         <p>Gestiona rutas de entrega</p>
-        <a href="{% url 'lista_rutas' %}"
-       style="display: inline-block; margin-top: 10px; padding: 10px 15px; background-color: white; color: #2196F3; text-decoration: none; border-radius: 5px; font-weight: bold;">
-       Ir
-        </a>
+        <a href="{% url 'lista_rutas' %}" style="display: inline-block; margin-top: 10px; padding: 10px 15px; background-color: white; color: #2196F3; text-decoration: none; border-radius: 5px; font-weight: bold;">Ir</a>
     </div>
-{% endif %}
+    {% endif %}
+
+    <!-- Calendario / Ocupación -->
+    {% if not es_cargador %}
+    <div style="background-color: #4CAF50; color: white; padding: 20px; border-radius: 10px; width: 200px; text-align: center; box-shadow: 0 4px 8px rgba(0,0,0,0.2);">
+        <h3>Ocupación</h3>
+        <p>Agenda y mantenimiento</p>
+        <a href="{% url 'ocupacion_productos' %}" style="display: inline-block; margin-top: 10px; padding: 10px 15px; background-color: white; color: #4CAF50; text-decoration: none; border-radius: 5px; font-weight: bold;">Ver</a>
+    </div>
+    {% endif %}
 
 </div>
 {% endblock %}

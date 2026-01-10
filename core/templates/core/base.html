@@ -8,6 +8,24 @@
     <link rel="stylesheet" href="{% static 'css/styles.css' %}">
 
     <style>
+    .alert {
+        padding: 12px 15px;
+        border-radius: 6px;
+        margin-bottom: 15px;
+        font-weight: bold;
+    }
+
+    .alert-success {
+        background: #e0ffe0;
+        color: #065f06;
+        border: 1px solid #8dd88d;
+    }
+
+    .alert-error {
+        background: #ffe0e0;
+        color: #900;
+        border: 1px solid #ff9a9a;
+    }
 
     html, body {
         height: 100%;
@@ -74,6 +92,15 @@
         width: 100%;
         margin-top: auto;
     }
+
+    .form-input {
+         border: 1px solid #ccc;
+         padding: 6px;
+         border-radius: 4px;
+         background: #fff;
+         min-width: 140px;
+    }
+
     </style>
 
 </head>
@@ -90,12 +117,13 @@
 <nav>
     {% if user.is_authenticated %}
         <span>Hola, {{ user.get_full_name|default:user.username }}</span>
-        <<form method="post" action="{% url 'logout' %}" style="display:inline;">
-    {% csrf_token %}
-    <button type="submit" style="background:none;border:none;color:white;cursor:pointer;">
-        Cerrar sesión
-    </button>
-</form>
+        <form method="post" action="{% url 'logout' %}" style="display:inline;">
+            {% csrf_token %}
+            <button type="submit"
+                    style="background:none;border:none;color:white;cursor:pointer;">
+                Cerrar sesión
+            </button>
+        </form>
     {% else %}
         <a href="{% url 'login' %}">Iniciar sesión</a>
     {% endif %}

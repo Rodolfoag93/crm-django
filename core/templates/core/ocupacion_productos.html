@@ -1,0 +1,75 @@
+{% extends 'core/base.html' %}
+
+{% block content %}
+
+<a href="?filtro=lleno">Solo llenos</a> |
+<a href="?filtro=parcial">Llenos y parciales</a> |
+<a href="?filtro=todos">Todos</a>
+
+<h2>Ocupación de Productos (Próximos 7 días)</h2>
+
+<form method="get" style="margin-bottom:15px;">
+    <label>Mostrar:</label>
+    <select name="filtro" onchange="this.form.submit()">
+        <option value="todos">Todos</option>
+        <option value="parcial">Solo parciales</option>
+        <option value="lleno">Solo llenos</option>
+    </select>
+</form>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <a class="btn btn-outline-secondary"
+       href="?week={{ prev_week|date:'Y-m-d' }}&filtro={{ filtro }}">
+    ⬅ Semana anterior
+    </a>
+
+    <strong>
+        {{ inicio|date:"d M Y" }} - {{ fin|date:"d M Y" }}
+    </strong>
+
+    <a class="btn btn-outline-secondary"
+       href="?week={{ next_week|date:'Y-m-d' }}&filtro={{ filtro }}">
+    Semana siguiente ➡
+    </a>
+</div>
+
+<table border="1" cellpadding="8" cellspacing="0" style="width:100%; border-collapse: collapse;">
+    <thead>
+        <tr style="background:#f0f0f0;">
+            <th>Producto</th>
+            {% for dia in dias %}
+                <th>{{ dia|date:"d M" }}</th>
+            {% endfor %}
+        </tr>
+    </thead>
+    <tbody>
+        {% for fila in data %}
+        <tr>
+            <td>{{ fila.producto.nombre }}</td>
+
+            {% for estado in fila.estados %}
+                <td style="text-align:center;
+                    {% if estado.estado == 'LIBRE' %}background:#c8e6c9;{% endif %}
+                    {% if estado.estado == 'PARCIAL' %}background:#fff9c4;{% endif %}
+                    {% if estado.estado == 'LLENO' %}background:#ffcdd2;{% endif %}
+                    {% if estado.estado == 'INACTIVO' %}background:#e0e0e0;{% endif %}
+                ">
+                    {{ estado.estado }}
+                </td>
+            {% endfor %}
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<br>
+
+<div>
+    <strong>Leyenda:</strong>
+    <span style="background:#c8e6c9;padding:5px;">LIBRE</span>
+    <span style="background:#fff9c4;padding:5px;">PARCIAL</span>
+    <span style="background:#ffcdd2;padding:5px;">LLENO</span>
+    <span style="background:#e0e0e0;padding:5px;">INACTIVO</span>
+</div>
+
+{% endblock %}

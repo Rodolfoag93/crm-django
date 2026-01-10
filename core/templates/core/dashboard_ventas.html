@@ -1,0 +1,37 @@
+{% extends 'core/base.html' %}
+{% block content %}
+
+<h2 style="text-align:center;">📦 Ventas</h2>
+<hr>
+
+<div style="display:flex; gap:20px; flex-wrap:wrap; justify-content:center;">
+
+    <a href="{% url 'lista_clientes' %}" class="sub-card">Clientes</a>
+    <a href="{% url 'lista_productos' %}" class="sub-card">Productos</a>
+    <a href="{% url 'lista_rentas' %}" class="sub-card">Rentas</a>
+
+    {% if not es_cargador %}
+        <a href="{% url 'lista_rutas' %}" class="sub-card">Rutas</a>
+        <a href="{% url 'ocupacion_productos' %}" class="sub-card">Ocupación</a>
+    {% endif %}
+
+</div>
+
+<style>
+.sub-card{
+    width:200px;
+    padding:25px;
+    background:#2196F3;
+    color:white;
+    border-radius:10px;
+    text-align:center;
+    text-decoration:none;
+    font-weight:bold;
+    box-shadow:0 4px 8px rgba(0,0,0,0.2);
+}
+.sub-card:hover{
+    background:#1976D2;
+}
+</style>
+
+{% endblock %}

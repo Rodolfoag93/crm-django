@@ -30,10 +30,14 @@
             <td>${{ producto.precio }}</td>
             <td>
                 {% if producto.disponible %}
-                    ✔ Sí
+                  <span style="color: green; font-weight: bold;">✔ Disponible</span>
+                 {% else %}
+                {% if not producto.activo %}
+                  <span style="color: orange;">⚠ En mantenimiento</span>
                 {% else %}
-                    ✖ No
-                {% endif %}
+                    <span style="color: red;">✖ Sin stock</span>
+                 {% endif %}
+                        {% endif %}
             </td>
             <td>
                 <a href="{% url 'editar_producto' producto.id %}"

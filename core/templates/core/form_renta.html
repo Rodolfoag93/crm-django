@@ -3,6 +3,48 @@
 
 <h2>{% if form.instance.pk %}Editar Renta{% else %}Nueva Renta{% endif %}</h2>
 
+{% if messages %}
+  {% for message in messages %}
+    {% if "RENTA_CREADA::" in message|stringformat:"s" %}
+        <div style="background:#e0ffe0; color:#060; padding:10px; border-radius:6px; margin-bottom:15px;">
+            Renta creada correctamente.
+        </div>
+
+        <script>
+            const rentaId = "{{ message|stringformat:'s' }}".split("::")[1];
+
+            // Abrir ticket en nueva pestaña
+            window.open(`/rentas/ticket/${rentaId}/`, "_blank");
+
+            // Limpiar el formulario
+            const form = document.querySelector('form');
+            form.reset();
+
+            // Limpiar la tabla de productos
+            const tbody = document.querySelector("#tabla-productos tbody");
+            tbody.innerHTML = "";
+
+            // Resetear total y productos_data
+            document.getElementById("total-general").textContent = "0.00";
+            document.getElementById("precio-total").value = "0.00";
+            document.getElementById("productos-data").value = "[]";
+            document.getElementById("restante").value = "0.00";
+
+            // Limpiar input cliente
+            document.getElementById("cliente-input").value = "";
+            document.getElementById("cliente-id").value = "";
+            document.getElementById("calle_y_numero").value = "";
+            document.getElementById("colonia").value = "";
+            document.getElementById("ciudad_o_municipio").value = "";
+        </script>
+    {% else %}
+        <div style="background:#ffe0e0; color:#900; padding:10px; border-radius:6px; margin-bottom:15px; font-weight:bold;">
+            {{ message }}
+        </div>
+    {% endif %}
+  {% endfor %}
+{% endif %}
+
 {% if form.instance.estado_entrega == "EN_RUTA" or form.instance.estado_entrega == "ENTREGADO" %}
 <div style="background:#ffe0e0; color:#900; padding:10px; border-radius:5px; margin-bottom:15px;">
     ⚠️ Esta renta ya está <strong>{{ form.instance.estado_entrega }}</strong> y no puede modificarse.
@@ -29,15 +71,17 @@
     <h4>Datos del Evento</h4>
     <div style="display: flex; gap: 20px; align-items: center; margin-bottom: 10px;">
         <div>
-            {{ form.fecha_renta.label_tag }}<br>
-            {{ form.fecha_renta }}
+                <label>Fecha</label>
+                {{ form.fecha_renta }}
         </div>
+
         <div>
-            {{ form.hora_inicio.label_tag }}<br>
-            {{ form.hora_inicio }}
+                <label>Hora inicio</label>
+                {{ form.hora_inicio }}
         </div>
+
         <div>
-            {{ form.hora_fin.label_tag }}<br>
+            <label>Hora fin</label>
             {{ form.hora_fin }}
         </div>
     </div>
@@ -198,7 +242,13 @@ function agregarProductoTabla(prod) {
     const tr = document.createElement("tr");
     tr.innerHTML = `
         <td data-id="${prod.id}">${prod.nombre}</td>
-        <td>${prod.precio}</td>
+        <td>
+            <input type="number"
+                   class="precio-unitario"
+                   value="${prod.precio}"
+                   step="0.01"
+                   style="width: 80px;">
+        </td>
         <td><input type="number" value="${cantidad}" min="1" class="cantidad" style="width: 60px;"></td>
         <td class="subtotal">${(prod.precio * cantidad).toFixed(2)}</td>
         <td><button type="button" class="eliminar">❌</button></td>
@@ -206,6 +256,7 @@ function agregarProductoTabla(prod) {
     tbody.appendChild(tr);
 
     tr.querySelector(".cantidad").addEventListener("input", actualizarTotal);
+    tr.querySelector(".precio-unitario").addEventListener("input", actualizarTotal); // 🔥 nuevo
     tr.querySelector(".eliminar").addEventListener("click", () => {
         tr.remove();
         actualizarTotal();
@@ -223,19 +274,25 @@ function actualizarTotal() {
     let productos = [];
 
     document.querySelectorAll("#tabla-productos tbody tr").forEach(row => {
-        const id = row.children[0].dataset.id;
-        const nombre = row.children[0].textContent;
-        const precio = parseFloat(row.children[1].textContent);
-        const cantidad = parseInt(row.querySelector(".cantidad").value);
-        const subtotal = precio * cantidad;
+    const id = row.children[0].dataset.id;
+    const nombre = row.children[0].textContent;
+    const precio = parseFloat(row.querySelector(".precio-unitario").value); // 🔥 ahora editable
+    const cantidad = parseInt(row.querySelector(".cantidad").value);
+    const subtotal = precio * cantidad;
 
-        row.querySelector(".subtotal").textContent = subtotal.toFixed(2);
-        total += subtotal;
+    row.querySelector(".subtotal").textContent = subtotal.toFixed(2);
+    total += subtotal;
 
-        if (id) {
-            productos.push({id: parseInt(id), nombre, precio, cantidad});
-        }
-    });
+    if (id) {
+        productos.push({
+            id: parseInt(id),
+            nombre,
+            precio_unitario: precio, // 🔥 enviamos al backend
+            cantidad,
+            nota: row.querySelector(".nota")?.value || ""
+        });
+    }
+});
 
     document.getElementById("total-general").textContent = total.toFixed(2);
     document.getElementById("precio-total").value = total.toFixed(2);

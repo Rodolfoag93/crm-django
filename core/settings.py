@@ -10,3 +10,6 @@ STATICFILES_DIRS = [
 LOGIN_REDIRECT_URL = '/home/'
 LOGOUT_REDIRECT_URL = '/accounts/login/'
 LOGIN_URL = '/accounts/login/'
+INSTALLED_APPS = [
+    'core.apps.CoreConfig',  # 👈 NO 'core'
+]

@@ -1,6 +1,8 @@
 from django.db import models
 from django.utils import timezone
 from django.contrib.auth.models import User
+from django.db.models import Sum
+from datetime import timedelta
 
 
 class Cliente(models.Model):
@@ -20,6 +22,9 @@ class Producto(models.Model):
         ('ME', 'Mesa'),
         ('SI', 'Silla'),
         ('AN', 'Animación'),
+        ('FL', 'Flete'),
+        ('LZ', 'Loza'),
+        ('MT', 'Manteleria'),
         ('OT', 'Otro'),
     ]
 
@@ -27,8 +32,10 @@ class Producto(models.Model):
     tipo = models.CharField(max_length=2, choices=TIPO_PRODUCTO)
     precio = models.DecimalField(max_digits=10, decimal_places=2)
 
+
     stock_total = models.PositiveIntegerField(default=0)
     stock_disponible = models.PositiveIntegerField(default=0)
+    stock = models.IntegerField(default=0)
 
     # 🟢 Control administrativo
     activo = models.BooleanField(default=True)
@@ -50,8 +57,66 @@ class Producto(models.Model):
         )
         self.save(update_fields=['stock_disponible'])
 
+    @property
+    def disponible(self):
+        return self.activo and self.stock_disponible > 0
+
+    def stock_disponible_en_horario(self, fecha, hora_inicio, hora_fin):
+        # aquí ya puedes usar self
+        rentas_en_horario = RentaProducto.objects.filter(
+            producto=self,
+            renta__fecha_renta=fecha,
+            renta__hora_inicio__lt=hora_fin,
+            renta__hora_fin__gt=hora_inicio,
+            renta__status='ACTIVO'
+        ).aggregate(total=models.Sum('cantidad'))['total'] or 0
+
+        disponible = self.stock_total - rentas_en_horario
+        return max(disponible, 0)
+
+    def ocupacion_por_dia(self, fecha):
+        if not self.activo:
+            return "INACTIVO"
+
+        usados = RentaProducto.objects.filter(
+            producto=self,
+            renta__fecha_renta=fecha,
+            renta__status="ACTIVO"
+        ).aggregate(total=Sum("cantidad"))["total"] or 0
+
+        if usados == 0:
+            return "LIBRE"
+
+        if usados < self.stock_total:
+            return "PARCIAL"
+
+        return "LLENO"
+
+    def save(self, *args, **kwargs):
+        if self.stock_disponible > self.stock_total:
+            self.stock_disponible = self.stock_total
+        super().save(*args, **kwargs)
+
     def __str__(self):
         return f"{self.nombre}"
+
+class OcupacionDia(models.Model):
+    ESTADOS = [
+        ('LIBRE', 'Libre'),
+        ('PARCIAL', 'Parcial'),
+        ('LLENO', 'Lleno'),
+    ]
+
+    producto = models.ForeignKey(Producto, on_delete=models.CASCADE)
+    fecha = models.DateField()
+    estado = models.CharField(max_length=10, choices=ESTADOS)
+
+    class Meta:
+        unique_together = ('producto', 'fecha')
+        indexes = [
+            models.Index(fields=['fecha']),
+            models.Index(fields=['producto', 'fecha']),
+        ]
 
 class Renta(models.Model):
     STATUS = [
@@ -135,21 +200,40 @@ class RentaProducto(models.Model):
         related_name="rentaproductos"
     )
 
-    cantidad = models.IntegerField(default=1)
+    cantidad = models.PositiveIntegerField(default=1)
+
+    # 💰 precios
+    precio_lista = models.DecimalField(
+        max_digits=10,
+        decimal_places=2
+    )
 
     precio_unitario = models.DecimalField(
         max_digits=10,
-        decimal_places=2,
-        null=True,
-        blank=True
+        decimal_places=2
     )
 
     subtotal = models.DecimalField(
         max_digits=10,
         decimal_places=2,
-        null=True,
-        blank=True
+        editable=False
     )
+
+    # 📝 opcional pero MUY útil
+    nota = models.CharField(max_length=255, blank=True)
+
+    def save(self, *args, **kwargs):
+
+        # 🔹 precio de lista SIEMPRE viene del producto
+        if not self.precio_lista:
+            self.precio_lista = self.producto.precio
+
+        # 🔹 si no se especifica precio_unitario → usar lista
+        if self.precio_unitario is None:
+            self.precio_unitario = self.precio_lista
+
+        self.subtotal = self.cantidad * self.precio_unitario
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.producto.nombre} x{self.cantidad} - {self.renta.folio}"
@@ -182,3 +266,48 @@ class Compra(models.Model):
 
     def __str__(self):
         return f"{self.proveedor} - ${self.monto}"
+
+
+
+def calcular_total(renta):
+    """
+    Calcula el total de la renta usando el precio ajustado de cada producto en esa renta.
+    """
+    return sum(rp.cantidad * rp.precio_unitario for rp in renta.rentaproductos.all())
+
+
+class Empleado(models.Model):
+    nombre = models.CharField(max_length=100)
+    telefono = models.CharField(max_length=20, blank=True, null=True)
+    sueldo_diario = models.DecimalField(max_digits=10, decimal_places=2)
+    correo = models.EmailField(blank=True, null=True)
+    comentarios = models.TextField(blank=True, null=True)
+
+    def __str__(self):
+        return self.nombre
+
+class Nomina(models.Model):
+    empleado = models.ForeignKey(Empleado, on_delete=models.CASCADE, related_name='nominas')
+    fecha_inicio = models.DateField()
+    fecha_fin = models.DateField()
+    dias_trabajados = models.PositiveIntegerField(default=0)
+    eventos_extras = models.PositiveIntegerField(default=0)
+    pago_extra_por_evento = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+
+    total = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+
+    def calcular_total(self):
+        """
+        Calcula el total a pagar al empleado según días trabajados y eventos extras.
+        """
+        total_dias = self.dias_trabajados * self.empleado.sueldo_diario
+        total_eventos = self.eventos_extras * self.pago_extra_por_evento
+        self.total = total_dias + total_eventos
+        return self.total
+
+    def save(self, *args, **kwargs):
+        self.calcular_total()  # recalcula automáticamente al guardar
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.empleado.nombre} ({self.fecha_inicio} - {self.fecha_fin})"

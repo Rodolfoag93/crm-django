@@ -40,6 +40,7 @@ urlpatterns = [
         views.cancelar_renta,
         name='cancelar_renta'
     ),
+    path('inventario/ocupacion/', views.ocupacion_productos, name='ocupacion_productos'),
     path('ruta/<int:ruta_id>/iniciar/', views.iniciar_ruta, name='iniciar_ruta'),
     path('ruta/<int:ruta_id>/finalizar/', views.finalizar_ruta, name='finalizar_ruta'),
     path('mi-ruta/', views.mi_ruta, name='mi_ruta'),
@@ -50,11 +51,12 @@ urlpatterns = [
 ),
     path('rutas/', views.lista_rutas, name='lista_rutas'),
     path('rutas/crear/', views.crear_ruta, name='crear_ruta'),
+    path('ocupacion-productos/',views.ocupacion_productos,name='ocupacion_productos'),
 
     # 💰 Contabilidad
     path('contabilidad/', views.contabilidad_home, name='contabilidad'),
-    path('contabilidad/pagar/<int:pk>/', views.marcar_pagado, name='cont_pagar'),
-    path('contabilidad/pendiente/<int:pk>/', views.marcar_pendiente, name='cont_pendiente'),
+    path('contabilidad/pagar/<int:renta_id>/', views.marcar_pagado, name='cont_pagar'),
+    path('contabilidad/pendiente/<int:renta_id>/', views.marcar_pendiente, name='cont_pendiente'),
     path('contabilidad/pedidos-semana/', views.pedidos_semana, name='pedidos_semana'),
     path('contabilidad/gastos/nuevo/', views.nuevo_gasto, name='nuevo_gasto'),
     path('contabilidad/compras/nueva/', views.nueva_compra, name='nueva_compra'),
@@ -79,6 +81,16 @@ urlpatterns = [
     ),
     name='login'
 ),
+
+# Empleados
+    path('empleados/', views.lista_empleados, name='lista_empleados'),
+    path('empleados/nuevo/', views.nuevo_empleado, name='nuevo_empleado'),
+    path('empleados/<int:pk>/editar/', views.editar_empleado, name='editar_empleado'),
+
+    # Nómina
+    path('nomina/', views.lista_nomina, name='lista_nomina'),
+    path('nomina/nueva/', views.nueva_nomina, name='nueva_nomina'),
+    path('nomina/<int:pk>/editar/', views.editar_nomina, name='editar_nomina'),
 ]
 
 if settings.DEBUG:
