@@ -17,6 +17,8 @@ from django.contrib.auth.models import User
 from core.decorators import solo_admin
 from django.db import transaction
 from django.contrib import messages
+from django.core.serializers.json import DjangoJSONEncoder
+from django.urls import reverse
 
 
 
@@ -259,53 +261,74 @@ def ocupacion_productos(request):
 @login_required
 @solo_admin
 def nueva_renta(request):
+    # Obtener productos y clientes para el template
+    productos = Producto.objects.filter(activo=True)
+    clientes = Cliente.objects.all()
+
+    # Serializar a JSON para JS
+    productos_catalogo_json = json.dumps(
+        list(productos.values("id", "nombre", "precio")),
+        cls=DjangoJSONEncoder
+    )
+
+    clientes_json = json.dumps(
+        list(clientes.values("id", "nombre", "telefono", "calle_y_numero", "colonia", "ciudad_o_municipio")),
+        cls=DjangoJSONEncoder
+    )
+
     if request.method == "POST":
         # ===== DATOS BÁSICOS =====
         fecha = request.POST.get("fecha_renta")
         hora_inicio = request.POST.get("hora_inicio")
         hora_fin = request.POST.get("hora_fin")
-        cliente_id = request.POST.get("cliente")
+        cliente_input = request.POST.get("cliente", "")
+        anticipo = float(request.POST.get("anticipo") or 0)
 
-        print("POST:", request.POST)
+        # 🔹 Extraer solo el teléfono del input "teléfono - nombre"
+        telefono_cliente = cliente_input.split(" - ")[0].strip()
 
-        if not fecha or not hora_inicio or not hora_fin or not cliente_id:
+        if not fecha or not hora_inicio or not hora_fin or not telefono_cliente:
             messages.error(request, "Debes seleccionar cliente, fecha y horario.")
             return redirect("nueva_renta")
 
-        productos_data = request.POST.get("productos_data")
+        # Buscar cliente
+        try:
+            cliente = Cliente.objects.get(telefono=telefono_cliente)
+        except Cliente.DoesNotExist:
+            messages.error(request, f"No existe un cliente con el teléfono {telefono_cliente}.")
+            return redirect("nueva_renta")
 
+        # ===== PRODUCTOS =====
+        productos_data = request.POST.get("productos_data")
         if not productos_data:
             messages.error(request, "Debes agregar al menos un producto a la renta.")
             return redirect("nueva_renta")
 
-        productos = json.loads(productos_data)
+        productos_list = json.loads(productos_data)
 
         try:
             with transaction.atomic():
-                for p in productos:
+                # Validar stock antes de crear renta
+                for p in productos_list:
                     producto = Producto.objects.select_for_update().get(id=p["id"])
                     cantidad = int(p.get("cantidad", 1))
+                    precio_unitario = float(p.get("precio_unitario", producto.precio))
 
-                    disponible = producto.stock_disponible_en_horario(
-                        fecha, hora_inicio, hora_fin
-                    )
-
-                    print("DISPONIBLE:", disponible, type(disponible))
+                    disponible = producto.stock_disponible_en_horario(fecha, hora_inicio, hora_fin)
 
                     if disponible <= 0:
-                        raise ValueError(
-                            f"No hay disponibilidad del producto "
-                            f"'{producto.nombre}' en el horario seleccionado."
-                        )
-
+                        raise ValueError(f"El producto '{producto.nombre}' está ocupado para esa fecha y horario.")
                     if cantidad > disponible:
                         raise ValueError(
-                            f"Solo hay {disponible} disponibles del producto "
-                            f"'{producto.nombre}' en el horario seleccionado."
+                            f"Solo hay {disponible} disponibles del producto '{producto.nombre}' en el horario seleccionado."
                         )
 
+                # Calcular total desde los productos
+                precio_total = sum(float(p.get("precio_unitario", 0)) * int(p.get("cantidad", 1)) for p in productos_list)
+
+                # Crear la renta
                 renta = Renta.objects.create(
-                    cliente_id=cliente_id,
+                    cliente=cliente,
                     fecha_renta=fecha,
                     hora_inicio=hora_inicio,
                     hora_fin=hora_fin,
@@ -313,20 +336,18 @@ def nueva_renta(request):
                     colonia=request.POST.get("colonia"),
                     ciudad_o_municipio=request.POST.get("ciudad_o_municipio"),
                     comentarios=request.POST.get("comentarios", ""),
-                    precio_total=float(request.POST.get("precio_total") or 0),
-                    anticipo=float(request.POST.get("anticipo") or 0),
+                    precio_total=precio_total,
+                    anticipo=anticipo,
                     pagado=request.POST.get("pagado") == "on"
                 )
 
-                for p in productos:
+                # Crear productos asociados
+                for p in productos_list:
                     producto = Producto.objects.get(id=p["id"])
                     cantidad = int(p.get("cantidad", 1))
-
-                    precio_unitario = float(
-                        p.get("precio_unitario", producto.precio)
-                    )
-
+                    precio_unitario = float(p.get("precio_unitario", producto.precio))
                     nota = p.get("nota", "")
+
 
                     RentaProducto.objects.create(
                         renta=renta,
@@ -334,23 +355,23 @@ def nueva_renta(request):
                         cantidad=cantidad,
                         precio_unitario=precio_unitario,
                         nota=nota
-                        # 👆 NO subtotal, NO precio_lista → el modelo lo calcula
                     )
 
-            messages.success(
-                request,
-                f"RENTA_CREADA::{renta.id}"
-            )
-            return redirect("nueva_renta")
+            messages.success(request, f"Renta creada correctamente (ID: {renta.id})")
+            return redirect(f"{reverse('nueva_renta')}?renta_creada={renta.id}")
 
         except ValueError as e:
             messages.error(request, str(e))
             return redirect("nueva_renta")
 
-    # 🔥 ESTO ES LO QUE FALTABA
+    # GET: mostrar formulario
     form = RentaForm()
     return render(request, "core/form_renta.html", {
-        "form": form
+        "form": form,
+        "clientes_json": clientes_json,
+        "productos_catalogo_json": productos_catalogo_json,
+        "productos_data": json.dumps([]),
+        "editando": False
     })
 
 
@@ -784,6 +805,16 @@ def nuevo_gasto(request):
 def nueva_compra(request):
     return render(request, 'core/nueva_compra.html')
 
+@login_required
+def lista_gastos(request):
+    gastos = Gasto.objects.all().order_by('-fecha')
+    return render(request, 'core/lista_gastos.html', {'gastos': gastos})
+
+@login_required
+def lista_compras(request):
+    compras = Gasto.objects.filter(tipo='COMPRA')
+    return render(request, 'core/lista_compras.html', {'compras': compras})
+
 def es_admin(user):
     return user.groups.filter(name='Administrador').exists()
 
@@ -820,16 +851,21 @@ def editar_empleado(request, pk):
 # ---------------- Nómina ----------------
 def lista_nomina(request):
     nominas = Nomina.objects.select_related('empleado').all()
+
+    for n in nominas:
+        n.total = (n.dias_trabajados * n.empleado.sueldo_diario) + n.pago_evento_extra
+
     return render(request, 'core/nomina_lista.html', {'nominas': nominas})
 
 def nueva_nomina(request):
-    if request.method == "POST":
+    if request.method == 'POST':
         form = NominaForm(request.POST)
         if form.is_valid():
             form.save()
             return redirect('lista_nomina')
     else:
         form = NominaForm()
+
     return render(request, 'core/nomina_form.html', {'form': form})
 
 def editar_nomina(request, pk):

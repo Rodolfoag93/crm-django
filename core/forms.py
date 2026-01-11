@@ -11,6 +11,15 @@ class ClienteForm(forms.ModelForm):
     class Meta:
         model = Cliente
         fields = '__all__'
+        widgets = {
+            'nombre': forms.TextInput(attrs={'class': 'form-control'}),
+            'telefono': forms.TextInput(attrs={'class': 'form-control'}),
+            'email': forms.EmailInput(attrs={'class': 'form-control'}),
+            'direccion': forms.Textarea(attrs={
+                'class': 'form-control',
+                'rows': 3
+            }),
+        }
 
 # ----------------------------
 # Formulario Producto
@@ -106,9 +115,26 @@ class RentaProductoForm(forms.ModelForm):
 class EmpleadoForm(forms.ModelForm):
     class Meta:
         model = Empleado
-        fields = ['nombre', 'telefono', 'sueldo_diario', 'correo', 'comentarios']
+        fields = '__all__'
+        widgets = {
+            'nombre': forms.TextInput(attrs={'class': 'form-control'}),
+            'sueldo_diario': forms.NumberInput(attrs={'class': 'form-control'}),
+        }
 
 class NominaForm(forms.ModelForm):
     class Meta:
         model = Nomina
-        fields = ['empleado', 'fecha_inicio', 'fecha_fin', 'dias_trabajados', 'eventos_extras', 'pago_extra_por_evento']
+        fields = '__all__'
+        widgets = {
+            'empleado': forms.Select(attrs={'class': 'form-select'}),
+            'fecha_inicio': forms.DateInput(attrs={
+                'class': 'form-control',
+                'type': 'date'
+            }),
+            'fecha_fin': forms.DateInput(attrs={
+                'class': 'form-control',
+                'type': 'date'
+            }),
+            'dias_trabajados': forms.NumberInput(attrs={'class': 'form-control'}),
+            'pago_evento_extra': forms.NumberInput(attrs={'class': 'form-control'}),
+        }

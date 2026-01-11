@@ -1,12 +1,15 @@
-from django.urls import path
+from django.urls import path, include
+
+import dashboard
 from . import views
 from django.conf.urls.static import static
 from django.conf import settings
 from django.contrib.auth import views as django_auth_views
 from core.auth import views as auth_views  # vistas personalizadas (register)
 from django.urls import reverse_lazy
+from django.contrib import admin
 urlpatterns = [
-
+    path('admin/', admin.site.urls),
     # 🔐 LOGIN como página principal
     path(
         '',
@@ -16,6 +19,9 @@ urlpatterns = [
 
     # 🏠 Home del sistema
     path('home/', views.home, name='home'),
+    path('ventas/', views.dashboard_ventas, name='dashboard_ventas'),
+    path('administracion/', views.dashboard_admin, name='dashboard_admin'),
+    path('dashboard/', include('dashboard.urls')),
 
     # 👥 Clientes
     path('clientes/', views.lista_clientes, name='lista_clientes'),
@@ -55,6 +61,8 @@ urlpatterns = [
 
     # 💰 Contabilidad
     path('contabilidad/', views.contabilidad_home, name='contabilidad'),
+    path('gastos/', views.lista_gastos, name='lista_gastos'),
+    path('compas/', views.lista_compras, name='lista_compras'),
     path('contabilidad/pagar/<int:renta_id>/', views.marcar_pagado, name='cont_pagar'),
     path('contabilidad/pendiente/<int:renta_id>/', views.marcar_pendiente, name='cont_pendiente'),
     path('contabilidad/pedidos-semana/', views.pedidos_semana, name='pedidos_semana'),

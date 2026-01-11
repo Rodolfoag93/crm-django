@@ -1,330 +1,249 @@
 {% extends 'core/base.html' %}
+{% load static %}
 {% block content %}
 
-<h2>{% if form.instance.pk %}Editar Renta{% else %}Nueva Renta{% endif %}</h2>
+<!-- ===== CSS ===== -->
+<link rel="stylesheet" href="{% static 'css/styles.css' %}">
 
-{% if messages %}
-  {% for message in messages %}
-    {% if "RENTA_CREADA::" in message|stringformat:"s" %}
-        <div style="background:#e0ffe0; color:#060; padding:10px; border-radius:6px; margin-bottom:15px;">
-            Renta creada correctamente.
-        </div>
+<h2>{% if editando %}Editar Renta{% else %}Nueva Renta{% endif %}</h2>
 
-        <script>
-            const rentaId = "{{ message|stringformat:'s' }}".split("::")[1];
-
-            // Abrir ticket en nueva pestaña
-            window.open(`/rentas/ticket/${rentaId}/`, "_blank");
-
-            // Limpiar el formulario
-            const form = document.querySelector('form');
-            form.reset();
-
-            // Limpiar la tabla de productos
-            const tbody = document.querySelector("#tabla-productos tbody");
-            tbody.innerHTML = "";
-
-            // Resetear total y productos_data
-            document.getElementById("total-general").textContent = "0.00";
-            document.getElementById("precio-total").value = "0.00";
-            document.getElementById("productos-data").value = "[]";
-            document.getElementById("restante").value = "0.00";
-
-            // Limpiar input cliente
-            document.getElementById("cliente-input").value = "";
-            document.getElementById("cliente-id").value = "";
-            document.getElementById("calle_y_numero").value = "";
-            document.getElementById("colonia").value = "";
-            document.getElementById("ciudad_o_municipio").value = "";
-        </script>
-    {% else %}
-        <div style="background:#ffe0e0; color:#900; padding:10px; border-radius:6px; margin-bottom:15px; font-weight:bold;">
-            {{ message }}
-        </div>
-    {% endif %}
-  {% endfor %}
-{% endif %}
-
-{% if form.instance.estado_entrega == "EN_RUTA" or form.instance.estado_entrega == "ENTREGADO" %}
-<div style="background:#ffe0e0; color:#900; padding:10px; border-radius:5px; margin-bottom:15px;">
-    ⚠️ Esta renta ya está <strong>{{ form.instance.estado_entrega }}</strong> y no puede modificarse.
-</div>
-{% endif %}
-
-<form method="POST">
+<form method="POST" id="renta-form">
     {% csrf_token %}
 
-    <!-- ========================= -->
-    <!--   AUTOCOMPLETAR CLIENTE   -->
-    <!-- ========================= -->
-    <label for="cliente-input">Cliente:</label>
-    <input type="text" id="cliente-input" autocomplete="off" placeholder="Nombre o teléfono"
-           value="{{ form.instance.cliente.nombre|default:'' }}">
-    <ul id="sugerencias-clientes"></ul>
-    <input type="hidden" name="cliente" id="cliente-id" value="{{ form.instance.cliente.id|default:'' }}">
+    <!-- ===== CLIENTE ===== -->
+    <div class="mb-3">
+        <label for="cliente-input" class="form-label">Cliente (teléfono)</label>
+        <input type="text" id="cliente-input" name="cliente" class="form-control"
+               placeholder="Escribe el teléfono del cliente"
+               value="{% if renta %}{{ renta.cliente.telefono }} - {{ renta.cliente.nombre }}{% endif %}">
+    </div>
 
-    <hr>
-
-    <!-- ===================== -->
-    <!--    DATOS DE EVENTO    -->
-    <!-- ===================== -->
-    <h4>Datos del Evento</h4>
-    <div style="display: flex; gap: 20px; align-items: center; margin-bottom: 10px;">
-        <div>
-                <label>Fecha</label>
-                {{ form.fecha_renta }}
+    <!-- ===== FECHA Y HORARIO ===== -->
+    <div class="row mb-3">
+        <div class="col">
+            <label for="id_fecha_renta" class="form-label">Fecha</label>
+            {{ form.fecha_renta }}
         </div>
-
-        <div>
-                <label>Hora inicio</label>
-                {{ form.hora_inicio }}
+        <div class="col">
+            <label for="id_hora_inicio" class="form-label">Hora inicio</label>
+            {{ form.hora_inicio }}
         </div>
-
-        <div>
-            <label>Hora fin</label>
+        <div class="col">
+            <label for="id_hora_fin" class="form-label">Hora fin</label>
             {{ form.hora_fin }}
         </div>
     </div>
 
-    <!-- ========================= -->
-    <!--  DIRECCIÓN DEL EVENTO     -->
-    <!-- ========================= -->
-    <div style="display: flex; gap: 20px; align-items: flex-start; margin-bottom: 10px;">
-        <div>
-            <label for="calle_y_numero">Calle y número:</label><br>
-            <input type="text" name="calle_y_numero" id="calle_y_numero" value="{{ form.instance.calle_y_numero|default:'' }}">
+    <!-- ===== DIRECCIÓN Y COMENTARIOS ===== -->
+    <div class="mb-3">
+        <label for="calle_y_numero" class="form-label">Calle y número</label>
+        <input type="text" name="calle_y_numero" id="calle_y_numero" class="form-control"
+               value="{% if renta %}{{ renta.calle_y_numero }}{% endif %}">
+    </div>
+    <div class="row mb-3">
+        <div class="col">
+            <label for="colonia" class="form-label">Colonia</label>
+            <input type="text" name="colonia" id="colonia" class="form-control"
+                   value="{% if renta %}{{ renta.colonia }}{% endif %}">
         </div>
-        <div>
-            <label for="colonia">Colonia:</label><br>
-            <input type="text" name="colonia" id="colonia" value="{{ form.instance.colonia|default:'' }}">
+        <div class="col">
+            <label for="ciudad_o_municipio" class="form-label">Ciudad / Municipio</label>
+            <input type="text" name="ciudad_o_municipio" id="ciudad_o_municipio" class="form-control"
+                   value="{% if renta %}{{ renta.ciudad_o_municipio }}{% endif %}">
         </div>
-        <div>
-            <label for="ciudad_o_municipio">Ciudad / Municipio:</label><br>
-            <input type="text" name="ciudad_o_municipio" id="ciudad_o_municipio" value="{{ form.instance.ciudad_o_municipio|default:'' }}">
-        </div>
+    </div>
+
+    <div class="mb-3">
+        <label for="comentarios" class="form-label">Comentarios</label>
+        <textarea name="comentarios" id="comentarios" class="form-control">{% if renta %}{{ renta.comentarios }}{% endif %}</textarea>
+    </div>
+
+    <!-- ===== ANTICIPO ===== -->
+    <div class="mb-3">
+        <label for="anticipo" class="form-label">Anticipo</label>
+        <input type="number" step="0.01" name="anticipo" id="anticipo" class="form-control"
+               value="{% if renta %}{{ renta.anticipo }}{% else %}0{% endif %}">
     </div>
 
     <hr>
 
-    <!-- ============================ -->
-    <!--   BUSCADOR Y TABLA PRODUCTOS -->
-    <!-- ============================ -->
-    <h3>Agregar Productos</h3>
-    <input type="text" id="buscar-producto" placeholder="Buscar producto..." autocomplete="off">
-    <ul id="sugerencias-productos"></ul>
-
-    <table border="1" width="100%" id="tabla-productos" style="margin-top: 10px;">
-        <thead>
+    <!-- ===== TABLA DE PRODUCTOS ===== -->
+    <h4>Productos</h4>
+    <table class="table table-bordered" id="productos-table">
+        <thead class="table-light">
             <tr>
                 <th>Producto</th>
-                <th>Precio</th>
                 <th>Cantidad</th>
+                <th>Precio Unitario</th>
                 <th>Subtotal</th>
-                <th></th>
+                <th>Acciones</th>
             </tr>
         </thead>
-        <tbody>
-            <!-- Las filas se llenan con JS -->
-        </tbody>
+        <tbody></tbody>
     </table>
 
-    <input type="hidden" name="productos_data" id="productos-data">
+    <input type="hidden" name="productos_data" id="productos_data">
 
-    <!-- ======================= -->
-    <!--   TOTAL GENERAL         -->
-    <!-- ======================= -->
-    <h3>Total: $<span id="total-general">{{ form.instance.precio_total|default:"0.00" }}</span></h3>
-
-    <hr>
-
-    <!-- ======================= -->
-    <!--   PAGO (anticipo)       -->
-    <!-- ======================= -->
-    <h3>Pago</h3>
-    <div style="display: flex; gap: 20px; align-items: center; margin-bottom: 10px;">
-        <div>
-            <label for="anticipo">Anticipo:</label><br>
-            <input type="number" step="0.01" name="anticipo" id="anticipo" value="{{ form.instance.anticipo|default:"0.00" }}">
-        </div>
-        <div>
-            <label>Restante:</label><br>
-            <input type="text" id="restante" readonly style="background: #eee;" value="{{ form.instance.precio_total|default:"0.00"|floatformat:2 }}">
-        </div>
-    </div>
-
-    <input type="hidden" name="precio_total" id="precio-total" value="{{ form.instance.precio_total|default:"0.00" }}">
-
-    <div style="margin-top: 10px;">
-    <label for="comentarios"><strong>Comentarios</strong></label><br>
-    <textarea name="comentarios"
-              id="comentarios"
-              rows="3"
-              style="width:100%;"
-              placeholder="Comentarios adicionales">{{ form.instance.comentarios|default:'' }}</textarea>
-    </div>
-
-    {% if user.groups.all.0.name == "Administrador" %}
-<div>
-    {{ form.cargador.label_tag }}
-    {{ form.cargador }}
-</div>
-{% endif %}
-
-
-
-    <button type="submit"
-            {% if form.instance.estado_entrega == "EN_RUTA" or form.instance.estado_entrega == "ENTREGADO" %}
-disabled
-{% endif %}
-    >
-    Guardar
+    <button type="button" class="btn btn-primary mb-3" data-bs-toggle="modal" data-bs-target="#modalAgregarProducto">
+        Agregar Producto
     </button>
+
+    <div>
+        <button type="submit" class="btn btn-success">Guardar Renta</button>
+        <a href="{% url 'lista_rentas' %}" class="btn btn-secondary">Cancelar</a>
+    </div>
 </form>
 
+<!-- ===== MODAL PARA AGREGAR PRODUCTOS ===== -->
+<div class="modal fade" id="modalAgregarProducto" tabindex="-1" aria-labelledby="modalAgregarProductoLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Agregar Producto</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body">
+        <label for="producto-busqueda" class="form-label">Buscar producto</label>
+        <input type="text" id="producto-busqueda" class="form-control" placeholder="Escribe nombre del producto">
+        <ul class="list-group mt-1" id="lista-productos" style="max-height: 200px; overflow-y: auto;"></ul>
 
-<!-- ======================= -->
-<!-- ======= SCRIPTS ======= -->
-<!-- ======================= -->
+        <div class="mt-3">
+            <label for="cantidad-producto" class="form-label">Cantidad</label>
+            <input type="number" id="cantidad-producto" class="form-control" min="1" value="1">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+      </div>
+    </div>
+  </div>
+</div>
 
+<!-- ===== JAVASCRIPT ===== -->
 <script>
-// ===== AUTOCOMPLETAR CLIENTE =====
-document.getElementById("cliente-input").addEventListener("input", function() {
-    const q = this.value;
-    if (q.length < 2) return document.getElementById("sugerencias-clientes").innerHTML = "";
+document.addEventListener('DOMContentLoaded', function() {
 
-    fetch(`/api/clientes/?q=${q}`)
-        .then(res => res.json())
-        .then(data => {
-            const lista = document.getElementById("sugerencias-clientes");
-            lista.innerHTML = "";
-            data.forEach(cliente => {
-                const li = document.createElement("li");
-                li.style.cursor = "pointer";
-                li.textContent = `${cliente.nombre} (${cliente.telefono})`;
-                li.addEventListener("click", () => {
-                    document.getElementById("cliente-input").value = cliente.nombre;
-                    document.getElementById("cliente-id").value = cliente.id;
-                    document.getElementById("calle_y_numero").value = cliente.calle_y_numero || '';
-                    document.getElementById("colonia").value = cliente.colonia || '';
-                    document.getElementById("ciudad_o_municipio").value = cliente.ciudad_o_municipio || '';
-                    lista.innerHTML = "";
-                });
-                lista.appendChild(li);
-            });
-        });
-});
+    let clientes = {{ clientes_json|safe }};
+    let productosCatalogo = {{ productos_catalogo_json|safe }};
+    let productos = {{ productos_data|safe }};
 
-// ===== AUTOCOMPLETAR PRODUCTOS =====
-document.getElementById("buscar-producto").addEventListener("input", function () {
-    const q = this.value.trim();
-    if (q.length < 2) return document.getElementById("sugerencias-productos").innerHTML = "";
-
-    fetch(`/api/productos/?q=${q}`)
-        .then(res => res.json())
-        .then(data => {
-            const lista = document.getElementById("sugerencias-productos");
-            lista.innerHTML = "";
-            data.forEach(prod => {
-                const li = document.createElement("li");
-                li.style.cursor = "pointer";
-                li.textContent = `${prod.nombre} - $${prod.precio}`;
-                li.addEventListener("click", () => agregarProductoTabla(prod));
-                lista.appendChild(li);
-            });
-        });
-});
-
-// ===== AGREGAR PRODUCTO A LA TABLA =====
-function agregarProductoTabla(prod) {
-    const tbody = document.querySelector("#tabla-productos tbody");
-    const cantidad = prod.cantidad || 1;
-
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-        <td data-id="${prod.id}">${prod.nombre}</td>
-        <td>
-            <input type="number"
-                   class="precio-unitario"
-                   value="${prod.precio}"
-                   step="0.01"
-                   style="width: 80px;">
-        </td>
-        <td><input type="number" value="${cantidad}" min="1" class="cantidad" style="width: 60px;"></td>
-        <td class="subtotal">${(prod.precio * cantidad).toFixed(2)}</td>
-        <td><button type="button" class="eliminar">❌</button></td>
-    `;
-    tbody.appendChild(tr);
-
-    tr.querySelector(".cantidad").addEventListener("input", actualizarTotal);
-    tr.querySelector(".precio-unitario").addEventListener("input", actualizarTotal); // 🔥 nuevo
-    tr.querySelector(".eliminar").addEventListener("click", () => {
-        tr.remove();
-        actualizarTotal();
+    // ===== AUTOCOMPLETAR CLIENTE =====
+    const inputCliente = document.getElementById('cliente-input');
+    inputCliente.addEventListener('input', function() {
+        const telefono = this.value;
+        const cliente = clientes.find(c => c.telefono === telefono || (telefono.includes(c.telefono) && c.telefono));
+        if (cliente) {
+            document.getElementById('calle_y_numero').value = cliente.calle_y_numero || '';
+            document.getElementById('colonia').value = cliente.colonia || '';
+            document.getElementById('ciudad_o_municipio').value = cliente.ciudad_o_municipio || '';
+            this.value = `${cliente.telefono} - ${cliente.nombre}`;
+        }
     });
 
-    document.getElementById("sugerencias-productos").innerHTML = "";
-    document.getElementById("buscar-producto").value = "";
-
-    actualizarTotal();
+    // ===== TABLA DE PRODUCTOS =====
+function renderProductos() {
+    const tbody = document.querySelector('#productos-table tbody');
+    tbody.innerHTML = '';
+    productos.forEach((p, index) => {
+        const subtotal = (parseFloat(p.precio_unitario) * parseInt(p.cantidad)).toFixed(2);
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>${p.nombre}</td>
+            <td><input type="number" min="1" value="${p.cantidad}" class="form-control cantidad-input" data-index="${index}"></td>
+            <td><input type="number" step="0.01" value="${parseFloat(p.precio_unitario).toFixed(2)}" class="form-control precio-unitario-input" data-index="${index}"></td>
+            <td class="subtotal">${subtotal}</td>
+            <td><button type="button" class="btn btn-sm btn-danger btn-eliminar" data-index="${index}">Eliminar</button></td>
+        `;
+        tbody.appendChild(tr);
+    });
+    document.getElementById('productos_data').value = JSON.stringify(productos);
 }
 
-// ===== RECALCULAR TOTAL =====
-function actualizarTotal() {
-    let total = 0;
-    let productos = [];
+// ===== EVENTOS EDITABLES SIN PERDER FOCO =====
+const table = document.querySelector('#productos-table');
 
-    document.querySelectorAll("#tabla-productos tbody tr").forEach(row => {
-    const id = row.children[0].dataset.id;
-    const nombre = row.children[0].textContent;
-    const precio = parseFloat(row.querySelector(".precio-unitario").value); // 🔥 ahora editable
-    const cantidad = parseInt(row.querySelector(".cantidad").value);
-    const subtotal = precio * cantidad;
+table.addEventListener('input', e => {
+    const index = e.target.dataset.index;
+    if (!index) return;
 
-    row.querySelector(".subtotal").textContent = subtotal.toFixed(2);
-    total += subtotal;
-
-    if (id) {
-        productos.push({
-            id: parseInt(id),
-            nombre,
-            precio_unitario: precio, // 🔥 enviamos al backend
-            cantidad,
-            nota: row.querySelector(".nota")?.value || ""
-        });
+    if (e.target.classList.contains('cantidad-input')) {
+        productos[index].cantidad = parseInt(e.target.value) || 1;
+    } else if (e.target.classList.contains('precio-unitario-input')) {
+        productos[index].precio_unitario = parseFloat(e.target.value) || 0;
     }
+
+    // Actualizamos solo el subtotal de esa fila
+    const tr = e.target.closest('tr');
+    const subtotal = (productos[index].cantidad * productos[index].precio_unitario).toFixed(2);
+    tr.querySelector('.subtotal').textContent = subtotal;
+
+    document.getElementById('productos_data').value = JSON.stringify(productos);
 });
 
-    document.getElementById("total-general").textContent = total.toFixed(2);
-    document.getElementById("precio-total").value = total.toFixed(2);
-    document.getElementById("productos-data").value = JSON.stringify(productos);
+    table.addEventListener('click', e => {
+        if (e.target.classList.contains('btn-eliminar')) {
+            const index = e.target.dataset.index;
+            productos.splice(index, 1);
+            renderProductos();
+        }
+    });
 
-    calcularRestante();
-}
+    renderProductos();
 
-// ===== CALCULAR RESTANTE =====
-document.getElementById("anticipo").addEventListener("input", calcularRestante);
-function calcularRestante() {
-    const total = parseFloat(document.getElementById("precio-total").value || 0);
-    const anticipo = parseFloat(document.getElementById("anticipo").value || 0);
-    document.getElementById("restante").value = (total - anticipo).toFixed(2);
-}
+    // ===== MODAL PRODUCTOS =====
+    const modal = document.getElementById('modalAgregarProducto');
+    const inputBusqueda = document.getElementById('producto-busqueda');
+    const listaProductos = document.getElementById('lista-productos');
 
-// ===== PRECARGAR PRODUCTOS AL EDITAR =====
-document.addEventListener('DOMContentLoaded', function() {
-    {% if renta %}
-        const productos = JSON.parse('{{ productos_data|escapejs }}');
-        productos.forEach(prod => {
-            agregarProductoTabla({
-                id: prod.id,
-                nombre: prod.nombre,
-                precio: prod.precio_unitario,
-                cantidad: prod.cantidad
-            });
+    modal.addEventListener('shown.bs.modal', function(){
+        inputBusqueda.value = '';
+        listaProductos.innerHTML = '';
+        inputBusqueda.focus();
+    });
+
+    inputBusqueda.addEventListener('input', function() {
+        const texto = this.value.toLowerCase();
+        listaProductos.innerHTML = '';
+
+        const filtrados = productosCatalogo.filter(p => p.nombre.toLowerCase().includes(texto));
+
+        filtrados.forEach(p => {
+            const precioNum = parseFloat(p.precio) || 0;
+            const li = document.createElement('li');
+            li.className = 'list-group-item list-group-item-action';
+            li.textContent = `${p.nombre} - $${precioNum.toFixed(2)}`;
+            li.dataset.id = p.id;
+            li.dataset.nombre = p.nombre;
+            li.dataset.precio = precioNum;
+            listaProductos.appendChild(li);
         });
-        actualizarTotal();
-    {% endif %}
-});
-</script>
+    });
 
+    listaProductos.addEventListener('click', function(e){
+        if(e.target.tagName === 'LI'){
+            const id = parseInt(e.target.dataset.id);
+            const nombre = e.target.dataset.nombre;
+            const precio = parseFloat(e.target.dataset.precio) || 0;
+            const cantidad = parseInt(document.getElementById('cantidad-producto').value) || 1;
+
+            productos.push({id, nombre, precio_unitario: precio, cantidad});
+            renderProductos();
+
+            inputBusqueda.value = '';
+            listaProductos.innerHTML = '';
+
+            bootstrap.Modal.getInstance(modal).hide();
+        }
+    });
+
+});
+    // ===== ABRIR TICKET Y ALERTA =====
+const urlParams = new URLSearchParams(window.location.search);
+const rentaId = urlParams.get('renta_creada');
+if (rentaId) {
+    alert('Renta creada correctamente con ID ' + rentaId);
+    window.open(`/rentas/ticket/${rentaId}/`, '_blank');
+}
+</script>
 
 {% endblock %}

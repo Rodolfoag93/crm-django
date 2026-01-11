@@ -1,0 +1,10 @@
+th>Tipo</th><th>Descripción</th><th>Monto</th><th>Fecha</th></tr>
+{% for g in gastos %}
+<tr>
+    <td>{{ g.get_tipo_display }}</td>
+    <td>{{ g.descripcion }}</td>
+    <td>${{ g.monto }}</td>
+    <td>{{ g.fecha }}</td>
+</tr>
+{% endfor %}
+</table>

@@ -1,6 +1,6 @@
 from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
-from core.models import RentaProducto, Renta, PedidoFinanzas
+from core.models import RentaProducto, Renta, PedidoFinanzas, Nomina, Empleado, Gasto
 from core.services.ocupacion import recalcular_ocupacion_producto_dia
 from core.models import calcular_total
 
@@ -36,3 +36,16 @@ def calcular_total(renta):
     """
     total = sum([rp.cantidad * rp.producto.precio for rp in renta.rentaproductos.all()])
     return total
+
+@receiver(post_save, sender=Nomina)
+def crear_gasto_nomina(sender, instance, created, **kwargs):
+    if not created:
+        return
+
+    Gasto.objects.create(
+        tipo='NOMINA',
+        descripcion=f"Nómina {instance.empleado}",
+        monto=instance.total,
+        fecha=instance.fecha_fin,
+        referencia=f"Nomina ID {instance.id}"
+    )

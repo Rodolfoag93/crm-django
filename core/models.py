@@ -249,13 +249,20 @@ class PedidoFinanzas(models.Model):
 
 
 class Gasto(models.Model):
-    categoria = models.CharField(max_length=100)
-    descripcion = models.TextField(blank=True, null=True)
+    TIPO = [
+        ('GASTO', 'Gasto General'),
+        ('COMPRA', 'Compra'),
+        ('NOMINA', 'Nómina'),
+    ]
+
+    tipo = models.CharField(max_length=10, choices=TIPO)
+    descripcion = models.CharField(max_length=255)
     monto = models.DecimalField(max_digits=10, decimal_places=2)
     fecha = models.DateField()
+    referencia = models.CharField(max_length=100, blank=True, null=True)
 
     def __str__(self):
-        return f"{self.categoria} - ${self.monto}"
+        return f"{self.get_tipo_display()} - ${self.monto}"
 
 
 class Compra(models.Model):
@@ -278,36 +285,34 @@ def calcular_total(renta):
 
 class Empleado(models.Model):
     nombre = models.CharField(max_length=100)
-    telefono = models.CharField(max_length=20, blank=True, null=True)
-    sueldo_diario = models.DecimalField(max_digits=10, decimal_places=2)
+    telefono = models.CharField(max_length=20, blank=True)
     correo = models.EmailField(blank=True, null=True)
+    sueldo_diario = models.DecimalField(max_digits=8, decimal_places=2)
     comentarios = models.TextField(blank=True, null=True)
+    activo = models.BooleanField(default=True)
 
     def __str__(self):
         return self.nombre
 
 class Nomina(models.Model):
-    empleado = models.ForeignKey(Empleado, on_delete=models.CASCADE, related_name='nominas')
+    empleado = models.ForeignKey(Empleado, on_delete=models.CASCADE)
     fecha_inicio = models.DateField()
     fecha_fin = models.DateField()
     dias_trabajados = models.PositiveIntegerField(default=0)
-    eventos_extras = models.PositiveIntegerField(default=0)
-    pago_extra_por_evento = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-
-    total = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    pago_evento_extra = models.DecimalField(
+        max_digits=10, decimal_places=2, default=0
+    )
+    total = models.DecimalField(
+        max_digits=10, decimal_places=2, default=0
+    )
 
     def calcular_total(self):
-        """
-        Calcula el total a pagar al empleado según días trabajados y eventos extras.
-        """
-        total_dias = self.dias_trabajados * self.empleado.sueldo_diario
-        total_eventos = self.eventos_extras * self.pago_extra_por_evento
-        self.total = total_dias + total_eventos
-        return self.total
+        sueldo_base = self.empleado.sueldo_diario * self.dias_trabajados
+        return sueldo_base + self.pago_evento_extra
 
     def save(self, *args, **kwargs):
-        self.calcular_total()  # recalcula automáticamente al guardar
+        self.total = self.calcular_total()
         super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"{self.empleado.nombre} ({self.fecha_inicio} - {self.fecha_fin})"
+        return f"Nómina {self.empleado} ({self.fecha_inicio} - {self.fecha_fin})"

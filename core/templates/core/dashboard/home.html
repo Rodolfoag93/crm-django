@@ -1,0 +1,41 @@
+{% extends "core/base.html" %}
+
+{% block content %}
+<div class="row">
+  <div class="col-md-3">
+    <div class="card text-bg-success mb-3">
+      <div class="card-body">
+        <h6>Ingresos del mes</h6>
+        <h3>${{ ingresos_mes|floatformat:2 }}</h3>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-3">
+    <div class="card text-bg-danger mb-3">
+      <div class="card-body">
+        <h6>Gastos del mes</h6>
+        <h3>${{ gastos_mes|floatformat:2 }}</h3>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-3">
+    <div class="card text-bg-warning mb-3">
+      <div class="card-body">
+        <h6>Nómina</h6>
+        <h3>${{ nomina_mes|floatformat:2 }}</h3>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-3">
+    <div class="card text-bg-primary mb-3">
+      <div class="card-body">
+        <h6>Utilidad estimada</h6>
+        <h3>${{ utilidad|floatformat:2 }}</h3>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
