@@ -1,13 +1,18 @@
 {% extends 'core/base.html' %}
 {% block content %}
+
 <h2>Lista de Empleados</h2>
 
-<a href="{% url 'nuevo_empleado' %}" style="padding:8px 12px; background:#43a047; color:white; border-radius:5px; text-decoration:none;">➕ Nuevo Empleado</a>
+<a href="{% url 'nuevo_empleado' %}"
+   style="padding:8px 12px; background:#43a047; color:white; border-radius:5px; text-decoration:none;">
+   ➕ Nuevo Empleado
+</a>
 
 <table style="width:100%; border-collapse:collapse; margin-top:15px;">
     <thead>
         <tr style="background:#ff9800; color:white;">
             <th>Nombre</th>
+            <th>Tipo</th>
             <th>Teléfono</th>
             <th>Sueldo Diario</th>
             <th>Correo</th>
@@ -15,21 +20,30 @@
         </tr>
     </thead>
     <tbody>
+
         {% for e in empleados %}
         <tr>
             <td>{{ e.nombre }}</td>
+            <td>{{ e.get_tipo_empleado_display }}</td>
             <td>{{ e.telefono }}</td>
             <td>${{ e.sueldo_diario }}</td>
             <td>{{ e.correo }}</td>
             <td>
-                <a href="{% url 'editar_empleado' e.id %}" style="padding:5px 8px; background:#2196F3; color:white; border-radius:4px; text-decoration:none;">Editar</a>
+                <a href="{% url 'editar_empleado' e.id %}"
+                   style="padding:5px 8px; background:#2196F3; color:white; border-radius:4px; text-decoration:none;">
+                   Editar
+                </a>
             </td>
         </tr>
         {% empty %}
         <tr>
-            <td colspan="5" style="text-align:center;">No hay empleados registrados.</td>
+            <td colspan="6" style="text-align:center;">
+                No hay empleados registrados.
+            </td>
         </tr>
         {% endfor %}
+
     </tbody>
 </table>
+
 {% endblock %}

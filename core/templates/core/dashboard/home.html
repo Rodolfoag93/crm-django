@@ -1,41 +1,65 @@
 {% extends "core/base.html" %}
-
 {% block content %}
-<div class="row">
-  <div class="col-md-3">
-    <div class="card text-bg-success mb-3">
-      <div class="card-body">
-        <h6>Ingresos del mes</h6>
-        <h3>${{ ingresos_mes|floatformat:2 }}</h3>
-      </div>
-    </div>
-  </div>
 
-  <div class="col-md-3">
-    <div class="card text-bg-danger mb-3">
-      <div class="card-body">
-        <h6>Gastos del mes</h6>
-        <h3>${{ gastos_mes|floatformat:2 }}</h3>
-      </div>
-    </div>
-  </div>
+<h2 style="text-align:center; margin-top:20px;">📊 Resumen Mensual</h2>
 
-  <div class="col-md-3">
-    <div class="card text-bg-warning mb-3">
-      <div class="card-body">
-        <h6>Nómina</h6>
-        <h3>${{ nomina_mes|floatformat:2 }}</h3>
-      </div>
-    </div>
-  </div>
+<!-- Selector de mes/año -->
+<form method="get" style="text-align:center; margin-bottom:30px;">
+    <select name="mes">
+        {% for mes in meses %}
+            <option value="{{ m }}" {% if m == mes_seleccionado %}selected{% endif %}>
+                {{ m }}
+            </option>
+        {% endfor %}
+    </select>
+    <input type="number" name="año" value="{{ año_seleccionado }}" style="width:80px;">
+    <button type="submit" style="padding:5px 10px;">Ver</button>
+</form>
 
-  <div class="col-md-3">
-    <div class="card text-bg-primary mb-3">
-      <div class="card-body">
-        <h6>Utilidad estimada</h6>
-        <h3>${{ utilidad|floatformat:2 }}</h3>
-      </div>
-    </div>
-  </div>
+<div style="display:flex; justify-content:space-between; align-items:center; margin:30px 0;">
+
+    <!-- Mes anterior -->
+    <a href="?mes={{ mes_anterior }}&año={{ año_anterior }}"
+       style="padding:10px 20px; background:#eee; border-radius:8px; text-decoration:none; font-weight:bold;">
+        ⬅ Mes anterior
+    </a>
+
+    <!-- Mes actual -->
+    <h3 style="margin:0;">
+        📅 {{ mes_seleccionado }}/{{ año_seleccionado }}
+    </h3>
+
+    <!-- Mes siguiente -->
+    <a href="?mes={{ mes_siguiente }}&año={{ año_siguiente }}"
+       style="padding:10px 20px; background:#eee; border-radius:8px; text-decoration:none; font-weight:bold;">
+        Mes siguiente ➡
+    </a>
+
 </div>
+
+
+<div style="display:flex; flex-wrap:wrap; justify-content:center; gap:30px;">
+
+    <div style="width:250px; background:#2196F3; color:white; border-radius:12px; padding:30px; text-align:center;">
+        <h3>📦 Ingresos</h3>
+        <p style="font-size:20px; font-weight:bold;">${{ ingresos_mes|floatformat:2 }}</p>
+    </div>
+
+    <div style="width:250px; background:#e53935; color:white; border-radius:12px; padding:30px; text-align:center;">
+        <h3>💸 Gastos</h3>
+        <p style="font-size:20px; font-weight:bold;">${{ gastos_mes|floatformat:2 }}</p>
+    </div>
+
+    <div style="width:250px; background:#43a047; color:white; border-radius:12px; padding:30px; text-align:center;">
+        <h3>💰 Nómina</h3>
+        <p style="font-size:20px; font-weight:bold;">${{ nomina_mes|floatformat:2 }}</p>
+    </div>
+
+    <div style="width:250px; background:#ffb300; color:white; border-radius:12px; padding:30px; text-align:center;">
+        <h3>📈 Utilidad</h3>
+        <p style="font-size:20px; font-weight:bold;">${{ utilidad|floatformat:2 }}</p>
+    </div>
+
+</div>
+
 {% endblock %}

@@ -1,10 +1,133 @@
-th>Tipo</th><th>Descripción</th><th>Monto</th><th>Fecha</th></tr>
-{% for g in gastos %}
-<tr>
-    <td>{{ g.get_tipo_display }}</td>
-    <td>{{ g.descripcion }}</td>
-    <td>${{ g.monto }}</td>
-    <td>{{ g.fecha }}</td>
-</tr>
-{% endfor %}
+{% extends 'core/base.html' %}
+
+{% block content %}
+<h2 class="mb-3">📊 Lista de Gastos</h2>
+
+<!-- FILTROS -->
+<form method="get" class="row g-3 mb-3">
+
+    <!-- Mantener semana -->
+    <input type="hidden" name="semana" value="{{ lunes|date:'Y-m-d' }}">
+
+    <div class="col-md-4">
+        <label class="form-label">Tipo</label>
+        <select name="tipo" class="form-select">
+            <option value="">Todos</option>
+            {% for value, label in tipos %}
+                <option value="{{ value }}"
+                    {% if value == tipo_seleccionado %}selected{% endif %}>
+                    {{ label }}
+                </option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <div class="col-md-4">
+        <label class="form-label">Categoría</label>
+        <select name="categoria" class="form-select">
+            <option value="">Todas</option>
+            {% for value, label in categorias %}
+                <option value="{{ value }}"
+                    {% if value == categoria_seleccionada %}selected{% endif %}>
+                    {{ label }}
+                </option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <div class="col-md-4 d-flex align-items-end">
+        <button type="submit" class="btn btn-primary w-100">
+            🔍 Filtrar
+        </button>
+    </div>
+
+</form>
+
+<!-- NAVEGACIÓN SEMANAL -->
+<div class="d-flex justify-content-between align-items-center mb-3">
+
+    <a href="?semana={{ lunes_anterior|date:'Y-m-d' }}{% if tipo_seleccionado %}&tipo={{ tipo_seleccionado }}{% endif %}{% if categoria_seleccionada %}&categoria={{ categoria_seleccionada }}{% endif %}">
+        ⬅ Semana anterior
+    </a>
+
+    <strong>
+        Semana del {{ lunes|date:"d M Y" }} al {{ domingo|date:"d M Y" }}
+    </strong>
+
+    <a href="?semana={{ lunes_siguiente|date:'Y-m-d' }}{% if tipo_seleccionado %}&tipo={{ tipo_seleccionado }}{% endif %}{% if categoria_seleccionada %}&categoria={{ categoria_seleccionada }}{% endif %}">
+        Semana siguiente ➡
+    </a>
+
+</div>
+
+<!-- ACCIONES -->
+<div class="mb-3 d-flex justify-content-between align-items-center">
+    <a href="{% url 'nuevo_gasto' %}" class="btn btn-danger">
+        ➕ Nuevo Gasto
+    </a>
+
+    <h5 class="mb-0">
+        Total semana:
+        <span class="badge bg-success">
+            ${{ total_semana|floatformat:2 }}
+        </span>
+    </h5>
+</div>
+
+<!-- TABLA -->
+<table class="table table-striped table-bordered align-middle">
+    <thead class="table-dark">
+        <tr>
+            <th>Fecha</th>
+            <th>Tipo</th>
+            <th>Categoría</th>
+            <th>Descripción</th>
+            <th>Origen</th>
+            <th class="text-end">Monto</th>
+            <th style="width:150px;" class="text-center">Acciones</th>
+        </tr>
+    </thead>
+    <tbody>
+    {% for gasto in gastos %}
+        <tr>
+            <td>{{ gasto.fecha|date:"d M Y" }}</td>
+            <td>{{ gasto.get_tipo_display }}</td>
+            <td>{{ gasto.get_categoria_display }}</td>
+            <td>{{ gasto.descripcion }}</td>
+
+            <td>
+                {% if gasto.cuenta %}
+                    <span class="badge bg-primary">
+                        🏦 {{ gasto.cuenta.nombre }}
+                    </span>
+                {% else %}
+                    <span class="badge bg-secondary">
+                        💵 Efectivo
+                    </span>
+                {% endif %}
+            </td>
+
+            <td class="text-end">
+                ${{ gasto.monto|floatformat:2 }}
+            </td>
+
+            <td class="text-center">
+                <a href="{% url 'editar_gasto' gasto.id %}" class="btn btn-sm btn-primary">
+                    ✏️
+                </a>
+                <a href="{% url 'eliminar_gasto' gasto.id %}" class="btn btn-sm btn-danger">
+                    ❌
+                </a>
+            </td>
+        </tr>
+    {% empty %}
+        <tr>
+            <td colspan="7" class="text-center text-muted">
+                No hay gastos registrados en esta semana.
+            </td>
+        </tr>
+    {% endfor %}
+    </tbody>
 </table>
+
+{% endblock %}

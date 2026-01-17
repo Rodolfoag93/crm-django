@@ -1,0 +1,41 @@
+<table class="table table-striped">
+  <thead>
+    <tr>
+      <th>Empleado</th>
+      <th>Semana</th>
+      <th>Horas trabajadas</th>
+      <th>Horas extra</th>
+      <th>Monto</th>
+      <th>Estado</th>
+      <th>Acciones</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for h in horas %}
+    <tr>
+      <td>{{ h.empleado }}</td>
+      <td>{{ h.semana_inicio }} - {{ h.semana_fin }}</td>
+      <td>{{ h.horas_trabajadas }}</td>
+      <td>{{ h.horas_extra }}</td>
+      <td>${{ h.monto_pagado }}</td>
+      <td>
+        {% if h.pagado %}
+          <span class="badge bg-success">Pagado</span>
+        {% else %}
+          <span class="badge bg-warning text-dark">Pendiente</span>
+        {% endif %}
+      </td>
+      <td>
+        {% if not h.pagado %}
+          <a href="{% url 'pagar_horas_extra' h.id %}"
+             class="btn btn-sm btn-success">
+             Pagar
+          </a>
+        {% else %}
+          —
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>

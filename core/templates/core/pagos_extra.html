@@ -1,0 +1,27 @@
+<h3>Pagos extra – {{ nomina.empleado }}</h3>
+
+<a href="{% url 'crear_pago_extra' nomina.id %}" class="btn btn-primary">
+  + Agregar pago extra
+</a>
+
+<a href="{% url 'catalogo_pagos_extra' %}" class="btn btn-secondary">
+  Catálogo de conceptos
+</a>
+
+<table class="table mt-3">
+  <tr>
+    <th>Concepto</th>
+    <th>Monto</th>
+    <th></th>
+  </tr>
+  {% for pago in pagos %}
+  <tr>
+    <td>{{ pago.tipo.nombre }}</td>
+    <td>${{ pago.monto }}</td>
+    <td>
+      <a href="{% url 'editar_pago_extra' pago.id %}">Editar</a> |
+      <a href="{% url 'eliminar_pago_extra' pago.id %}">Eliminar</a>
+    </td>
+  </tr>
+  {% endfor %}
+</table>

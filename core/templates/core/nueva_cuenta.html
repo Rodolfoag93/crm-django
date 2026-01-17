@@ -1,0 +1,52 @@
+{% extends 'core/base.html' %}
+
+{% block content %}
+<div style="width:90%; margin:auto; margin-top:30px;">
+
+    <h2 style="margin-bottom:20px;">➕ Nueva Cuenta Bancaria</h2>
+
+    <form method="post" style="max-width:500px;">
+        {% csrf_token %}
+
+        <div style="margin-bottom:15px;">
+            <label><strong>Banco</strong></label>
+            <input
+                type="text"
+                name="banco"
+                required
+                class="form-control"
+                placeholder="Ej. BBVA, Banorte, Santander">
+        </div>
+
+        <div style="margin-bottom:15px;">
+            <label><strong>Nombre de la cuenta</strong></label>
+            <input
+                type="text"
+                name="nombre"
+                required
+                class="form-control"
+                placeholder="Ej. Trota Producciones">
+        </div>
+
+        <div style="margin-bottom:20px;">
+            <label><strong>Número de cuenta / CLABE</strong></label>
+            <input
+                type="text"
+                name="numero"
+                class="form-control"
+                placeholder="Opcional">
+        </div>
+
+        <div style="display:flex; gap:15px;">
+            <button type="submit" class="btn btn-success">
+                💾 Guardar cuenta
+            </button>
+
+            <a href="{% url 'lista_cuentas' %}" class="btn btn-secondary">
+                ⬅ Volver
+            </a>
+        </div>
+    </form>
+
+</div>
+{% endblock %}

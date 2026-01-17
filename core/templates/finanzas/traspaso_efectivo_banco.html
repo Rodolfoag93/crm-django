@@ -1,0 +1,60 @@
+{% extends "core/base.html" %}
+{% block content %}
+
+<h2 style="text-align:center;">
+    💵 ⇄ 🏦 Traspaso Efectivo ⇄ Banco
+</h2>
+<hr>
+
+<!-- ================= CARD FORM ================= -->
+<div style="
+    max-width:500px;
+    margin:30px auto;
+    padding:25px;
+    background:#F1F8E9;
+    border-radius:12px;
+    box-shadow:0 4px 10px rgba(0,0,0,0.15);
+">
+
+    <form method="post">
+        {% csrf_token %}
+
+        <div style="margin-bottom:15px;">
+            {{ form.as_p }}
+        </div>
+
+        <!-- ================= BOTONES ================= -->
+        <div style="
+            display:flex;
+            justify-content:space-between;
+            margin-top:25px;
+        ">
+            <button type="submit"
+                style="
+                    padding:10px 20px;
+                    background:#2E7D32;
+                    color:white;
+                    border:none;
+                    border-radius:8px;
+                    font-weight:bold;
+                    cursor:pointer;
+                ">
+                💾 Realizar traspaso
+            </button>
+
+            <a href="{% url 'balance_cuentas' %}"
+               style="
+                    padding:10px 20px;
+                    background:#9E9E9E;
+                    color:white;
+                    border-radius:8px;
+                    text-decoration:none;
+                    font-weight:bold;
+               ">
+                ✖ Cancelar
+            </a>
+        </div>
+    </form>
+</div>
+
+{% endblock %}

@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+
+<style>
+  @page {
+    size: 80mm auto;
+    margin: 4mm;
+  }
+
+  body {
+    font-family: Arial, sans-serif;
+    font-size: 11px;
+  }
+
+  .center {
+    text-align: center;
+  }
+
+  .bold {
+    font-weight: bold;
+  }
+
+  .line {
+    border-top: 1px dashed #000;
+    margin: 6px 0;
+  }
+</style>
+</head>
+
+<body>
+
+<div class="bold center">
+  TOTAL PAGADO<br>
+  ${{ horas.total_pago }}
+</div>
+
+<div class="line"></div>
+
+Empleado:<br>
+<b>{{ horas.empleado }}</b><br><br>
+
+Semana:<br>
+{{ horas.semana_inicio }} al {{ horas.semana_fin }}<br><br>
+
+Horas trabajadas: {{ horas.horas_trabajadas }}<br>
+Horas extra: {{ horas.horas_extra }}<br>
+Pago por hora extra: $55.00<br>
+
+<div class="line"></div>
+
+<div class="bold center">
+  TOTAL PAGADO<br>
+  ${{ horas.total_pago }}
+</div>
+
+
+<div class="line"></div>
+
+Fecha pago:<br>
+{{ fecha }}<br><br>
+
+Firma empleado:<br>
+_________________________
+
+</body>
+</html>

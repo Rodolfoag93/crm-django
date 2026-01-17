@@ -7,13 +7,16 @@
 <div style="display:flex; gap:20px; flex-wrap:wrap; justify-content:center;">
 
     <a href="{% url 'lista_clientes' %}" class="sub-card">Clientes</a>
-    <a href="{% url 'lista_productos' %}" class="sub-card">Productos</a>
-    <a href="{% url 'lista_rentas' %}" class="sub-card">Rentas</a>
+<a href="{% url 'lista_productos' %}" class="sub-card">Productos</a>
+<a href="{% url 'lista_rentas' %}" class="sub-card">Rentas</a>
 
-    {% if not es_cargador %}
-        <a href="{% url 'lista_rutas' %}" class="sub-card">Rutas</a>
-        <a href="{% url 'ocupacion_productos' %}" class="sub-card">Ocupación</a>
-    {% endif %}
+{% if not es_cargador %}
+    <a href="{% url 'lista_rutas' %}" class="sub-card">Rutas</a>
+    <a href="{% url 'ocupacion_productos' %}" class="sub-card">Ocupación</a>
+   <a href="{% url 'bitacora_list' %}" class="sub-card">
+    🛠 Bitácora de Mantenimiento
+</a>
+{% endif %}
 
 </div>
 

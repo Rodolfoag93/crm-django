@@ -1,0 +1,121 @@
+{% extends "core/base.html" %}
+{% block content %}
+
+<h2 style="text-align:center;">📈 Productos más rentados por ingreso</h2>
+
+<p style="text-align:center;">
+    Mes: <strong>{{ mes }}/{{ anio }}</strong>
+</p>
+<h2 style="text-align:center;">{{ titulo }}</h2>
+
+<div style="display:flex; justify-content:center; gap:15px; margin:20px 0;">
+
+    <!-- Mes anterior -->
+    <a href="?mes={{ mes_anterior }}&anio={{ anio_anterior }}"
+       style="padding:8px 14px; background:#1976d2; color:white; border-radius:6px; text-decoration:none;">
+        ⬅ Mes anterior
+    </a>
+
+    <!-- Mes siguiente -->
+    <a href="?mes={{ mes_siguiente }}&anio={{ anio_siguiente }}"
+       style="padding:8px 14px; background:#1976d2; color:white; border-radius:6px; text-decoration:none;">
+        Mes siguiente ➡
+    </a>
+
+    <!-- Reporte anual -->
+    <a href="?anio={{ anio }}&anual=1"
+       style="padding:8px 14px; background:#2e7d32; color:white; border-radius:6px; text-decoration:none;">
+        📅 Reporte anual
+    </a>
+
+</div>
+
+<!-- TABLA -->
+<table style="width:90%; margin:auto; border-collapse:collapse;">
+    <thead>
+        <tr style="background:#1976d2;color:white; text-align:center;">
+            <th>#</th>
+            <th>Producto</th>
+            <th>Tipo</th>
+            <th>Ingreso generado</th>
+        </tr>
+    </thead>
+    <tbody>
+    {% for p in productos %}
+        <tr style="background:{% cycle 'white' '#f5f5f5' %}; text-align:center;">
+            <td>{{ forloop.counter }}</td>
+            <td>{{ p.producto__nombre }}</td>
+            <td>{{ p.producto__tipo }}</td>
+            <td>
+                <strong>${{ p.ingreso_total|floatformat:2 }}</strong>
+            </td>
+        </tr>
+    {% empty %}
+        <tr>
+            <td colspan="4" style="text-align:center;padding:20px;">
+                No hay datos este periodo
+            </td>
+        </tr>
+    {% endfor %}
+    </tbody>
+</table>
+
+<!-- GRÁFICA -->
+<div style="width:90%; margin:40px auto;">
+    <canvas id="graficaProductos" height="120"></canvas>
+</div>
+
+<!-- CHART JS -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+
+    const labels = [
+        {% for p in productos %}
+            "{{ p.producto__nombre }}",
+        {% endfor %}
+    ];
+
+    const data = [
+        {% for p in productos %}
+            {{ p.ingreso_total|default:0 }},
+        {% endfor %}
+    ];
+
+    const ctx = document
+        .getElementById("graficaProductos")
+        .getContext("2d");
+
+    new Chart(ctx, {
+        type: "bar",
+        data: {
+            labels: labels,
+            datasets: [{
+                label: "Ingreso generado ($)",
+                data: data,
+                backgroundColor: "#2e7d32"
+            }]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        callback: function(value) {
+                            return '$' + value;
+                        }
+                    }
+                }
+            },
+            plugins: {
+                legend: { display: false }
+            }
+        }
+    });
+
+});
+</script>
+
+{% endblock %}

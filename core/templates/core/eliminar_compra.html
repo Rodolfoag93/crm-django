@@ -1,12 +1,11 @@
 {% extends 'core/base.html' %}
 
 {% block content %}
-<h2>{{ titulo }}</h2>
+<h3>¿Deseas eliminar la compra: "{{ compra.concepto }}"?</h3>
 
-<form method="POST">
+<form method="post">
     {% csrf_token %}
-    {{ form.as_p }}
-    <button type="submit" class="btn btn-success">Guardar</button>
+    <button type="submit" class="btn btn-danger">Eliminar</button>
     <a href="{% url 'lista_compras' %}" class="btn btn-secondary">Cancelar</a>
 </form>
 {% endblock %}

@@ -1,0 +1,68 @@
+{% extends "core/base.html" %}
+
+{% block content %}
+<div class="container mt-4 mb-5">
+
+  <div class="row justify-content-center">
+    <div class="col-lg-6 col-md-8">
+
+      <div class="card shadow">
+        <div class="card-body">
+
+          <h4 class="mb-4 text-center fw-bold">
+            Registrar horas extra
+          </h4>
+
+          <form method="post">
+            {% csrf_token %}
+
+            <!-- Empleado -->
+            <div class="mb-3 text-center">
+              <label class="form-label">Empleado</label>
+              <div class="w-75 mx-auto">
+                {{ form.empleado }}
+              </div>
+            </div>
+
+            <!-- Semana inicio -->
+            <div class="mb-3 text-center">
+              <label class="form-label">Inicio de semana</label>
+              <div class="w-50 mx-auto">
+                {{ form.semana_inicio }}
+              </div>
+            </div>
+
+            <!-- Horas trabajadas -->
+            <div class="mb-3 text-center">
+              <label class="form-label">Horas trabajadas</label>
+              <div class="w-50 mx-auto">
+                {{ form.horas_trabajadas }}
+              </div>
+              <div class="form-text">
+                Jornada semanal: 44 hrs · Horas extra se pagan al doble
+              </div>
+            </div>
+
+            <!-- Botones -->
+            <div class="d-flex justify-content-between mt-4">
+              <a href="{% url 'lista_horas_extra' %}"
+                 class="btn btn-outline-secondary px-4">
+                Cancelar
+              </a>
+
+              <button type="submit"
+                      class="btn btn-success px-4">
+                Guardar
+              </button>
+            </div>
+
+          </form>
+
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+{% endblock %}

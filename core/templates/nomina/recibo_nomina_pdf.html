@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+
+<style>
+  @page {
+    size: 80mm auto;
+    margin: 4mm;
+  }
+
+  body {
+    font-family: Arial, sans-serif;
+    font-size: 11px;
+  }
+
+  .center {
+    text-align: center;
+  }
+
+  .bold {
+    font-weight: bold;
+  }
+
+  .line {
+    border-top: 1px dashed #000;
+    margin: 6px 0;
+  }
+
+  ul {
+    padding-left: 16px;
+  }
+
+  li {
+    margin-bottom: 2px;
+  }
+</style>
+</head>
+
+<body>
+
+<div class="center bold">
+  TROTAMUNDOS<br>
+  RECIBO DE NÓMINA
+</div>
+
+<div class="line"></div>
+
+Empleado:<br>
+<b>{{ nomina.empleado }}</b><br><br>
+
+Periodo:<br>
+{{ nomina.fecha_inicio }} al {{ nomina.fecha_fin }}<br><br>
+
+<div class="line"></div>
+
+Sueldo base:<br>
+<b>${{ sueldo_base }}</b><br>
+
+{% if nomina.pagos_extras.exists %}
+<h5>Pagos extra</h5>
+<ul>
+  {% for pago in nomina.pagos_extras.all %}
+    <li>{{ pago.tipo.nombre }}: ${{ pago.monto }}</li>
+  {% endfor %}
+</ul>
+{% endif %}
+
+<div class="line"></div>
+
+<div class="bold center">
+  TOTAL PAGADO<br>
+  ${{ total_pagado }}
+</div>
+
+<div class="line"></div>
+
+Fecha de pago:<br>
+{{ fecha }}<br><br>
+
+Firma empleado:<br>
+_________________________
+
+</body>
+</html>

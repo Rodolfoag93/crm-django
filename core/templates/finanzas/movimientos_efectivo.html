@@ -1,0 +1,64 @@
+{% extends "core/base.html" %}
+{% block content %}
+
+<h2 style="text-align:center;">
+    💵 Movimientos de Efectivo
+</h2>
+<hr>
+
+<!-- ================= RESUMEN ================= -->
+<div style="
+    max-width:900px;
+    margin:20px auto 30px;
+    padding:20px;
+    background:#FFF8E1;
+    border-radius:12px;
+    box-shadow:0 2px 6px rgba(0,0,0,0.15);
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+">
+
+    <div>
+        <strong>Caja:</strong> Efectivo<br>
+        <strong>Tipo:</strong> Operaciones diarias
+    </div>
+
+    <div style="font-size:20px; font-weight:bold;">
+        Saldo efectivo:<br>
+        ${{ saldo_efectivo }}
+    </div>
+
+</div>
+
+<!-- ================= TABLA ================= -->
+<table style="
+    width:100%;
+    max-width:900px;
+    margin:0 auto 30px;
+    border-collapse:collapse;
+">
+    <tr style="background:#FFE082;">
+        <th style="padding:12px;">Fecha</th>
+        <th style="padding:12px;">Tipo</th>
+        <th style="padding:12px;">Monto</th>
+        <th style="padding:12px;">Descripción</th>
+    </tr>
+
+    {% for m in movimientos %}
+    <tr style="border-bottom:1px solid #ddd;">
+        <td style="padding:10px;">
+            {{ m.fecha|date:"d/m/Y H:i" }}
+        </td>
+
+        <td style="
+            padding:10px;
+            font-weight:bold;
+            color:{% if m.tipo == 'INGRESO' %}#2E7D32{% else %}#C62828{% endif %};
+        ">
+            {{ m.tipo }}
+        </td>
+
+        <td style="
+            padding:10px;
+            font-weigh

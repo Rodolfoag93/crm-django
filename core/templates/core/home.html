@@ -25,6 +25,14 @@
         <a href="{% url 'dashboard_admin' %}" class="main-btn">Entrar</a>
     </div>
 
+    <!-- RESUMEN DE MOVIMIENTOS -->
+    <div style="width:300px; background:#43a047; color:white; border-radius:15px;
+                padding:40px; text-align:center; box-shadow:0 6px 12px rgba(0,0,0,0.2);">
+        <h3>💹 Resumen</h3>
+        <p>Movimientos recientes</p>
+        <a href="{% url 'dashboard' %}" class="main-btn">Entrar</a>
+    </div>
+
 </div>
 
 <style>
@@ -37,6 +45,11 @@
     border-radius:8px;
     font-weight:bold;
     text-decoration:none;
+    transition: background 0.3s, color 0.3s;
+}
+.main-btn:hover{
+    background:#f1f1f1;
+    color:#000;
 }
 </style>
 

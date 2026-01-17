@@ -2,7 +2,6 @@
 {% load static %}
 {% block content %}
 
-<!-- ===== CSS ===== -->
 <link rel="stylesheet" href="{% static 'css/styles.css' %}">
 
 <h2>{% if editando %}Editar Renta{% else %}Nueva Renta{% endif %}</h2>
@@ -17,57 +16,78 @@
                placeholder="Escribe el teléfono del cliente"
                value="{% if renta %}{{ renta.cliente.telefono }} - {{ renta.cliente.nombre }}{% endif %}">
     </div>
+    <input type="hidden" name="cliente_id" id="cliente-id"
+           value="{% if renta %}{{ renta.cliente.id }}{% endif %}">
 
     <!-- ===== FECHA Y HORARIO ===== -->
     <div class="row mb-3">
         <div class="col">
-            <label for="id_fecha_renta" class="form-label">Fecha</label>
+            <label class="form-label">Fecha</label>
             {{ form.fecha_renta }}
         </div>
         <div class="col">
-            <label for="id_hora_inicio" class="form-label">Hora inicio</label>
+            <label class="form-label">Hora inicio</label>
             {{ form.hora_inicio }}
         </div>
         <div class="col">
-            <label for="id_hora_fin" class="form-label">Hora fin</label>
+            <label class="form-label">Hora fin</label>
             {{ form.hora_fin }}
         </div>
     </div>
 
-    <!-- ===== DIRECCIÓN Y COMENTARIOS ===== -->
+    <!-- ===== DIRECCIÓN ===== -->
     <div class="mb-3">
-        <label for="calle_y_numero" class="form-label">Calle y número</label>
+        <label class="form-label">Calle y número</label>
         <input type="text" name="calle_y_numero" id="calle_y_numero" class="form-control"
                value="{% if renta %}{{ renta.calle_y_numero }}{% endif %}">
     </div>
+
     <div class="row mb-3">
         <div class="col">
-            <label for="colonia" class="form-label">Colonia</label>
+            <label class="form-label">Colonia</label>
             <input type="text" name="colonia" id="colonia" class="form-control"
                    value="{% if renta %}{{ renta.colonia }}{% endif %}">
         </div>
         <div class="col">
-            <label for="ciudad_o_municipio" class="form-label">Ciudad / Municipio</label>
+            <label class="form-label">Ciudad / Municipio</label>
             <input type="text" name="ciudad_o_municipio" id="ciudad_o_municipio" class="form-control"
                    value="{% if renta %}{{ renta.ciudad_o_municipio }}{% endif %}">
         </div>
     </div>
 
     <div class="mb-3">
-        <label for="comentarios" class="form-label">Comentarios</label>
+        <label class="form-label">Comentarios</label>
         <textarea name="comentarios" id="comentarios" class="form-control">{% if renta %}{{ renta.comentarios }}{% endif %}</textarea>
     </div>
 
     <!-- ===== ANTICIPO ===== -->
     <div class="mb-3">
-        <label for="anticipo" class="form-label">Anticipo</label>
-        <input type="number" step="0.01" name="anticipo" id="anticipo" class="form-control"
-               value="{% if renta %}{{ renta.anticipo }}{% else %}0{% endif %}">
+        <label class="form-label">Anticipo</label>
+        <input type="number" step="0.01" name="anticipo" id="anticipo"
+               class="form-control" value="0">
+    </div>
+
+    <div class="mb-3">
+        <label class="form-label">Método de pago del anticipo</label>
+        <select name="metodo_pago_anticipo" id="metodo_pago_anticipo" class="form-select">
+            <option value="efectivo">Efectivo</option>
+            <option value="transferencia">Transferencia</option>
+        </select>
+    </div>
+
+    <div class="mb-3" id="cuenta_anticipo_container" style="display:none;">
+        <label class="form-label">Cuenta destino</label>
+        <select name="cuenta_anticipo" class="form-select">
+            <option value="">-- Selecciona una cuenta --</option>
+            {% for c in cuentas %}
+                <option value="{{ c.id }}">{{ c.banco }} - {{ c.nombre }}</option>
+            {% endfor %}
+        </select>
     </div>
 
     <hr>
 
-    <!-- ===== TABLA DE PRODUCTOS ===== -->
+    <!-- ===== PRODUCTOS ===== -->
     <h4>Productos</h4>
     <table class="table table-bordered" id="productos-table">
         <thead class="table-light">
@@ -76,7 +96,7 @@
                 <th>Cantidad</th>
                 <th>Precio Unitario</th>
                 <th>Subtotal</th>
-                <th>Acciones</th>
+                <th></th>
             </tr>
         </thead>
         <tbody></tbody>
@@ -84,7 +104,8 @@
 
     <input type="hidden" name="productos_data" id="productos_data">
 
-    <button type="button" class="btn btn-primary mb-3" data-bs-toggle="modal" data-bs-target="#modalAgregarProducto">
+    <button type="button" class="btn btn-primary mb-3" data-bs-toggle="modal"
+            data-bs-target="#modalAgregarProducto">
         Agregar Producto
     </button>
 
@@ -94,156 +115,188 @@
     </div>
 </form>
 
-<!-- ===== MODAL PARA AGREGAR PRODUCTOS ===== -->
-<div class="modal fade" id="modalAgregarProducto" tabindex="-1" aria-labelledby="modalAgregarProductoLabel" aria-hidden="true">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title">Agregar Producto</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
-      </div>
-      <div class="modal-body">
-        <label for="producto-busqueda" class="form-label">Buscar producto</label>
-        <input type="text" id="producto-busqueda" class="form-control" placeholder="Escribe nombre del producto">
-        <ul class="list-group mt-1" id="lista-productos" style="max-height: 200px; overflow-y: auto;"></ul>
+<!-- ===== MODAL PRODUCTOS ===== -->
+<div class="modal fade" id="modalAgregarProducto" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Agregar Producto</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="text" id="producto-busqueda" class="form-control"
+                       placeholder="Buscar producto">
+                <ul class="list-group mt-2" id="lista-productos"
+                    style="max-height:200px; overflow-y:auto;"></ul>
 
-        <div class="mt-3">
-            <label for="cantidad-producto" class="form-label">Cantidad</label>
-            <input type="number" id="cantidad-producto" class="form-control" min="1" value="1">
+                <div class="mt-3">
+                    <label>Cantidad</label>
+                    <input type="number" id="cantidad-producto" class="form-control" min="1" value="1">
+                </div>
+            </div>
         </div>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-      </div>
     </div>
-  </div>
 </div>
 
-<!-- ===== JAVASCRIPT ===== -->
 <script>
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
 
+    /* ===============================
+       DATA DESDE DJANGO
+    =============================== */
     let clientes = {{ clientes_json|safe }};
     let productosCatalogo = {{ productos_catalogo_json|safe }};
-    let productos = {{ productos_data|safe }};
+    let productos = {{ productos_data|default:"[]"|safe }};
 
-    // ===== AUTOCOMPLETAR CLIENTE =====
-    const inputCliente = document.getElementById('cliente-input');
-    inputCliente.addEventListener('input', function() {
-        const telefono = this.value;
-        const cliente = clientes.find(c => c.telefono === telefono || (telefono.includes(c.telefono) && c.telefono));
-        if (cliente) {
-            document.getElementById('calle_y_numero').value = cliente.calle_y_numero || '';
-            document.getElementById('colonia').value = cliente.colonia || '';
-            document.getElementById('ciudad_o_municipio').value = cliente.ciudad_o_municipio || '';
-            this.value = `${cliente.telefono} - ${cliente.nombre}`;
+    /* ===============================
+       ANTICIPO / CUENTAS
+    =============================== */
+    const metodoPago = document.getElementById('metodo_pago_anticipo');
+    const cuentaDiv = document.getElementById('cuenta_anticipo_container');
+    const anticipoInput = document.getElementById('anticipo');
+
+    function toggleCuenta() {
+        if (parseFloat(anticipoInput.value) > 0 && metodoPago.value === 'transferencia') {
+            cuentaDiv.style.display = 'block';
+        } else {
+            cuentaDiv.style.display = 'none';
         }
-    });
-
-    // ===== TABLA DE PRODUCTOS =====
-function renderProductos() {
-    const tbody = document.querySelector('#productos-table tbody');
-    tbody.innerHTML = '';
-    productos.forEach((p, index) => {
-        const subtotal = (parseFloat(p.precio_unitario) * parseInt(p.cantidad)).toFixed(2);
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-            <td>${p.nombre}</td>
-            <td><input type="number" min="1" value="${p.cantidad}" class="form-control cantidad-input" data-index="${index}"></td>
-            <td><input type="number" step="0.01" value="${parseFloat(p.precio_unitario).toFixed(2)}" class="form-control precio-unitario-input" data-index="${index}"></td>
-            <td class="subtotal">${subtotal}</td>
-            <td><button type="button" class="btn btn-sm btn-danger btn-eliminar" data-index="${index}">Eliminar</button></td>
-        `;
-        tbody.appendChild(tr);
-    });
-    document.getElementById('productos_data').value = JSON.stringify(productos);
-}
-
-// ===== EVENTOS EDITABLES SIN PERDER FOCO =====
-const table = document.querySelector('#productos-table');
-
-table.addEventListener('input', e => {
-    const index = e.target.dataset.index;
-    if (!index) return;
-
-    if (e.target.classList.contains('cantidad-input')) {
-        productos[index].cantidad = parseInt(e.target.value) || 1;
-    } else if (e.target.classList.contains('precio-unitario-input')) {
-        productos[index].precio_unitario = parseFloat(e.target.value) || 0;
     }
 
-    // Actualizamos solo el subtotal de esa fila
-    const tr = e.target.closest('tr');
-    const subtotal = (productos[index].cantidad * productos[index].precio_unitario).toFixed(2);
-    tr.querySelector('.subtotal').textContent = subtotal;
+    metodoPago.addEventListener('change', toggleCuenta);
+    anticipoInput.addEventListener('input', toggleCuenta);
+    toggleCuenta();
 
-    document.getElementById('productos_data').value = JSON.stringify(productos);
-});
+    /* ===============================
+       AUTOCOMPLETE CLIENTE
+    =============================== */
+    const clienteInput = document.getElementById('cliente-input');
+    const clienteIdInput = document.getElementById('cliente-id');
 
-    table.addEventListener('click', e => {
-        if (e.target.classList.contains('btn-eliminar')) {
-            const index = e.target.dataset.index;
-            productos.splice(index, 1);
+    clienteInput.addEventListener('blur', function () {
+        const txt = this.value.toLowerCase().trim();
+        if (!txt) return;
+
+        const matches = clientes.filter(x =>
+            x.telefono.includes(txt) ||
+            x.nombre.toLowerCase().includes(txt)
+        );
+
+        // ✅ SOLO si hay un match exacto
+        if (matches.length === 1) {
+            const c = matches[0];
+
+            clienteIdInput.value = c.id;
+            document.getElementById('calle_y_numero').value = c.calle_y_numero || '';
+            document.getElementById('colonia').value = c.colonia || '';
+            document.getElementById('ciudad_o_municipio').value = c.ciudad_o_municipio || '';
+            this.value = `${c.telefono} - ${c.nombre}`;
+        }
+    });
+
+    /* ===============================
+       MODAL PRODUCTOS
+    =============================== */
+    const listaProductos = document.getElementById('lista-productos');
+    const busquedaProducto = document.getElementById('producto-busqueda');
+    const cantidadProducto = document.getElementById('cantidad-producto');
+
+    busquedaProducto.addEventListener('input', function () {
+        const txt = this.value.toLowerCase();
+        listaProductos.innerHTML = '';
+
+        productosCatalogo
+            .filter(p => p.nombre.toLowerCase().includes(txt))
+            .forEach(p => {
+                const li = document.createElement('li');
+                li.className = 'list-group-item list-group-item-action';
+                li.textContent = `${p.nombre} ($${p.precio})`;
+
+                li.onclick = () => {
+                    productos.push({
+                        id: p.id,
+                        nombre: p.nombre,
+                        cantidad: parseInt(cantidadProducto.value) || 1,
+                        precio_unitario: p.precio
+                    });
+                    renderProductos();
+                    busquedaProducto.value = '';
+                    listaProductos.innerHTML = '';
+                };
+
+                listaProductos.appendChild(li);
+            });
+    });
+
+    /* ===============================
+       TABLA PRODUCTOS
+    =============================== */
+    function renderProductos() {
+        const tbody = document.querySelector('#productos-table tbody');
+        tbody.innerHTML = '';
+
+        productos.forEach((p, i) => {
+            const sub = (p.cantidad * p.precio_unitario).toFixed(2);
+
+            tbody.innerHTML += `
+                <tr>
+                    <td>${p.nombre}</td>
+                    <td>
+                        <input type="number" class="form-control cantidad"
+                               data-i="${i}" value="${p.cantidad}">
+                    </td>
+                    <td>
+                        <input type="number" class="form-control precio"
+                               data-i="${i}" value="${p.precio_unitario}">
+                    </td>
+                    <td>$${sub}</td>
+                    <td>
+                        <button type="button"
+                                class="btn btn-danger btn-sm del"
+                                data-i="${i}">X</button>
+                    </td>
+                </tr>`;
+        });
+
+        document.getElementById('productos_data').value = JSON.stringify(productos);
+    }
+
+    document.querySelector('#productos-table').addEventListener('input', e => {
+        const i = e.target.dataset.i;
+        if (i === undefined) return;
+
+        if (e.target.classList.contains('cantidad')) {
+            productos[i].cantidad = parseInt(e.target.value) || 1;
+        }
+        if (e.target.classList.contains('precio')) {
+            productos[i].precio_unitario = parseFloat(e.target.value) || 0;
+        }
+        renderProductos();
+    });
+
+    document.querySelector('#productos-table').addEventListener('click', e => {
+        if (e.target.classList.contains('del')) {
+            productos.splice(e.target.dataset.i, 1);
             renderProductos();
         }
     });
+
+    /* ===============================
+       ABRIR TICKET AL CREAR RENTA
+    ================================ */
+    const params = new URLSearchParams(window.location.search);
+    const rentaCreada = params.get('renta_creada');
+
+    if (rentaCreada) {
+        const urlTicket = "{% url 'ticket_pdf' 0 %}".replace("/0/", "/" + rentaCreada + "/");
+        window.open(urlTicket, '_blank');
+
+        // limpiar URL para que no se vuelva a abrir al refrescar
+        window.history.replaceState({}, document.title, window.location.pathname);
+    }
 
     renderProductos();
-
-    // ===== MODAL PRODUCTOS =====
-    const modal = document.getElementById('modalAgregarProducto');
-    const inputBusqueda = document.getElementById('producto-busqueda');
-    const listaProductos = document.getElementById('lista-productos');
-
-    modal.addEventListener('shown.bs.modal', function(){
-        inputBusqueda.value = '';
-        listaProductos.innerHTML = '';
-        inputBusqueda.focus();
-    });
-
-    inputBusqueda.addEventListener('input', function() {
-        const texto = this.value.toLowerCase();
-        listaProductos.innerHTML = '';
-
-        const filtrados = productosCatalogo.filter(p => p.nombre.toLowerCase().includes(texto));
-
-        filtrados.forEach(p => {
-            const precioNum = parseFloat(p.precio) || 0;
-            const li = document.createElement('li');
-            li.className = 'list-group-item list-group-item-action';
-            li.textContent = `${p.nombre} - $${precioNum.toFixed(2)}`;
-            li.dataset.id = p.id;
-            li.dataset.nombre = p.nombre;
-            li.dataset.precio = precioNum;
-            listaProductos.appendChild(li);
-        });
-    });
-
-    listaProductos.addEventListener('click', function(e){
-        if(e.target.tagName === 'LI'){
-            const id = parseInt(e.target.dataset.id);
-            const nombre = e.target.dataset.nombre;
-            const precio = parseFloat(e.target.dataset.precio) || 0;
-            const cantidad = parseInt(document.getElementById('cantidad-producto').value) || 1;
-
-            productos.push({id, nombre, precio_unitario: precio, cantidad});
-            renderProductos();
-
-            inputBusqueda.value = '';
-            listaProductos.innerHTML = '';
-
-            bootstrap.Modal.getInstance(modal).hide();
-        }
-    });
-
 });
-    // ===== ABRIR TICKET Y ALERTA =====
-const urlParams = new URLSearchParams(window.location.search);
-const rentaId = urlParams.get('renta_creada');
-if (rentaId) {
-    alert('Renta creada correctamente con ID ' + rentaId);
-    window.open(`/rentas/ticket/${rentaId}/`, '_blank');
-}
 </script>
 
 {% endblock %}

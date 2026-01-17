@@ -11,16 +11,16 @@
 <form method="get" style="margin-bottom:15px;">
     <label>Mostrar:</label>
     <select name="filtro" onchange="this.form.submit()">
-        <option value="todos">Todos</option>
-        <option value="parcial">Solo parciales</option>
-        <option value="lleno">Solo llenos</option>
+        <option value="todos" {% if filtro == 'todos' %}selected{% endif %}>Todos</option>
+        <option value="parcial" {% if filtro == 'parcial' %}selected{% endif %}>Solo parciales</option>
+        <option value="lleno" {% if filtro == 'lleno' %}selected{% endif %}>Solo llenos</option>
     </select>
 </form>
 
 <div class="d-flex justify-content-between align-items-center mb-3">
     <a class="btn btn-outline-secondary"
        href="?week={{ prev_week|date:'Y-m-d' }}&filtro={{ filtro }}">
-    ⬅ Semana anterior
+        ⬅ Semana anterior
     </a>
 
     <strong>
@@ -29,7 +29,7 @@
 
     <a class="btn btn-outline-secondary"
        href="?week={{ next_week|date:'Y-m-d' }}&filtro={{ filtro }}">
-    Semana siguiente ➡
+        Semana siguiente ➡
     </a>
 </div>
 
@@ -46,14 +46,14 @@
         {% for fila in data %}
         <tr>
             <td>{{ fila.producto.nombre }}</td>
-
             {% for estado in fila.estados %}
-                <td style="text-align:center;
-                    {% if estado.estado == 'LIBRE' %}background:#c8e6c9;{% endif %}
-                    {% if estado.estado == 'PARCIAL' %}background:#fff9c4;{% endif %}
-                    {% if estado.estado == 'LLENO' %}background:#ffcdd2;{% endif %}
-                    {% if estado.estado == 'INACTIVO' %}background:#e0e0e0;{% endif %}
-                ">
+                <td class="celda-calendario"
+                    data-fecha="{{ estado.fecha|date:'Y-m-d' }}"
+                    style="text-align:center;
+                        {% if estado.estado == 'LIBRE' %}background:#c8e6c9;{% endif %}
+                        {% if estado.estado == 'PARCIAL' %}background:#fff9c4;{% endif %}
+                        {% if estado.estado == 'LLENO' %}background:#ffcdd2;{% endif %}
+                        {% if estado.estado == 'INACTIVO' %}background:#e0e0e0;{% endif %}">
                     {{ estado.estado }}
                 </td>
             {% endfor %}
@@ -71,5 +71,117 @@
     <span style="background:#ffcdd2;padding:5px;">LLENO</span>
     <span style="background:#e0e0e0;padding:5px;">INACTIVO</span>
 </div>
+
+<!-- Modal -->
+<div class="modal fade" id="modalCalendario" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5>Productos rentados</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="modal-body"></div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const celdas = document.querySelectorAll('.celda-calendario');
+
+    celdas.forEach(celda => {
+        celda.addEventListener('click', async () => {
+            const fecha = celda.dataset.fecha;
+
+            try {
+                const res = await fetch(`/ocupacion/${fecha}/`);
+                if (!res.ok) throw new Error('Error backend');
+
+                const productos = await res.json();
+                let html = '';
+
+                if (productos.length === 0) {
+                    html = "<p>No hay productos rentados este día.</p>";
+                } else {
+                    html = `
+                    <table class="table table-bordered">
+                    <thead>
+                        <tr>
+                            <th>Producto</th>
+                            <th>Cantidad</th>
+                            <th>Última renta</th>
+                            <th>Último mantenimiento</th>
+                            <th>Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    `;
+
+                    productos.forEach(p => {
+                        const hoy = new Date().toISOString().split('T')[0];
+                        const yaMantenidoHoy = p.fecha_ultimo_mantenimiento === hoy;
+
+                        html += `
+                        <tr>
+                            <td>${p.nombre}</td>
+                            <td>${p.cantidad_rentada}</td>
+                            <td>${p.fecha_ultima_renta || 'N/A'}</td>
+                            <td>${p.fecha_ultimo_mantenimiento || 'N/A'}</td>
+                            <td>
+                                <button class="btn btn-sm btn-success"
+                                    ${yaMantenidoHoy ? 'disabled' : ''}
+                                    onclick="marcarMantenimiento(${p.producto_id}, '${fecha}')">
+                                    ${yaMantenidoHoy ? 'Mantenido hoy' : 'Marcar mantenimiento'}
+                                </button>
+                            </td>
+                        </tr>
+                        `;
+                    });
+
+                    html += '</tbody></table>';
+                }
+
+                document.getElementById('modal-body').innerHTML = html;
+                new bootstrap.Modal(document.getElementById('modalCalendario')).show();
+
+            } catch (err) {
+                console.error(err);
+                alert('No se pudieron cargar los datos del día');
+            }
+        });
+    });
+});
+
+async function marcarMantenimiento(producto_id, fecha) {
+    try {
+        const res = await fetch("/marcar_mantenimiento/", {
+            method: "POST",
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: JSON.stringify({ producto_id })
+        });
+
+        const data = await res.json();
+
+        if (data.status === 'ok') {
+            alert(`Mantenimiento marcado: ${data.fecha_ultimo_mantenimiento}`);
+            const modal = bootstrap.Modal.getInstance(
+                document.getElementById('modalCalendario')
+            );
+            modal.hide();
+        } else {
+            alert('Error al marcar mantenimiento');
+        }
+    } catch (err) {
+        console.error(err);
+        alert('Error al registrar mantenimiento');
+    }
+}
+</script>
 
 {% endblock %}

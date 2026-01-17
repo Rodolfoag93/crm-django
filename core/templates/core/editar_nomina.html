@@ -1,0 +1,129 @@
+{% extends "core/base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+
+  <h3>Editar nómina: {{ nomina.empleado }}</h3>
+
+  <!-- Formulario de la nómina -->
+  <div class="card shadow mb-4">
+    <div class="card-body">
+      <form method="post">
+        {% csrf_token %}
+        {% for field in form %}
+          <div class="mb-3">
+            <label class="form-label">{{ field.label }}</label>
+            {{ field }}
+            {% if field.errors %}
+              <div class="text-danger small">{{ field.errors }}</div>
+            {% endif %}
+          </div>
+        {% endfor %}
+        <button type="submit" name="guardar_nomina" class="btn btn-success">
+          Guardar nómina
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Pagos extra existentes -->
+  <div class="card shadow mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center bg-dark text-white">
+      <span>Pagos extra actuales</span>
+      <!-- Botón para abrir modal -->
+      <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#modalPagoExtra">
+        + Agregar pago extra
+      </button>
+    </div>
+    <div class="card-body table-responsive">
+      <table class="table table-striped align-middle">
+        <thead>
+          <tr>
+            <th>Concepto</th>
+            <th class="text-end">Monto</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for pago in pagos %}
+          <tr>
+            <td>{{ pago.tipo.nombre }}</td>
+            <td class="text-end">${{ pago.monto }}</td>
+            <td class="text-end">
+              <a href="{% url 'eliminar_pago_extra' pago.id %}"
+                 class="btn btn-sm btn-outline-danger"
+                 onclick="return confirm('¿Eliminar este pago extra?')">
+                Eliminar
+              </a>
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="3" class="text-center text-muted">
+              No hay pagos extra registrados
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<!-- Modal para agregar pago extra -->
+<div class="modal fade" id="modalPagoExtra" tabindex="-1" aria-labelledby="modalPagoExtraLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form method="post">
+        {% csrf_token %}
+        <div class="modal-header">
+          <h5 class="modal-title" id="modalPagoExtraLabel">Agregar pago extra</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">Tipo de pago extra</label>
+            <select name="tipo" id="id_tipo" class="form-select">
+              {% for tipo in pago_extra_form.fields.tipo.queryset %}
+                <option value="{{ tipo.id }}" data-monto="{{ tipo.monto_default }}">
+                  {{ tipo.nombre }}
+                </option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Monto</label>
+            {{ pago_extra_form.monto }}
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" name="agregar_pago_extra" class="btn btn-success">Agregar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- JS para precargar monto default editable -->
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  const tipoSelect = document.getElementById("id_tipo");
+  const montoInput = document.getElementById("id_monto");
+
+  function actualizarMontoDefault() {
+    const selectedOption = tipoSelect.options[tipoSelect.selectedIndex];
+    const defaultMonto = selectedOption.getAttribute('data-monto');
+    montoInput.value = defaultMonto || 0;
+  }
+
+  // Cargar monto al abrir modal
+  actualizarMontoDefault();
+
+  // Cambiar monto cuando cambia el tipo
+  tipoSelect.addEventListener('change', actualizarMontoDefault);
+});
+</script>
+
+{% endblock %}

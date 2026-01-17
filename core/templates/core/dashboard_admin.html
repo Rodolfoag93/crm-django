@@ -11,6 +11,22 @@
     <a href="{% url 'lista_nomina' %}" class="admin-card">Nómina</a>
     <a href="{% url 'lista_gastos' %}" class="admin-card">Gastos</a>
     <a href="{% url 'lista_compras' %}" class="admin-card">Compras</a>
+    <a href="{% url 'lista_cuentas' %}" class="admin-card">Cuentas bancarias</a>
+
+    <!-- 🔥 NUEVO: FINANZAS -->
+    <a href="{% url 'balance_cuentas' %}" class="admin-card finanzas">
+        💰 Finanzas
+    </a>
+
+    <a href="{% url 'productos_mas_rentados' %}"
+       style="padding:15px 25px;
+              background:#ff9800;
+              color:white;
+              border-radius:10px;
+              font-weight:bold;
+              text-decoration:none;">
+        📈 Productos más rentados
+    </a>
 
 </div>
 
@@ -28,6 +44,14 @@
 }
 .admin-card:hover{
     background:#7B1FA2;
+}
+
+/* Diferenciar Finanzas visualmente */
+.admin-card.finanzas{
+    background:#2E7D32;
+}
+.admin-card.finanzas:hover{
+    background:#1B5E20;
 }
 </style>
 

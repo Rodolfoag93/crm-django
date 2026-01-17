@@ -1,0 +1,75 @@
+{% extends 'core/base.html' %}
+{% block content %}
+<h3>Bitácora de Mantenimiento</h3>
+
+<form method="get" class="mb-3">
+  <input
+    type="text"
+    name="q"
+    placeholder="Buscar producto..."
+    value="{{ q }}"
+  >
+  <button type="submit" class="btn btn-primary btn-sm">Buscar</button>
+</form>
+
+<table class="table table-striped">
+  <thead>
+    <tr>
+      <th>Producto</th>
+      <th>Última Renta</th>
+      <th>Último Mantenimiento</th>
+      <th>Acción</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for b in bitacoras %}
+    <tr>
+      <td>{{ b.producto.nombre }}</td>
+      <td>
+        {% if b.ultima_renta %}
+          {{ b.ultima_renta }}
+        {% else %}
+          N/A
+        {% endif %}
+      </td>
+      <td>
+        {% if b.fecha_ultimo_mantenimiento %}
+          {{ b.fecha_ultimo_mantenimiento }}
+        {% else %}
+          N/A
+        {% endif %}
+      </td>
+      <td>
+        <button class="btn btn-sm btn-success marcar" data-id="{{ b.producto.id }}">
+          Marcar mantenimiento
+        </button>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<script>
+document.querySelectorAll('.marcar').forEach(btn => {
+    btn.addEventListener('click', async () => {
+        const producto_id = btn.dataset.id;
+        const fecha = new Date().toISOString().split('T')[0]; // Hoy
+        const res = await fetch("{% url 'marcar_mantenimiento' %}", {
+            method: 'POST',
+            headers: {
+                'Content-Type':'application/json',
+                'X-CSRFToken':'{{ csrf_token }}'
+            },
+            body: JSON.stringify({producto_id, fecha})
+        });
+        const data = await res.json();
+        if(data.status == 'ok'){
+            alert(`Mantenimiento marcado: ${data.fecha_ultimo_mantenimiento}\nÚltima renta: ${data.fecha_ultima_renta || 'N/A'}`);
+            location.reload();
+        } else {
+            alert("Error al marcar mantenimiento");
+        }
+    });
+});
+</script>
+{% endblock %}

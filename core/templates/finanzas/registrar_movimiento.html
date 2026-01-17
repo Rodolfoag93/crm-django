@@ -1,0 +1,19 @@
+{% extends "core/base.html" %}
+{% block content %}
+
+<h2>Registrar ingreso / egreso</h2>
+
+<form method="post" style="max-width:500px;margin:auto;">
+    {% csrf_token %}
+    {{ form.as_p }}
+
+    <button type="submit" style="padding:10px 20px;">
+        Guardar movimiento
+    </button>
+</form>
+
+<div style="text-align:center;margin-top:20px;">
+    <a href="{% url 'balance_cuentas' %}">⬅ Volver a Finanzas</a>
+</div>
+
+{% endblock %}
