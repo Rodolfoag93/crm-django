@@ -44,29 +44,28 @@ class Producto(models.Model):
     activo = models.BooleanField(default=True)
 
     # ===== INVENTARIO =====
-    def hay_stock(self, cantidad):
-        return self.stock_disponible >= cantidad
+    def hay_stock(self, cantidad, fecha, hora_inicio, hora_fin):
+        return self.stock_disponible_en_horario(fecha, hora_inicio, hora_fin) >= cantidad
 
-    def reservar_stock(self, cantidad):
-        if not self.hay_stock(cantidad):
-            raise ValueError("Stock insuficiente")
-        self.stock_disponible -= cantidad
-        self.save(update_fields=['stock_disponible'])
+    #def reservar_stock(self, cantidad):
+        #if not self.hay_stock(cantidad):
+            #raise ValueError("Stock insuficiente")
+        #self.stock_disponible -= cantidad
+        #self.save(update_fields=['stock_disponible'])
 
-    def liberar_stock(self, cantidad):
-        self.stock_disponible = min(
-            self.stock_disponible + cantidad,
-            self.stock_total
-        )
-        self.save(update_fields=['stock_disponible'])
+    #def liberar_stock(self, cantidad):
+        #self.stock_disponible = min(
+            #self.stock_disponible + cantidad,
+            #self.stock_total
+        #)
+        #self.save(update_fields=['stock_disponible'])
 
     @property
     def disponible(self):
         return self.activo and self.stock_disponible > 0
 
     def stock_disponible_en_horario(self, fecha, hora_inicio, hora_fin):
-        # aquí ya puedes usar self
-        rentas_en_horario = RentaProducto.objects.filter(
+        rentados = RentaProducto.objects.filter(
             producto=self,
             renta__fecha_renta=fecha,
             renta__hora_inicio__lt=hora_fin,
@@ -74,8 +73,9 @@ class Producto(models.Model):
             renta__status='ACTIVO'
         ).aggregate(total=models.Sum('cantidad'))['total'] or 0
 
-        disponible = self.stock_total - rentas_en_horario
+        disponible = self.stock_total - rentados
         return max(disponible, 0)
+
 
     def ocupacion_por_dia(self, fecha):
         if not self.activo:
@@ -232,12 +232,18 @@ class RentaProducto(models.Model):
 
     @staticmethod
     def obtener_fecha_ultima_renta(producto):
+        hoy = timezone.localdate()
+
         ultima_renta = (
-            RentaProducto.objects
-            .filter(producto=producto)
+            RentaProducto.objects.filter(
+                producto=producto,
+                renta__fecha_renta__lte=hoy,
+                renta__status='ACTIVO'
+            )
             .order_by('-renta__fecha_renta')
             .first()
         )
+
         if ultima_renta:
             return ultima_renta.renta.fecha_renta
         return None

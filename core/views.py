@@ -1694,11 +1694,7 @@ def bitacora_list(request):
 
     # 🧠 Agregar fecha última renta a cada fila
     for b in bitacoras:
-        b.ultima_renta = RentaProducto.objects.filter(
-            producto=b.producto
-        ).order_by('-renta__fecha_renta').values_list(
-            'renta__fecha_renta', flat=True
-        ).first()
+        b.ultima_renta = RentaProducto.obtener_fecha_ultima_renta(b.producto)
 
     return render(
         request,

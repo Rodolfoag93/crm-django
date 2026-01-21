@@ -13,8 +13,8 @@
         }
 
         body {
-            width: 72mm;
-            max-width: 72mm;
+            width: 62mm;
+            max-width: 62mm;
             font-family: Courier, monospace;
             font-size: 10.5px;
             margin: 0;
@@ -58,12 +58,10 @@
         }
 
         th, td {
-            padding: 2px 0;
-            border-bottom: 1px dotted #444;
-            overflow: hidden;
-            white-space: nowrap;
-            text-overflow: ellipsis;
-        }
+  		padding: 2px 0;
+  		border-bottom: 1px dotted #444;
+  		font-size: 9.5px;
+		}	
 
         th {
             font-weight: bold;
@@ -84,10 +82,19 @@
             text-align: center;
             margin-top: 10px;
         }
-    </style>
+
+	/* Forzar fin de página (ayuda al corte) */
+	.cut {
+    		page-break-after: always;
+		}
+	</style>
+
+          
 </head>
 
-<body>
+
+
+<body onload="window.print(); window.close();">
 
     <!-- LOGO -->
     <img src="{{ logo_url }}" class="logo" alt="Logo Empresa">
@@ -101,6 +108,7 @@
     <hr>
 
     <p><strong>Cliente:</strong> {{ renta.cliente.nombre }}</p>
+    <p><strong>Teléfono:</strong> {{ renta.cliente.telefono }}</p>
     <p><strong>Fecha:</strong> {{ renta.fecha_renta }} {{ renta.hora_inicio }} - {{ renta.hora_fin }}</p>
     <p><strong>Dirección:</strong> {{ renta.calle_y_numero }}, {{ renta.colonia }}, {{ renta.ciudad_o_municipio }}</p>
 
@@ -146,6 +154,6 @@
     <div class="footer">
         <p>¡Gracias por tu preferencia!</p>
     </div>
-
+<div class="cut"></div>
 </body>
 </html>
