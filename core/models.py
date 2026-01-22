@@ -47,18 +47,11 @@ class Producto(models.Model):
     def hay_stock(self, cantidad, fecha, hora_inicio, hora_fin):
         return self.stock_disponible_en_horario(fecha, hora_inicio, hora_fin) >= cantidad
 
-    #def reservar_stock(self, cantidad):
-        #if not self.hay_stock(cantidad):
-            #raise ValueError("Stock insuficiente")
-        #self.stock_disponible -= cantidad
-        #self.save(update_fields=['stock_disponible'])
+    def reservar_stock(self, cantidad):
+        return
 
-    #def liberar_stock(self, cantidad):
-        #self.stock_disponible = min(
-            #self.stock_disponible + cantidad,
-            #self.stock_total
-        #)
-        #self.save(update_fields=['stock_disponible'])
+    def liberar_stock(self, cantidad):
+        return
 
     @property
     def disponible(self):
