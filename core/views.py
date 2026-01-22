@@ -1063,66 +1063,100 @@ def marcar_pendiente(request, renta_id):
 
 @login_required
 def pedidos_semana(request):
-    # Revisar si viene el lunes de la semana a mostrar
     semana_inicio_str = request.GET.get("semana_inicio")
+    busqueda = request.GET.get("q", "").strip()
+
+    hoy = timezone.localdate()
     if semana_inicio_str:
         try:
             inicio = date.fromisoformat(semana_inicio_str)
         except ValueError:
-            inicio = date.today() - timedelta(days=date.today().weekday())
+            inicio = hoy - timedelta(days=hoy.weekday())
     else:
-        inicio = date.today() - timedelta(days=date.today().weekday())
+        inicio = hoy - timedelta(days=hoy.weekday())
 
-    fin = inicio + timedelta(days=6)  # domingo de la semana
+    fin = inicio + timedelta(days=6)
 
-    tipo_filtrado = request.GET.get("tipo")  # filtro opcional
+    tipo_filtrado = request.GET.get("tipo")
 
-    cuentas = Cuenta.objects.filter(activa=True)
-    rentas = Renta.objects.filter(fecha_renta__range=[inicio, fin])
-
-    rentas_filtradas = []
-    for r in rentas:
-        productos = r.rentaproductos.all()
-        if tipo_filtrado:
-            productos = productos.filter(producto__tipo=tipo_filtrado)
-
-        if productos.exists():
-            # Asegurarse de que el total de finanza tenga el valor correcto
-            if r.finanza and r.finanza.total == 0:
-                r.finanza.total = r.precio_total
-            rentas_filtradas.append((r, productos))
-
-    # Totales
-    total_ventas = sum(r.finanza.total for r, _ in rentas_filtradas)
-    total_fletes = sum(
-        sum(rp.subtotal for rp in productos if rp.producto.tipo == "FL")
-        for r, productos in rentas_filtradas
+    rentas_qs = (
+        Renta.objects
+        .filter(fecha_renta__range=[inicio, fin])
+        .select_related(
+            "cliente",
+            "finanza",
+            "finanza__cuenta_destino"
+        )
+        .prefetch_related(
+            "rentaproductos",
+            "rentaproductos__producto"
+        )
     )
-    total_pagado = sum(r.finanza.total for r, _ in rentas_filtradas if r.finanza.pagado)
-    total_pendiente = sum(r.finanza.total for r, _ in rentas_filtradas if not r.finanza.pagado)
 
-    # Fechas para navegación
-    semana_anterior = inicio - timedelta(days=7)
-    semana_siguiente = inicio + timedelta(days=7)
+    if busqueda:
+        rentas_qs = rentas_qs.filter(
+            Q(cliente__nombre__icontains=busqueda) |
+            Q(cliente__telefono__icontains=busqueda) |
+            Q(folio__icontains=busqueda)
+        )
 
-    #marcar recolectado
-    empleados = Empleado.objects.filter(activo=True)
+    rentas = []
 
-    return render(request, 'core/pedidos_semana.html', {
-        "rentas": rentas_filtradas,
+    for r in rentas_qs:
+        productos = list(r.rentaproductos.all())
+
+        if tipo_filtrado:
+            productos = [
+                rp for rp in productos
+                if rp.producto.tipo == tipo_filtrado
+            ]
+
+        if not productos:
+            continue
+
+        if r.finanza and r.finanza.total == 0:
+            r.finanza.total = r.precio_total
+
+        rentas.append((r, productos))
+
+    total_ventas = sum(
+        r.finanza.total for r, _ in rentas if r.finanza
+    )
+
+    total_fletes = sum(
+        rp.subtotal
+        for _, productos in rentas
+        for rp in productos
+        if rp.producto.tipo == "FL"
+    )
+
+    total_pagado = sum(
+        r.finanza.total for r, _ in rentas
+        if r.finanza and r.finanza.pagado
+    )
+
+    total_pendiente = sum(
+        r.finanza.total for r, _ in rentas
+        if r.finanza and not r.finanza.pagado
+    )
+
+    return render(request, "core/pedidos_semana.html", {
+        "rentas": rentas,
         "inicio_semana": inicio,
         "fin_semana": fin,
         "total_ventas": total_ventas,
         "total_fletes": total_fletes,
         "total_pagado": total_pagado,
         "total_pendiente": total_pendiente,
-        "tipo_filtrado": tipo_filtrado,
-        "cuentas": cuentas,
-        "semana_anterior": semana_anterior,
-        "semana_siguiente": semana_siguiente,
-        "empleados": empleados,  # 👈 NUEVO
-        "module": 'admin'
+        "semana_anterior": inicio - timedelta(days=7),
+        "semana_siguiente": inicio + timedelta(days=7),
+        "cuentas": Cuenta.objects.filter(activa=True),
+        "empleados": Empleado.objects.filter(activo=True),
+        "module": "admin"
     })
+
+
+
 
 @login_required
 def lista_gastos(request):

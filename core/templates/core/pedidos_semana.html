@@ -1,190 +1,251 @@
 {% extends 'core/base.html' %}
-
 {% block content %}
-<h2 style="text-align:center; margin-top: 20px;">Pedidos de la Semana</h2>
 
+<h2 class="text-center mt-3">📦 Pedidos de la Semana</h2>
 
-<!-- NAVEGACIÓN ENTRE SEMANAS -->
-<div style="text-align:center; margin-bottom:20px;">
-    <a href="?semana_inicio={{ semana_anterior|date:'Y-m-d' }}{% if tipo_filtrado %}&tipo={{ tipo_filtrado }}{% endif %}"
-       style="padding:5px 15px; background:#2196f3; color:white; border-radius:6px; text-decoration:none;">
-        ◀ Semana anterior
+<!-- =======================
+     FILTRO SEMANA + BUSQUEDA
+     ======================= -->
+<form method="get" class="row g-3 align-items-end mb-3 justify-content-center">
+
+  <div class="col-md-3">
+    <label class="form-label">Semana (lunes)</label>
+    <input type="date"
+           name="semana_inicio"
+           class="form-control"
+           value="{{ inicio_semana|date:'Y-m-d' }}">
+  </div>
+
+  <div class="col-md-4">
+    <label class="form-label">Buscar</label>
+    <input type="text"
+           name="q"
+           class="form-control"
+           placeholder="Cliente, teléfono o folio"
+           value="{{ request.GET.q }}">
+  </div>
+
+  <div class="col-md-2 d-grid">
+    <button class="btn btn-primary">🔍 Buscar</button>
+  </div>
+
+  {% if request.GET.q %}
+  <div class="col-md-2 d-grid">
+    <a href="?semana_inicio={{ inicio_semana|date:'Y-m-d' }}"
+       class="btn btn-secondary">
+      ❌ Limpiar
     </a>
+  </div>
+  {% endif %}
 
-    <span style="margin:0 15px; font-weight:bold;">
-        Semana del {{ inicio_semana }} al {{ fin_semana }}
-    </span>
+</form>
 
-    <a href="?semana_inicio={{ semana_siguiente|date:'Y-m-d' }}{% if tipo_filtrado %}&tipo={{ tipo_filtrado }}{% endif %}"
-       style="padding:5px 15px; background:#4caf50; color:white; border-radius:6px; text-decoration:none;">
-        Semana siguiente ▶
-    </a>
+<!-- =======================
+     NAVEGACION SEMANAL
+     ======================= -->
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <a class="btn btn-outline-secondary"
+     href="?semana_inicio={{ semana_anterior|date:'Y-m-d' }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}">
+    ⬅ Semana anterior
+  </a>
+
+  <strong>
+    {{ inicio_semana|date:"d M Y" }} – {{ fin_semana|date:"d M Y" }}
+  </strong>
+
+  <a class="btn btn-outline-secondary"
+     href="?semana_inicio={{ semana_siguiente|date:'Y-m-d' }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}">
+    Semana siguiente ➡
+  </a>
 </div>
 
-<!-- ACCIONES GENERALES -->
-<div style="width: 90%; margin: auto; text-align: right; margin-bottom: 20px; display:flex; justify-content:flex-end; gap:15px;">
-    <a href="{% url 'nuevo_gasto' %}" class="btn btn-danger font-weight-bold">
-        ➕ Registrar Gasto
-    </a>
-    <a href="{% url 'nueva_compra' %}" class="btn btn-primary font-weight-bold">
-        🛒 Registrar Compra
-    </a>
-    <a href="{% url 'nueva_nomina' %}" class="btn btn-success font-weight-bold">
-        💰 Registrar Nómina
-    </a>
+<!-- =======================
+     ACCIONES
+     ======================= -->
+<div class="d-flex justify-content-end gap-2 mb-3">
+  <a href="{% url 'nuevo_gasto' %}" class="btn btn-danger">➕ Gasto</a>
+  <a href="{% url 'nueva_compra' %}" class="btn btn-primary">🛒 Compra</a>
+  <a href="{% url 'nueva_nomina' %}" class="btn btn-success">💰 Nómina</a>
 </div>
 
-<!-- TABLA DE RENTAS -->
-<table style="width:90%; margin:auto; border-collapse:collapse;" class="table table-striped">
-    <thead class="table-dark">
-        <tr>
-            <th>Folio</th>
-            <th>Cliente</th>
-            <th>Fecha</th>
-            <th>Hora</th>
-            <th>Estado</th>
-            <th>Total</th>
-            <th>Acciones</th>
-        </tr>
-    </thead>
-    <tbody>
-    {% for r, productos in rentas %}
-        {% if not tipo_filtrado or productos.exists %}
-            <tr>
-                <td>{{ r.folio }}</td>
-                <td>{{ r.cliente.nombre }}</td>
-                <td>{{ r.fecha_renta }}</td>
-                <td>{{ r.hora_inicio }} - {{ r.hora_fin }}</td>
+<!-- =======================
+     TABLA DE PEDIDOS
+     ======================= -->
+<table class="table table-striped table-bordered">
+  <thead class="table-dark">
+    <tr>
+      <th>Folio</th>
+      <th>Cliente</th>
+      <th>Fecha</th>
+      <th>Horario</th>
+      <th>Estado</th>
+      <th>Total</th>
+      <th>Acciones</th>
+    </tr>
+  </thead>
 
-                <!-- ESTADO / BADGES -->
-                <td style="text-align:center;">
-                    {% if r.finanza.pagado %}
-                        {% if r.finanza.metodo_pago == 'efectivo' %}
-                            <span class="badge bg-success">💵 Efectivo</span>
-                        {% elif r.finanza.metodo_pago == 'transferencia' %}
-                            <span class="badge bg-primary">🏦 Transferencia</span><br>
-                            <small>{{ r.finanza.cuenta_destino.nombre }}</small>
-                        {% endif %}
-                    {% else %}
-                        <span class="badge bg-danger">❌ Pendiente</span>
-                    {% endif %}
-                </td>
+  <tbody>
+  {% for r, productos in rentas %}
+    <tr>
+      <td>{{ r.folio }}</td>
+      <td>
+        {{ r.cliente.nombre }}<br>
+        <small class="text-muted">{{ r.cliente.telefono }}</small>
+      </td>
+      <td>{{ r.fecha_renta|date:"d/m/Y" }}</td>
+      <td>{{ r.hora_inicio }} - {{ r.hora_fin }}</td>
 
-                <td>${{ r.finanza.total }}</td>
-
-                <!-- ACCIONES -->
-                <td>
-                    <a href="{% url 'editar_renta' r.id %}" class="btn btn-sm btn-outline-primary">✏️ Editar</a>
-
-                    {% if not r.finanza.pagado %}
-                        <button type="button"
-                                class="btn btn-sm btn-danger"
-                                data-bs-toggle="modal"
-                                data-bs-target="#modalPago"
-                                data-url="{% url 'cont_pagar' r.id %}">
-                             💵 Pagar
-                        </button>
-                    {% else %}
-                        <a href="{% url 'cont_pendiente' r.id %}" class="btn btn-sm btn-success">
-                            👌 pagado
-                        </a>
-
-                    {% if r.recolectado %}
-                        <button class="btn btn-sm btn-success" disabled>
-                            🟢 Recolectado
-                        </button>
-                        <br>
-                        <small>
-                            {{ r.fecha_recoleccion }}<br>
-                            {{ r.recolectado_por }}
-                        </small>
-                    {% else %}
-                        <button
-                            class="btn btn-sm btn-danger"
-                            data-bs-toggle="modal"
-                            data-bs-target="#modalRecolectado{{ r.id }}">
-                            🔴 Sin Recoger
-                        </button>
-                    {% endif %}
-                    {% endif %}
-                    {% for r, productos in rentas %}
-                        <div class="modal fade" id="modalRecolectado{{ r.id }}" tabindex="-1">
-                          <div class="modal-dialog">
-                            <form method="post" action="{% url 'marcar_recolectado' r.id %}">
-                              {% csrf_token %}
-                              <div class="modal-content">
-                                <div class="modal-header">
-                                  <h5 class="modal-title">Marcar recolectado</h5>
-                                  <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                                </div>
-
-                                <div class="modal-body">
-                                  <div class="mb-3">
-                                    <label>Fecha de recolección</label>
-                                    <input type="date" name="fecha_recoleccion" class="form-control" required>
-                                  </div>
-
-                                  <div class="mb-3">
-                                    <label>Empleado</label>
-                                    <select name="empleado" class="form-control" required>
-                                      {% for emp in empleados %}
-                                        <option value="{{ emp.id }}">
-                                          {{ emp.nombre }}
-                                        </option>
-                                      {% endfor %}
-                                    </select>
-                                  </div>
-                                </div>
-
-                                <div class="modal-footer">
-                                  <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-                                    Cancelar
-                                  </button>
-                                  <button type="submit" class="btn btn-success">
-                                    Guardar
-                                  </button>
-                                </div>
-                              </div>
-                            </form>
-                          </div>
-                        </div>
-                        {% endfor %}
-
-                </td>
-            </tr>
+      <!-- ESTADO -->
+      <td class="text-center">
+        {% if r.finanza %}
+          {% if r.finanza.pagado %}
+            {% if r.finanza.metodo_pago == 'efectivo' %}
+              <span class="badge bg-success">💵 Efectivo</span>
+            {% elif r.finanza.metodo_pago == 'transferencia' %}
+              <span class="badge bg-primary">🏦 Transferencia</span><br>
+              <small class="text-muted">
+                {{ r.finanza.cuenta_destino.nombre }}
+              </small>
+            {% endif %}
+          {% else %}
+            <span class="badge bg-danger">❌ Pendiente</span>
+          {% endif %}
+        {% else %}
+          —
         {% endif %}
-    {% empty %}
-        <tr>
-            <td colspan="7" style="text-align:center; padding:20px;">
-                No hay rentas en esta semana.
-            </td>
-        </tr>
-    {% endfor %}
-    </tbody>
+      </td>
+
+      <!-- TOTAL -->
+      <td>
+        {% if r.finanza %}
+          ${{ r.finanza.total|floatformat:2 }}
+        {% else %}
+          —
+        {% endif %}
+      </td>
+
+      <!-- ACCIONES -->
+      <td>
+        <a href="{% url 'editar_renta' r.id %}"
+           class="btn btn-sm btn-outline-primary"
+           title="Editar renta">
+          ✏️
+        </a>
+
+        {% if r.finanza %}
+          {% if not r.finanza.pagado %}
+            <button class="btn btn-sm btn-danger"
+                    title="Registrar pago"
+                    data-bs-toggle="modal"
+                    data-bs-target="#modalPago"
+                    data-url="{% url 'cont_pagar' r.id %}">
+              💵 Pagar
+            </button>
+          {% else %}
+            <span class="btn btn-sm btn-success disabled">
+              ✔ Pagado
+            </span>
+          {% endif %}
+        {% endif %}
+
+        {% if r.recolectado %}
+          <button class="btn btn-sm btn-success" disabled>🟢</button>
+          <small class="text-muted">
+          {{ r.fecha_recoleccion }}<br>
+          Recolectado por: <strong>{{ r.recolectado_por }}</strong>
+        </small>
+        {% else %}
+          <button class="btn btn-sm btn-danger"
+                  data-bs-toggle="modal"
+                  data-bs-target="#modalRecolectado{{ r.id }}">
+            🔴
+          </button>
+        {% endif %}
+      </td>
+    </tr>
+
+    <!-- MODAL RECOLECTADO -->
+    <div class="modal fade" id="modalRecolectado{{ r.id }}" tabindex="-1">
+      <div class="modal-dialog">
+        <form method="post" action="{% url 'marcar_recolectado' r.id %}">
+          {% csrf_token %}
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title">Marcar recolectado</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+
+            <div class="modal-body">
+              <input type="date"
+                     name="fecha_recoleccion"
+                     class="form-control mb-2"
+                     required>
+
+              <select name="empleado" class="form-control" required>
+                {% for emp in empleados %}
+                  <option value="{{ emp.id }}">{{ emp.nombre }}</option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <div class="modal-footer">
+              <button class="btn btn-secondary" data-bs-dismiss="modal">
+                Cancelar
+              </button>
+              <button class="btn btn-success">
+                Guardar
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+
+  {% empty %}
+    <tr>
+      <td colspan="7" class="text-center">
+        No hay pedidos en esta semana
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
 </table>
 
-<!-- RESUMEN -->
-<h3 style="text-align:center; margin-top:30px;">📊 Resumen</h3>
-<ul style="width:90%; margin:auto;">
-    <li>Total ventas: ${{ total_ventas|floatformat:2 }}</li>
-    <li>Total fletes: ${{ total_fletes|floatformat:2 }}</li>
-    <li>Total pagado: ${{ total_pagado|floatformat:2 }}</li>
-    <li>Pendiente por cobrar: ${{ total_pendiente|floatformat:2 }}</li>
+<!-- =======================
+     RESUMEN
+     ======================= -->
+<h4 class="text-center mt-4">📊 Resumen</h4>
+<ul class="list-group w-75 mx-auto">
+  <li class="list-group-item">
+    Total ventas: ${{ total_ventas|floatformat:2 }}
+  </li>
+  <li class="list-group-item">
+    Total fletes: ${{ total_fletes|floatformat:2 }}
+  </li>
+  <li class="list-group-item">
+    Pagado: ${{ total_pagado|floatformat:2 }}
+  </li>
+  <li class="list-group-item">
+    Pendiente: ${{ total_pendiente|floatformat:2 }}
+  </li>
 </ul>
 
-<!-- MODAL ÚNICO PARA MARCAR PAGADO -->
+<!-- =======================
+     MODAL PAGO
+     ======================= -->
 <div class="modal fade" id="modalPago" tabindex="-1">
   <div class="modal-dialog">
     <div class="modal-content">
-      <form method="POST" id="formPago" action="#">
+      <form method="post" id="formPago" action="">
         {% csrf_token %}
         <div class="modal-header">
-          <h5 class="modal-title">Registrar Pago</h5>
+          <h5 class="modal-title">Registrar pago</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
+
         <div class="modal-body">
-          <div style="margin-bottom:15px;">
-            <label><strong>Método de pago</strong></label>
+          <div class="mb-3">
+            <label>Método de pago</label>
             <select name="metodo_pago" id="metodo_pago" class="form-control" required>
               <option value="">Selecciona</option>
               <option value="efectivo">Efectivo</option>
@@ -192,26 +253,33 @@
             </select>
           </div>
 
-          <div id="cuenta_div" style="display:none;">
-            <label><strong>Cuenta destino</strong></label>
+          <div class="mb-3" id="cuenta_div" style="display:none;">
+            <label>Cuenta destino</label>
             <select name="cuenta_transferencia" class="form-control">
-                <option value="">-- Selecciona una cuenta --</option>
-                {% for c in cuentas %}
-                    <option value="{{ c.id }}">{{ c.banco }} - {{ c.nombre }}</option>
-                {% endfor %}
+              <option value="">-- Selecciona --</option>
+              {% for c in cuentas %}
+                <option value="{{ c.id }}">{{ c.banco }} - {{ c.nombre }}</option>
+              {% endfor %}
             </select>
           </div>
         </div>
+
         <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-          <button type="submit" class="btn btn-success">Guardar Pago</button>
+          <button class="btn btn-secondary" data-bs-dismiss="modal">
+            Cancelar
+          </button>
+          <button class="btn btn-success">
+            Guardar
+          </button>
         </div>
       </form>
     </div>
   </div>
 </div>
 
-<!-- SCRIPT PARA EL MODAL -->
+<!-- =======================
+     SCRIPT MODAL PAGO
+     ======================= -->
 <script>
   const modalPago = document.getElementById('modalPago');
   const formPago = document.getElementById('formPago');
@@ -220,14 +288,13 @@
 
   modalPago.addEventListener('show.bs.modal', function (event) {
     const button = event.relatedTarget;
-    if (!button) return;
     const url = button.getAttribute('data-url');
-    if (!url) return;
     formPago.action = url;
   });
 
   metodoPago.addEventListener('change', function () {
-    cuentaDiv.style.display = this.value === 'transferencia' ? 'block' : 'none';
+    cuentaDiv.style.display =
+      this.value === 'transferencia' ? 'block' : 'none';
   });
 </script>
 
