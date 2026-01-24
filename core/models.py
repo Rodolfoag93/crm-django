@@ -250,6 +250,12 @@ class Cuenta(models.Model):
     banco = models.CharField(max_length=50, blank=True, null=True)
     numero = models.CharField(max_length=50, blank=True)
     activa = models.BooleanField(default=True)
+    tipo = models.CharField(max_length=10, choices=
+                            [('Banco', 'Cuenta bancaria'),
+                             ('Efectivo', 'Efectivo / Caja'),
+                             ],
+                            default='Banco'
+                            )
 
     def __str__(self):
         return f"{self.banco or ''} - {self.nombre}"

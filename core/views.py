@@ -1,6 +1,6 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.http import JsonResponse, HttpResponse
-from .models import Ruta, Empleado, Nomina, Pedido, Cuenta, MovimientoContable, Cuenta, Compra, HorasExtra, BitacoraMantenimiento
+from .models import Ruta, Empleado, Nomina, Pedido, MovimientoContable, Cuenta, Compra, HorasExtra, BitacoraMantenimiento
 from .decorators import solo_admin
 from .models import Cliente, Producto, Renta, RentaProducto, PedidoFinanzas, Gasto, Compra, OcupacionDia, calcular_total, TipoPagoExtra, PagoExtraNomina
 from .forms import ClienteForm, ProductoForm, RentaForm, RentaProductoFormSet, EmpleadoForm, NominaForm, GastoForm, CompraForm, HorasExtraForm, PagoExtraForm, TipoPagoExtraForm, PagoExtraNominaForm, TransferenciaForm, MovimientoForm, TraspasoEfectivoBancoForm
@@ -25,11 +25,15 @@ from weasyprint import HTML
 from decimal import Decimal
 from django.utils.timezone import now
 from core.utils import saldo_efectivo, sincronizar_gasto_nomina, calcular_total
-from core.models import Cuenta
+import inspect
+print("🔍 Cuenta viene de:", inspect.getmodule(Cuenta))
 
 
+print("🔥 VISTA CARGADA DESDE:", __file__)
 
-
+#helpers
+def get_caja_efectivo():
+    return Cuenta.objects.filter(tipo='EFECTIVO', activa=True).first()
 
 
 
@@ -987,24 +991,34 @@ def contabilidad_home(request):
 
 @login_required
 def marcar_pagado(request, renta_id):
-    renta = get_object_or_404(Renta, id=renta_id)
-
-    if renta.pagado:
-        messages.warning(request, "Esta renta ya fue liquidada.")
-        return redirect("pedidos_semana")
-
-    pedido, _ = PedidoFinanzas.objects.get_or_create(renta=renta)
-
-    if request.method != "POST":
-        messages.error(request, "Método no permitido.")
-        return redirect("pedidos_semana")
 
     metodo_pago = request.POST.get("metodo_pago")
-    cuenta_id = request.POST.get("cuenta_transferencia")
+    cuenta_id = request.POST.get("cuenta")
 
     if not metodo_pago:
         messages.error(request, "Selecciona un método de pago.")
         return redirect("pedidos_semana")
+
+    if not cuenta_id:
+        messages.error(request, "Debes seleccionar una cuenta.")
+        return redirect("pedidos_semana")
+
+    cuenta = get_object_or_404(Cuenta, id=cuenta_id)
+
+    mp = (metodo_pago or "").lower().strip()
+    tipo = (cuenta.tipo or "").lower().strip()
+
+    if mp == "transferencia" and tipo != "banco":
+        messages.error(request, "Selecciona una cuenta bancaria.")
+        return redirect("pedidos_semana")
+
+    if mp == "efectivo" and tipo != "efectivo":
+        messages.error(request, "Selecciona una cuenta de efectivo.")
+        return redirect("pedidos_semana")
+
+    renta = get_object_or_404(Renta, id=renta_id)
+
+    pedido, _ = PedidoFinanzas.objects.get_or_create(renta=renta)
 
     total_renta = calcular_total(renta)
     saldo = total_renta - (renta.anticipo or 0)
@@ -1012,13 +1026,8 @@ def marcar_pagado(request, renta_id):
     if saldo <= 0:
         messages.error(request, "La renta no tiene saldo pendiente.")
         return redirect("pedidos_semana")
-
-    cuenta = None
-    if metodo_pago == "transferencia":
-        cuenta = Cuenta.objects.filter(id=cuenta_id).first()
-
     with transaction.atomic():
-        # ===== PEDIDO FINANZAS =====
+
         pedido.total = saldo
         pedido.pagado = True
         pedido.metodo_pago = metodo_pago
@@ -1026,7 +1035,6 @@ def marcar_pagado(request, renta_id):
         pedido.cuenta_destino = cuenta
         pedido.save()
 
-        # ===== MOVIMIENTO CONTABLE =====
         MovimientoContable.objects.create(
             pedido=pedido,
             tipo="INGRESO",
@@ -1037,12 +1045,12 @@ def marcar_pagado(request, renta_id):
             descripcion=f"Liquidación renta #{renta.folio or renta.id}"
         )
 
-        # ===== CERRAR RENTA =====
         renta.pagado = True
         renta.save(update_fields=["pagado"])
 
     messages.success(request, "Pago registrado correctamente.")
     return redirect("pedidos_semana")
+
 
 @login_required
 def marcar_pendiente(request, renta_id):
@@ -1815,10 +1823,14 @@ def transferir_entre_cuentas(request):
 
 def balance_cuentas(request):
     cuentas = Cuenta.objects.filter(activa=True)
-    saldo_cash = saldo_efectivo()
-    saldo_bancos = sum(c.saldo_actual() for c in cuentas)
 
-    total = saldo_cash + sum(c.saldo_actual() for c in cuentas)
+    caja = cuentas.filter(tipo='EFECTIVO').first()
+    bancos = cuentas.filter(tipo='BANCO')
+
+    saldo_cash = caja.saldo_actual() if caja else 0
+    saldo_bancos = sum(c.saldo_actual() for c in bancos)
+
+    total = saldo_cash + saldo_bancos
 
     return render(request, 'finanzas/balance_cuentas.html', {
         'cuentas': cuentas,
@@ -1892,9 +1904,10 @@ def transferencia_cuentas(request):
     })
 
 def movimientos_efectivo(request):
+    caja = get_caja_efectivo()
+
     movimientos = MovimientoContable.objects.filter(
-        metodo_pago='efectivo',
-        cuenta__isnull=True
+        cuenta=caja
     ).order_by('-fecha')
 
     return render(request, 'finanzas/movimientos_efectivo.html', {
@@ -1904,6 +1917,7 @@ def movimientos_efectivo(request):
 def traspaso_efectivo_banco(request):
     if request.method == 'POST':
         form = TraspasoEfectivoBancoForm(request.POST)
+
         if form.is_valid():
             origen = form.cleaned_data['origen_tipo']
             cuenta = form.cleaned_data['cuenta_banco']
@@ -1911,20 +1925,26 @@ def traspaso_efectivo_banco(request):
             descripcion = form.cleaned_data['descripcion']
 
             now = timezone.now()
+            caja = get_caja_efectivo()
+
+            if not caja:
+                messages.error(request, "No existe una cuenta de caja configurada.")
+                return redirect('balance_cuentas')
 
             if origen == 'EFECTIVO':
-                # EGRESO efectivo
+
+                # 🔴 EGRESO EFECTIVO
                 MovimientoContable.objects.create(
                     pedido=None,
                     tipo='EGRESO',
                     monto=monto,
                     metodo_pago='efectivo',
-                    cuenta=None,
+                    cuenta=caja,
                     fecha=now,
                     descripcion=f"Traspaso a banco {cuenta.nombre}. {descripcion}"
                 )
 
-                # INGRESO banco
+                # 🟢 INGRESO BANCO
                 MovimientoContable.objects.create(
                     pedido=None,
                     tipo='INGRESO',
@@ -1936,7 +1956,8 @@ def traspaso_efectivo_banco(request):
                 )
 
             else:
-                # EGRESO banco
+
+                # 🔴 EGRESO BANCO
                 MovimientoContable.objects.create(
                     pedido=None,
                     tipo='EGRESO',
@@ -1947,21 +1968,23 @@ def traspaso_efectivo_banco(request):
                     descripcion="Retiro a efectivo"
                 )
 
-                # INGRESO efectivo
+                # 🟢 INGRESO EFECTIVO
                 MovimientoContable.objects.create(
                     pedido=None,
                     tipo='INGRESO',
                     monto=monto,
                     metodo_pago='efectivo',
-                    cuenta=None,
+                    cuenta=caja,
                     fecha=now,
                     descripcion=f"Traspaso desde banco {cuenta.nombre}. {descripcion}"
                 )
 
             return redirect('balance_cuentas')
+
     else:
         form = TraspasoEfectivoBancoForm()
 
     return render(request, 'finanzas/traspaso_efectivo_banco.html', {
         'form': form
     })
+

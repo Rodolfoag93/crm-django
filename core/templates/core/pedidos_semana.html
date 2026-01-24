@@ -3,9 +3,6 @@
 
 <h2 class="text-center mt-3">📦 Pedidos de la Semana</h2>
 
-<!-- =======================
-     FILTRO SEMANA + BUSQUEDA
-     ======================= -->
 <form method="get" class="row g-3 align-items-end mb-3 justify-content-center">
 
   <div class="col-md-3">
@@ -40,9 +37,6 @@
 
 </form>
 
-<!-- =======================
-     NAVEGACION SEMANAL
-     ======================= -->
 <div class="d-flex justify-content-between align-items-center mb-3">
   <a class="btn btn-outline-secondary"
      href="?semana_inicio={{ semana_anterior|date:'Y-m-d' }}{% if request.GET.q %}&q={{ request.GET.q }}{% endif %}">
@@ -59,18 +53,6 @@
   </a>
 </div>
 
-<!-- =======================
-     ACCIONES
-     ======================= -->
-<div class="d-flex justify-content-end gap-2 mb-3">
-  <a href="{% url 'nuevo_gasto' %}" class="btn btn-danger">➕ Gasto</a>
-  <a href="{% url 'nueva_compra' %}" class="btn btn-primary">🛒 Compra</a>
-  <a href="{% url 'nueva_nomina' %}" class="btn btn-success">💰 Nómina</a>
-</div>
-
-<!-- =======================
-     TABLA DE PEDIDOS
-     ======================= -->
 <table class="table table-striped table-bordered">
   <thead class="table-dark">
     <tr>
@@ -95,18 +77,15 @@
       <td>{{ r.fecha_renta|date:"d/m/Y" }}</td>
       <td>{{ r.hora_inicio }} - {{ r.hora_fin }}</td>
 
-      <!-- ESTADO -->
       <td class="text-center">
         {% if r.finanza %}
           {% if r.finanza.pagado %}
-            {% if r.finanza.metodo_pago == 'efectivo' %}
-              <span class="badge bg-success">💵 Efectivo</span>
-            {% elif r.finanza.metodo_pago == 'transferencia' %}
-              <span class="badge bg-primary">🏦 Transferencia</span><br>
-              <small class="text-muted">
-                {{ r.finanza.cuenta_destino.nombre }}
-              </small>
-            {% endif %}
+            <span class="badge bg-success">
+              ✔ {{ r.finanza.get_metodo_pago_display }}
+            </span><br>
+            <small class="text-muted">
+              {{ r.finanza.cuenta_destino.nombre }}
+            </small>
           {% else %}
             <span class="badge bg-danger">❌ Pendiente</span>
           {% endif %}
@@ -115,7 +94,6 @@
         {% endif %}
       </td>
 
-      <!-- TOTAL -->
       <td>
         {% if r.finanza %}
           ${{ r.finanza.total|floatformat:2 }}
@@ -124,31 +102,23 @@
         {% endif %}
       </td>
 
-      <!-- ACCIONES -->
       <td>
         <a href="{% url 'editar_renta' r.id %}"
-           class="btn btn-sm btn-outline-primary"
-           title="Editar renta">
+           class="btn btn-sm btn-outline-primary">
           ✏️
         </a>
 
-        {% if r.finanza %}
-          {% if not r.finanza.pagado %}
-            <button class="btn btn-sm btn-danger"
-                    title="Registrar pago"
-                    data-bs-toggle="modal"
-                    data-bs-target="#modalPago"
-                    data-url="{% url 'cont_pagar' r.id %}">
-              💵 Pagar
-            </button>
-          {% else %}
-            <span class="btn btn-sm btn-success disabled">
-              ✔ Pagado
-            </span>
-          {% endif %}
-        {% endif %}
+        {% if r.finanza and not r.finanza.pagado %}
+          <button class="btn btn-sm btn-danger"
+                  data-bs-toggle="modal"
+                  data-bs-target="#modalPago"
+                  data-url="{% url 'cont_pagar' r.id %}">
+            💵 Pagar
+          </button>
 
-        {% if r.recolectado %}
+
+        {% endif %}
+          {% if r.recolectado %}
           <button class="btn btn-sm btn-success" disabled>🟢</button>
           <small class="text-muted">
           {{ r.fecha_recoleccion }}<br>
@@ -163,8 +133,7 @@
         {% endif %}
       </td>
     </tr>
-
-    <!-- MODAL RECOLECTADO -->
+  <!-- MODAL RECOLECTADO -->
     <div class="modal fade" id="modalRecolectado{{ r.id }}" tabindex="-1">
       <div class="modal-dialog">
         <form method="post" action="{% url 'marcar_recolectado' r.id %}">
@@ -200,7 +169,6 @@
         </form>
       </div>
     </div>
-
   {% empty %}
     <tr>
       <td colspan="7" class="text-center">
@@ -212,90 +180,125 @@
 </table>
 
 <!-- =======================
-     RESUMEN
-     ======================= -->
-<h4 class="text-center mt-4">📊 Resumen</h4>
-<ul class="list-group w-75 mx-auto">
-  <li class="list-group-item">
-    Total ventas: ${{ total_ventas|floatformat:2 }}
-  </li>
-  <li class="list-group-item">
-    Total fletes: ${{ total_fletes|floatformat:2 }}
-  </li>
-  <li class="list-group-item">
-    Pagado: ${{ total_pagado|floatformat:2 }}
-  </li>
-  <li class="list-group-item">
-    Pendiente: ${{ total_pendiente|floatformat:2 }}
-  </li>
-</ul>
-
-<!-- =======================
      MODAL PAGO
      ======================= -->
+
 <div class="modal fade" id="modalPago" tabindex="-1">
   <div class="modal-dialog">
     <div class="modal-content">
       <form method="post" id="formPago" action="">
         {% csrf_token %}
+
         <div class="modal-header">
           <h5 class="modal-title">Registrar pago</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          <button type="button"
+                  class="btn-close"
+                  data-bs-dismiss="modal"></button>
         </div>
 
         <div class="modal-body">
+
           <div class="mb-3">
             <label>Método de pago</label>
-            <select name="metodo_pago" id="metodo_pago" class="form-control" required>
+            <select name="metodo_pago"
+                    id="metodo_pago"
+                    class="form-control"
+                    required>
               <option value="">Selecciona</option>
               <option value="efectivo">Efectivo</option>
               <option value="transferencia">Transferencia</option>
             </select>
           </div>
 
-          <div class="mb-3" id="cuenta_div" style="display:none;">
-            <label>Cuenta destino</label>
-            <select name="cuenta_transferencia" class="form-control">
+          <!-- CUENTA (SIEMPRE VISIBLE) -->
+          <div class="mb-3" id="cuenta_div">
+            <label>Cuenta</label>
+            <select name="cuenta"
+                    id="cuenta_select"
+                    class="form-control"
+                    required>
               <option value="">-- Selecciona --</option>
+
               {% for c in cuentas %}
-                <option value="{{ c.id }}">{{ c.banco }} - {{ c.nombre }}</option>
+                <!-- DEBUG {{ c.tipo }} -->
+                <option value="{{ c.id }}"
+                        data-tipo="{{ c.tipo }}">
+                  {{ c.nombre }} ({{ c.get_tipo_display }})
+                </option>
               {% endfor %}
+
             </select>
           </div>
+
         </div>
 
         <div class="modal-footer">
-          <button class="btn btn-secondary" data-bs-dismiss="modal">
+          <button class="btn btn-secondary"
+                  data-bs-dismiss="modal">
             Cancelar
           </button>
           <button class="btn btn-success">
             Guardar
           </button>
         </div>
+
       </form>
     </div>
   </div>
 </div>
 
 <!-- =======================
-     SCRIPT MODAL PAGO
+     SCRIPT FILTRO CUENTAS
      ======================= -->
+
 <script>
-  const modalPago = document.getElementById('modalPago');
-  const formPago = document.getElementById('formPago');
-  const metodoPago = document.getElementById('metodo_pago');
-  const cuentaDiv = document.getElementById('cuenta_div');
 
-  modalPago.addEventListener('show.bs.modal', function (event) {
-    const button = event.relatedTarget;
-    const url = button.getAttribute('data-url');
-    formPago.action = url;
+const modalPago   = document.getElementById('modalPago');
+const formPago    = document.getElementById('formPago');
+const metodoPago  = document.getElementById('metodo_pago');
+const cuentaSel   = document.getElementById('cuenta_select');
+
+modalPago.addEventListener('show.bs.modal', function (event) {
+  const button = event.relatedTarget;
+  const url = button.getAttribute('data-url');
+  formPago.action = url;
+});
+
+// Filtrar cuentas según método
+metodoPago.addEventListener('change', function () {
+
+  const tipoMetodo = this.value;
+
+  const opciones = cuentaSel.querySelectorAll('option[data-tipo]');
+
+  opciones.forEach(opt => {
+
+    const tipoCuenta = opt.dataset.tipo.toLowerCase();
+
+    if (!tipoMetodo) {
+      opt.hidden = false;
+      return;
+    }
+
+    if (
+      (tipoMetodo === 'transferencia' &&
+        (tipoCuenta.includes('bank') || tipoCuenta.includes('banco'))) ||
+
+      (tipoMetodo === 'efectivo' &&
+        (tipoCuenta.includes('cash') ||
+         tipoCuenta.includes('efectivo') ||
+         tipoCuenta.includes('caja')))
+    ) {
+      opt.hidden = false;
+    } else {
+      opt.hidden = true;
+    }
+
   });
 
-  metodoPago.addEventListener('change', function () {
-    cuentaDiv.style.display =
-      this.value === 'transferencia' ? 'block' : 'none';
-  });
+  cuentaSel.value = "";
+
+});
 </script>
 
 {% endblock %}
