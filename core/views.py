@@ -1824,8 +1824,8 @@ def transferir_entre_cuentas(request):
 def balance_cuentas(request):
     cuentas = Cuenta.objects.filter(activa=True)
 
-    caja = cuentas.filter(tipo='EFECTIVO').first()
-    bancos = cuentas.filter(tipo='BANCO')
+    caja = cuentas.filter(tipo__iexact='efectivo').first()
+    bancos = cuentas.filter(tipo__iexact='banco')
 
     saldo_cash = caja.saldo_actual() if caja else 0
     saldo_bancos = sum(c.saldo_actual() for c in bancos)
