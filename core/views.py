@@ -25,6 +25,7 @@ from weasyprint import HTML
 from decimal import Decimal
 from django.utils.timezone import now
 from core.utils import saldo_efectivo, sincronizar_gasto_nomina, calcular_total
+from core.services.ocupacion import recalcular_ocupacion_producto_dia
 import inspect
 print("🔍 Cuenta viene de:", inspect.getmodule(Cuenta))
 
@@ -413,11 +414,24 @@ def nueva_renta(request):
             return redirect("nueva_renta")
 
         cuenta = None
-        if anticipo > 0 and metodo_pago == "transferencia":
-            cuenta = Cuenta.objects.filter(id=cuenta_id).first()
-            if not cuenta:
-                messages.error(request, "Selecciona una cuenta para la transferencia.")
-                return redirect("nueva_renta")
+
+        if anticipo > 0:
+            if metodo_pago == "transferencia":
+                cuenta = Cuenta.objects.filter(id=cuenta_id).first()
+                if not cuenta:
+                    messages.error(
+                        request,
+                        "Selecciona una cuenta para la transferencia."
+                    )
+                    return redirect("nueva_renta")
+            else:  # efectivo
+                cuenta = Cuenta.objects.filter(tipo__iexact="efectivo").first()
+                if not cuenta:
+                    messages.error(
+                        request,
+                        "No existe una cuenta de efectivo configurada."
+                    )
+                    return redirect("nueva_renta")
 
         productos_data = request.POST.get("productos_data")
         if not productos_data:
@@ -550,20 +564,19 @@ def editar_renta(request, renta_id):
                     print("DIF:", diferencia_anticipo)
                     print("PEDIDO:", renta_id)
                     print("CUENTA:", cuentas)
+
                     if diferencia_anticipo != 0:
+
                         metodo_pago = request.POST.get('metodo_pago_anticipo')
                         cuenta_id = request.POST.get('cuenta_anticipo')
 
-                        if not metodo_pago:
-                            raise ValueError("Selecciona un método de pago para el anticipo.")
-
-                        cuenta = None
-                        if metodo_pago == 'transferencia':
+                        if metodo_pago == "transferencia":
                             cuenta = Cuenta.objects.filter(id=cuenta_id).first()
-                            if not cuenta:
-                                raise ValueError(
-                                    "Selecciona una cuenta válida para la transferencia."
-                                )
+                        else:
+                            cuenta = Cuenta.objects.filter(tipo__iexact="efectivo").first()
+
+                        if not cuenta:
+                            raise ValueError("No se encontró cuenta válida.")
 
                         MovimientoContable.objects.create(
                             tipo='INGRESO' if diferencia_anticipo > 0 else 'EGRESO',
@@ -571,7 +584,7 @@ def editar_renta(request, renta_id):
                             metodo_pago=metodo_pago,
                             cuenta=cuenta,
                             fecha=timezone.now(),
-                            descripcion=f"Ajuste de anticipo renta #{renta.folio or renta.id}"
+                            descripcion=f"Ajuste de anticipo renta #{renta.folio}"
                         )
 
                     # ===============================
@@ -642,22 +655,6 @@ def editar_renta(request, renta_id):
                     pedido.total = total - renta.anticipo
                     pedido.save()
 
-                    # ===============================
-                    # 🔥 MOVIMIENTO CONTABLE ANTICIPO
-                    # ===============================
-                    if diferencia_anticipo > 0:
-                        MovimientoContable.objects.create(
-                            pedido=pedido,
-                            tipo='INGRESO',
-                            monto=diferencia_anticipo,
-                            metodo_pago=metodo_pago,
-                            cuenta=cuenta if metodo_pago == 'transferencia' else None,
-                            fecha=timezone.now(),
-                            descripcion=(
-                                f"Anticipo adicional renta "
-                                f"#{renta.folio or renta.id}"
-                            )
-                        )
 
                 messages.success(request, 'Renta actualizada correctamente.')
                 return redirect('lista_rentas')
