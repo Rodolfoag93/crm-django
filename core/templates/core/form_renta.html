@@ -159,6 +159,14 @@
             <div class="modal-body">
                 <input type="text" id="producto-busqueda" class="form-control"
                        placeholder="Buscar producto">
+                <div class="d-flex justify-content-end mt-2">
+                  <button
+                    type="button"
+                    class="btn btn-sm btn-primary"
+                    id="btn-nuevo-producto">
+                    ➕ Nuevo producto
+                  </button>
+                </diV>
                 <ul class="list-group mt-2" id="lista-productos"
                     style="max-height:200px; overflow-y:auto;"></ul>
 
@@ -171,6 +179,61 @@
     </div>
 </div>
 
+<div class="modal fade" id="modalNuevoProducto" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+
+      <div class="modal-header">
+        <h5 class="modal-title">Nuevo producto</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+
+      <div class="modal-body">
+
+        <div class="mb-2">
+          <label class="form-label">Nombre</label>
+          <input type="text" id="np-nombre" class="form-control">
+        </div>
+
+        <div class="mb-2">
+          <label class="form-label">Tipo</label>
+          <select id="np-tipo" class="form-control">
+            <option value="">Selecciona tipo</option>
+            <option value="BR">Brincolín</option>
+            <option value="ME">Mesa</option>
+            <option value="SI">Silla</option>
+            <option value="AN">Animación</option>
+            <option value="FL">Flete</option>
+            <option value="LZ">Loza</option>
+            <option value="MT">Mantelería</option>
+            <option value="OT">Otro</option>
+          </select>
+        </div>
+
+        <div class="mb-2">
+          <label class="form-label">Precio renta</label>
+          <input type="number" id="np-precio" class="form-control" step="0.01">
+        </div>
+
+        <div class="mb-2">
+          <label class="form-label">Stock total</label>
+          <input type="number" id="np-stock" class="form-control" min="0">
+        </div>
+
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button class="btn btn-success" id="btn-guardar-nuevo-producto">
+          Guardar producto
+        </button>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+
 <script>
 document.addEventListener('DOMContentLoaded', function () {
 
@@ -179,40 +242,42 @@ document.addEventListener('DOMContentLoaded', function () {
     let productos = {{ productos_data|default:"[]"|safe }};
 
     // ===============================
-// CLIENTE POR TELÉFONO (NUEVO FLUJO)
-// ===============================
-const telInput = document.getElementById('cliente-telefono');
-const nombreInput = document.getElementById('cliente-nombre');
-const clienteIdInput = document.getElementById('cliente-id');
+    // CLIENTE POR TELÉFONO
+    // ===============================
+    const telInput = document.getElementById('cliente-telefono');
+    const nombreInput = document.getElementById('cliente-nombre');
+    const clienteIdInput = document.getElementById('cliente-id');
 
-if (telInput) {
-    telInput.addEventListener('blur', function () {
-        const tel = this.value.replace(/\D/g, '');
-        if (!tel) return;
+    if (telInput) {
+        telInput.addEventListener('blur', function () {
+            const tel = this.value.replace(/\D/g, '');
+            if (!tel) return;
 
-        const match = clientes.find(c =>
-            (c.telefono || '').replace(/\D/g, '') === tel
-        );
+            const match = clientes.find(c =>
+                (c.telefono || '').replace(/\D/g, '') === tel
+            );
 
-        if (match) {
-            clienteIdInput.value = match.id;
-            nombreInput.value = match.nombre || '';
+            if (match) {
+                clienteIdInput.value = match.id;
+                nombreInput.value = match.nombre || '';
 
-            document.getElementById('calle_y_numero').value =
-                match.calle_y_numero || '';
+                document.getElementById('calle_y_numero').value =
+                    match.calle_y_numero || '';
 
-            document.getElementById('colonia').value =
-                match.colonia || '';
+                document.getElementById('colonia').value =
+                    match.colonia || '';
 
-            document.getElementById('ciudad_o_municipio').value =
-                match.ciudad_o_municipio || '';
-        } else {
-            // Cliente nuevo
-            clienteIdInput.value = '';
-        }
-    });
-}
+                document.getElementById('ciudad_o_municipio').value =
+                    match.ciudad_o_municipio || '';
+            } else {
+                clienteIdInput.value = '';
+            }
+        });
+    }
 
+    // ===============================
+    // ANTICIPO / CUENTA
+    // ===============================
     const metodoPago = document.getElementById('metodo_pago_anticipo');
     const cuentaDiv = document.getElementById('cuenta_anticipo_container');
     const anticipoInput = document.getElementById('anticipo');
@@ -229,6 +294,9 @@ if (telInput) {
     anticipoInput.addEventListener('input', toggleCuenta);
     toggleCuenta();
 
+    // ===============================
+    // RENDER PRODUCTOS
+    // ===============================
     function renderProductos() {
         const tbody = document.querySelector('#productos-table tbody');
         tbody.innerHTML = '';
@@ -277,47 +345,111 @@ if (telInput) {
     renderProductos();
 
     // ===============================
-// MODAL PRODUCTOS (FIX)
-// ===============================
-const listaProductos = document.getElementById('lista-productos');
-const busquedaProducto = document.getElementById('producto-busqueda');
-const cantidadProducto = document.getElementById('cantidad-producto');
+    // MODAL PRODUCTOS
+    // ===============================
+    const listaProductos = document.getElementById('lista-productos');
+    const busquedaProducto = document.getElementById('producto-busqueda');
+    const cantidadProducto = document.getElementById('cantidad-producto');
 
-if (busquedaProducto && listaProductos) {
+    if (busquedaProducto && listaProductos) {
+        busquedaProducto.addEventListener('input', function () {
+            const txt = this.value.toLowerCase();
+            listaProductos.innerHTML = '';
+            if (!txt) return;
 
-    busquedaProducto.addEventListener('input', function () {
-        const txt = this.value.toLowerCase();
-        listaProductos.innerHTML = '';
+            productosCatalogo
+                .filter(p => p.nombre.toLowerCase().includes(txt))
+                .forEach(p => {
+                    const li = document.createElement('li');
+                    li.className = 'list-group-item list-group-item-action';
+                    li.textContent = `${p.nombre} ($${p.precio})`;
 
-        if (!txt) return;
+                    li.addEventListener('click', function () {
+                        productos.push({
+                            id: p.id,
+                            nombre: p.nombre,
+                            cantidad: parseInt(cantidadProducto.value) || 1,
+                            precio_unitario: parseFloat(p.precio)
+                        });
 
-        productosCatalogo
-            .filter(p => p.nombre.toLowerCase().includes(txt))
-            .forEach(p => {
-                const li = document.createElement('li');
-                li.className = 'list-group-item list-group-item-action';
-                li.textContent = `${p.nombre} ($${p.precio})`;
-
-                li.addEventListener('click', function () {
-                    productos.push({
-                        id: p.id,
-                        nombre: p.nombre,
-                        cantidad: parseInt(cantidadProducto.value) || 1,
-                        precio_unitario: parseFloat(p.precio)
+                        renderProductos();
+                        busquedaProducto.value = '';
+                        listaProductos.innerHTML = '';
                     });
 
-                    renderProductos();
-                    busquedaProducto.value = '';
-                    listaProductos.innerHTML = '';
+                    listaProductos.appendChild(li);
+                });
+        });
+    }
+
+    // ===============================
+    // NUEVO PRODUCTO
+    // ===============================
+    const btnNuevoProducto = document.getElementById('btn-nuevo-producto');
+
+    if (btnNuevoProducto) {
+        btnNuevoProducto.addEventListener('click', function () {
+            bootstrap.Modal.getOrCreateInstance(
+                document.getElementById('modalNuevoProducto')
+            ).show();
+        });
+    }
+
+    const btnGuardarNuevoProducto = document.getElementById('btn-guardar-nuevo-producto');
+
+    if (btnGuardarNuevoProducto) {
+        btnGuardarNuevoProducto.addEventListener('click', function () {
+
+            const data = {
+                nombre: document.getElementById('np-nombre').value,
+                tipo: document.getElementById('np-tipo').value,
+                precio: document.getElementById('np-precio').value,
+                stock: document.getElementById('np-stock').value
+            };
+
+            fetch("{% url 'crear_producto_ajax' %}", {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token }}'
+                },
+                body: JSON.stringify(data)
+            })
+            .then(async res => {
+                const response = await res.json();
+                if (!res.ok) throw response;
+                return response;
+            })
+            .then(producto => {
+
+                productosCatalogo.push({
+                    id: producto.id,
+                    nombre: producto.nombre,
+                    precio: producto.precio
                 });
 
-                listaProductos.appendChild(li);
-            });
-    });
+                productos.push({
+                    id: producto.id,
+                    nombre: producto.nombre,
+                    cantidad: parseInt(cantidadProducto.value) || 1,
+                    precio_unitario: producto.precio
+                });
 
-}
+                renderProductos();
+
+                bootstrap.Modal.getOrCreateInstance(
+                    document.getElementById('modalNuevoProducto')
+                ).hide();
+            })
+            .catch(err => {
+                alert(err.error || 'Error al crear el producto');
+            });
+
+        });
+    }
 
 });
 </script>
+
 
 {% endblock %}

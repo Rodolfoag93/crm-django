@@ -65,7 +65,7 @@ urlpatterns = [
         views.marcar_recolectado,
         name="marcar_recolectado"
     ),
-
+    path("productos/crear-ajax/", views.crear_producto_ajax, name="crear_producto_ajax"),
     # 💰 Contabilidad
     path('contabilidad/', views.contabilidad_home, name='contabilidad'),
     path('gastos/', views.lista_gastos, name='lista_gastos'),
