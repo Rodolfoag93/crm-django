@@ -9,15 +9,38 @@
 <form method="POST" id="renta-form">
     {% csrf_token %}
 
-    <!-- ===== CLIENTE ===== -->
-    <div class="mb-3">
-        <label for="cliente-input" class="form-label">Cliente (teléfono)</label>
-        <input type="text" id="cliente-input" name="cliente" class="form-control"
-               placeholder="Escribe el teléfono del cliente"
-               value="{% if renta %}{{ renta.cliente.telefono }} - {{ renta.cliente.nombre }}{% endif %}">
+<!-- ===== CLIENTE ===== -->
+<div class="row mb-3">
+
+    <div class="col-md-4">
+        <label for="cliente-telefono" class="form-label">Teléfono</label>
+        <input
+            type="text"
+            id="cliente-telefono"
+            name="cliente_telefono"
+            class="form-control"
+            placeholder="Ej. 3126600251"
+            value="{% if renta %}{{ renta.cliente.telefono }}{% endif %}">
     </div>
-    <input type="hidden" name="cliente_id" id="cliente-id"
-           value="{% if renta %}{{ renta.cliente.id }}{% endif %}">
+
+    <div class="col-md-8">
+        <label for="cliente-nombre" class="form-label">Nombre</label>
+        <input
+            type="text"
+            id="cliente-nombre"
+            name="cliente_nombre"
+            class="form-control"
+            value="{% if renta %}{{ renta.cliente.nombre }}{% endif %}">
+    </div>
+
+</div>
+
+<input
+    type="hidden"
+    name="cliente_id"
+    id="cliente-id"
+    value="{% if renta %}{{ renta.cliente.id }}{% endif %}">
+
 
     <!-- ===== FECHA Y HORARIO ===== -->
     <div class="row mb-3">
@@ -155,34 +178,25 @@ document.addEventListener('DOMContentLoaded', function () {
     let productosCatalogo = {{ productos_catalogo_json|safe }};
     let productos = {{ productos_data|default:"[]"|safe }};
 
-     // ===============================
-    // AUTOCOMPLETE CLIENTE (FIX FINAL)
     // ===============================
-    const clienteInput = document.getElementById('cliente-input');
-    const clienteIdInput = document.getElementById('cliente-id');
+// CLIENTE POR TELÉFONO (NUEVO FLUJO)
+// ===============================
+const telInput = document.getElementById('cliente-telefono');
+const nombreInput = document.getElementById('cliente-nombre');
+const clienteIdInput = document.getElementById('cliente-id');
 
-    clienteInput.addEventListener('input', function () {
-        const txt = this.value.toLowerCase().trim();
+if (telInput) {
+    telInput.addEventListener('blur', function () {
+        const tel = this.value.replace(/\D/g, '');
+        if (!tel) return;
 
-        if (!txt) {
-            clienteIdInput.value = '';
-            return;
-        }
-
-        const txtNums = txt.replace(/\D/g, '');
-
-        const match = clientes.find(c => {
-            const tel = (c.telefono || '').replace(/\D/g, '');
-            const nombre = (c.nombre || '').toLowerCase();
-
-            return (
-                (txtNums && tel === txtNums) ||
-                nombre === txt
-            );
-        });
+        const match = clientes.find(c =>
+            (c.telefono || '').replace(/\D/g, '') === tel
+        );
 
         if (match) {
             clienteIdInput.value = match.id;
+            nombreInput.value = match.nombre || '';
 
             document.getElementById('calle_y_numero').value =
                 match.calle_y_numero || '';
@@ -192,10 +206,12 @@ document.addEventListener('DOMContentLoaded', function () {
 
             document.getElementById('ciudad_o_municipio').value =
                 match.ciudad_o_municipio || '';
-
-            this.value = `${match.telefono} - ${match.nombre}`;
+        } else {
+            // Cliente nuevo
+            clienteIdInput.value = '';
         }
     });
+}
 
     const metodoPago = document.getElementById('metodo_pago_anticipo');
     const cuentaDiv = document.getElementById('cuenta_anticipo_container');
