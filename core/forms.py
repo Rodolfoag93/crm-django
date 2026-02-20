@@ -49,21 +49,20 @@ class RentaForm(forms.ModelForm):
 
     class Meta:
         model = Renta
-        exclude = ('productos', 'precio_total', 'cliente', 'status', 'estado_entrega')
+        exclude = ('productos', 'cliente', 'status', 'estado_entrega')
         widgets = {
             'fecha_renta': forms.DateInput(attrs={
-            'type': 'date',
-            'class': 'form-input'
+                'type': 'date',
+                'class': 'form-input'
             }),
             'hora_inicio': forms.TimeInput(attrs={
-            'type': 'time',
-            'class': 'form-input'
+                'type': 'time',
+                'class': 'form-input'
             }),
             'hora_fin': forms.TimeInput(attrs={
-            'type': 'time',
-            'class': 'form-input'
+                'type': 'time',
+                'class': 'form-input'
             }),
-
             'comentarios': forms.Textarea(attrs={
                 'rows': 3,
                 'placeholder': 'Comentarios'
@@ -78,16 +77,7 @@ class RentaForm(forms.ModelForm):
             self.fields['folio'].widget.attrs['readonly'] = True
 
 
-# ✅ ESTO VA FUERA DE LA CLASE
-RentaProductoFormSet = inlineformset_factory(
-    Renta,
-    RentaProducto,
-    fields=('producto', 'cantidad'),
-    extra=1,
-    can_delete=True
-)
-
-class RentaProductoForm(forms.ModelForm):
+class RentaProductoFormSet(forms.ModelForm):
     class Meta:
         model = RentaProducto
         fields = (

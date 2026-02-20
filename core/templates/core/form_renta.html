@@ -64,7 +64,8 @@
     <div class="mb-3">
         <label class="form-label">Anticipo</label>
         <input type="number" step="0.01" name="anticipo" id="anticipo"
-               class="form-control" value="0">
+               class="form-control"
+               value="{% if renta %}{{ renta.anticipo }}{% else %}0{% endif %}">
     </div>
 
     <div class="mb-3">
@@ -104,6 +105,15 @@
 
     <input type="hidden" name="productos_data" id="productos_data">
 
+    <!-- 🔥 TOTAL RENTA -->
+    <div class="mb-3">
+        <label class="form-label">Total</label>
+        <input type="text" class="form-control" id="total_visual" readonly>
+    </div>
+
+    <!-- 🔥 INPUT REAL QUE SE ENVÍA AL BACKEND -->
+    <input type="hidden" name="precio_total" id="precio_total">
+
     <button type="button" class="btn btn-primary mb-3" data-bs-toggle="modal"
             data-bs-target="#modalAgregarProducto">
         Agregar Producto
@@ -141,16 +151,52 @@
 <script>
 document.addEventListener('DOMContentLoaded', function () {
 
-    /* ===============================
-       DATA DESDE DJANGO
-    =============================== */
     let clientes = {{ clientes_json|safe }};
     let productosCatalogo = {{ productos_catalogo_json|safe }};
     let productos = {{ productos_data|default:"[]"|safe }};
 
-    /* ===============================
-       ANTICIPO / CUENTAS
-    =============================== */
+     // ===============================
+    // AUTOCOMPLETE CLIENTE (FIX FINAL)
+    // ===============================
+    const clienteInput = document.getElementById('cliente-input');
+    const clienteIdInput = document.getElementById('cliente-id');
+
+    clienteInput.addEventListener('input', function () {
+        const txt = this.value.toLowerCase().trim();
+
+        if (!txt) {
+            clienteIdInput.value = '';
+            return;
+        }
+
+        const txtNums = txt.replace(/\D/g, '');
+
+        const match = clientes.find(c => {
+            const tel = (c.telefono || '').replace(/\D/g, '');
+            const nombre = (c.nombre || '').toLowerCase();
+
+            return (
+                (txtNums && tel === txtNums) ||
+                nombre === txt
+            );
+        });
+
+        if (match) {
+            clienteIdInput.value = match.id;
+
+            document.getElementById('calle_y_numero').value =
+                match.calle_y_numero || '';
+
+            document.getElementById('colonia').value =
+                match.colonia || '';
+
+            document.getElementById('ciudad_o_municipio').value =
+                match.ciudad_o_municipio || '';
+
+            this.value = `${match.telefono} - ${match.nombre}`;
+        }
+    });
+
     const metodoPago = document.getElementById('metodo_pago_anticipo');
     const cuentaDiv = document.getElementById('cuenta_anticipo_container');
     const anticipoInput = document.getElementById('anticipo');
@@ -167,98 +213,29 @@ document.addEventListener('DOMContentLoaded', function () {
     anticipoInput.addEventListener('input', toggleCuenta);
     toggleCuenta();
 
-    /* ===============================
-       AUTOCOMPLETE CLIENTE
-    =============================== */
-    const clienteInput = document.getElementById('cliente-input');
-    const clienteIdInput = document.getElementById('cliente-id');
-
-    clienteInput.addEventListener('blur', function () {
-        const txt = this.value.toLowerCase().trim();
-        if (!txt) return;
-
-        const matches = clientes.filter(x =>
-            x.telefono.includes(txt) ||
-            x.nombre.toLowerCase().includes(txt)
-        );
-
-        // ✅ SOLO si hay un match exacto
-        if (matches.length === 1) {
-            const c = matches[0];
-
-            clienteIdInput.value = c.id;
-            document.getElementById('calle_y_numero').value = c.calle_y_numero || '';
-            document.getElementById('colonia').value = c.colonia || '';
-            document.getElementById('ciudad_o_municipio').value = c.ciudad_o_municipio || '';
-            this.value = `${c.telefono} - ${c.nombre}`;
-        }
-    });
-
-    /* ===============================
-       MODAL PRODUCTOS
-    =============================== */
-    const listaProductos = document.getElementById('lista-productos');
-    const busquedaProducto = document.getElementById('producto-busqueda');
-    const cantidadProducto = document.getElementById('cantidad-producto');
-
-    busquedaProducto.addEventListener('input', function () {
-        const txt = this.value.toLowerCase();
-        listaProductos.innerHTML = '';
-
-        productosCatalogo
-            .filter(p => p.nombre.toLowerCase().includes(txt))
-            .forEach(p => {
-                const li = document.createElement('li');
-                li.className = 'list-group-item list-group-item-action';
-                li.textContent = `${p.nombre} ($${p.precio})`;
-
-                li.onclick = () => {
-                    productos.push({
-                        id: p.id,
-                        nombre: p.nombre,
-                        cantidad: parseInt(cantidadProducto.value) || 1,
-                        precio_unitario: p.precio
-                    });
-                    renderProductos();
-                    busquedaProducto.value = '';
-                    listaProductos.innerHTML = '';
-                };
-
-                listaProductos.appendChild(li);
-            });
-    });
-
-    /* ===============================
-       TABLA PRODUCTOS
-    =============================== */
     function renderProductos() {
         const tbody = document.querySelector('#productos-table tbody');
         tbody.innerHTML = '';
 
+        let total = 0;
+
         productos.forEach((p, i) => {
-            const sub = (p.cantidad * p.precio_unitario).toFixed(2);
+            const sub = p.cantidad * p.precio_unitario;
+            total += sub;
 
             tbody.innerHTML += `
                 <tr>
                     <td>${p.nombre}</td>
-                    <td>
-                        <input type="number" class="form-control cantidad"
-                               data-i="${i}" value="${p.cantidad}">
-                    </td>
-                    <td>
-                        <input type="number" class="form-control precio"
-                               data-i="${i}" value="${p.precio_unitario}">
-                    </td>
-                    <td>$${sub}</td>
-                    <td>
-                        <button type="button"
-                                class="btn btn-danger btn-sm del"
-                                data-i="${i}">X</button>
-                    </td>
+                    <td><input type="number" class="form-control cantidad" data-i="${i}" value="${p.cantidad}"></td>
+                    <td><input type="number" class="form-control precio" data-i="${i}" value="${p.precio_unitario}"></td>
+                    <td>$${sub.toFixed(2)}</td>
+                    <td><button type="button" class="btn btn-danger btn-sm del" data-i="${i}">X</button></td>
                 </tr>`;
         });
 
         document.getElementById('productos_data').value = JSON.stringify(productos);
+        document.getElementById('precio_total').value = total.toFixed(2);
+        document.getElementById('total_visual').value = `$${total.toFixed(2)}`;
     }
 
     document.querySelector('#productos-table').addEventListener('input', e => {
@@ -281,21 +258,49 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     });
 
-    /* ===============================
-       ABRIR TICKET AL CREAR RENTA
-    ================================ */
-    const params = new URLSearchParams(window.location.search);
-    const rentaCreada = params.get('renta_creada');
-
-    if (rentaCreada) {
-        const urlTicket = "{% url 'ticket_pdf' 0 %}".replace("/0/", "/" + rentaCreada + "/");
-        window.open(urlTicket, '_blank');
-
-        // limpiar URL para que no se vuelva a abrir al refrescar
-        window.history.replaceState({}, document.title, window.location.pathname);
-    }
-
     renderProductos();
+
+    // ===============================
+// MODAL PRODUCTOS (FIX)
+// ===============================
+const listaProductos = document.getElementById('lista-productos');
+const busquedaProducto = document.getElementById('producto-busqueda');
+const cantidadProducto = document.getElementById('cantidad-producto');
+
+if (busquedaProducto && listaProductos) {
+
+    busquedaProducto.addEventListener('input', function () {
+        const txt = this.value.toLowerCase();
+        listaProductos.innerHTML = '';
+
+        if (!txt) return;
+
+        productosCatalogo
+            .filter(p => p.nombre.toLowerCase().includes(txt))
+            .forEach(p => {
+                const li = document.createElement('li');
+                li.className = 'list-group-item list-group-item-action';
+                li.textContent = `${p.nombre} ($${p.precio})`;
+
+                li.addEventListener('click', function () {
+                    productos.push({
+                        id: p.id,
+                        nombre: p.nombre,
+                        cantidad: parseInt(cantidadProducto.value) || 1,
+                        precio_unitario: parseFloat(p.precio)
+                    });
+
+                    renderProductos();
+                    busquedaProducto.value = '';
+                    listaProductos.innerHTML = '';
+                });
+
+                listaProductos.appendChild(li);
+            });
+    });
+
+}
+
 });
 </script>
 

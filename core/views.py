@@ -535,6 +535,10 @@ def editar_renta(request, renta_id):
 
     if request.method == 'POST':
         form = RentaForm(request.POST, instance=renta)
+        cliente_id = request.POST.get("cliente_id")
+        if not cliente_id:
+            messages.error(request, "Debes seleccionar un cliente válido.")
+            return redirect(request.path)
 
         if form.is_valid():
             try:
@@ -550,13 +554,17 @@ def editar_renta(request, renta_id):
                     # ===============================
                     # GUARDAR RENTA
                     # ===============================
-                    print("POST anticipo:", request.POST.get('anticipo'))
-                    print("FORM cleaned anticipo:", form.cleaned_data.get('anticipo'))
-                    print("RENTA antes:", renta.anticipo)
+                    print("FORM cleaned precio_total:", form.cleaned_data.get('precio_total'))
+                    print("FORM changed_data:", form.changed_data)
+                    print("RENTA precio antes:", renta.precio_total)
+
                     renta = form.save(commit=False)
+                    print("RENTA precio tras form.save:", renta.precio_total)
                     renta.anticipo = anticipo_nuevo
                     renta.save()
-                    print("RENTA después:", renta.anticipo)
+
+
+
 
                     # ===============================
                     # MOVIMIENTO CONTABLE (AJUSTE)
@@ -592,7 +600,7 @@ def editar_renta(request, renta_id):
                     # ===============================
                     for rp in renta.rentaproductos.select_related('producto'):
                         rp.producto.liberar_stock(rp.cantidad)
-
+                    print("ANTES PRODUCTOS precio:", renta.precio_total)
                     renta.rentaproductos.all().delete()
 
                     # ===============================
@@ -642,7 +650,13 @@ def editar_renta(request, renta_id):
                     # ===============================
                     # ACTUALIZAR TOTAL RENTA
                     # ===============================
-                    renta.precio_total = total
+                    precio_manual = form.cleaned_data.get('precio_total')
+
+                    if precio_manual is not None:
+                        renta.precio_total = precio_manual
+                    else:
+                        renta.precio_total = total
+
                     renta.save()
 
                     # ===============================
@@ -652,7 +666,7 @@ def editar_renta(request, renta_id):
                         renta=renta
                     )
 
-                    pedido.total = total - renta.anticipo
+                    pedido.total = renta.precio_total - renta.anticipo
                     pedido.save()
 
 
@@ -1118,9 +1132,6 @@ def pedidos_semana(request):
 
         if not productos:
             continue
-
-        if r.finanza and r.finanza.total == 0:
-            r.finanza.total = r.precio_total
 
         rentas.append((r, productos))
 
