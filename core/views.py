@@ -390,61 +390,83 @@ def nueva_renta(request):
     )
 
     if request.method == "POST":
-        # ===== DATOS BÁSICOS =====
+
+        # ===============================
+        # DATOS BÁSICOS
+        # ===============================
         fecha = request.POST.get("fecha_renta")
         hora_inicio = request.POST.get("hora_inicio")
         hora_fin = request.POST.get("hora_fin")
-        cliente_input = request.POST.get("cliente", "")
-        anticipo = float(request.POST.get("anticipo") or 0)
 
+        telefono = request.POST.get("cliente_telefono", "").strip()
+        nombre = request.POST.get("cliente_nombre", "").strip()
+
+        anticipo = Decimal(request.POST.get("anticipo") or "0")
         metodo_pago = request.POST.get("metodo_pago_anticipo")
         cuenta_id = request.POST.get("cuenta_anticipo")
 
-        telefono_cliente = cliente_input.split(" - ")[0].strip()
-
-        # ===== VALIDACIONES =====
-        if not fecha or not hora_inicio or not hora_fin or not telefono_cliente:
-            messages.error(request, "Debes seleccionar cliente, fecha y horario.")
+        if not fecha or not hora_inicio or not hora_fin or not telefono:
+            messages.error(request, "Debes capturar teléfono, fecha y horario.")
             return redirect("nueva_renta")
 
-        try:
-            cliente = Cliente.objects.get(telefono=telefono_cliente)
-        except Cliente.DoesNotExist:
-            messages.error(request, f"No existe un cliente con el teléfono {telefono_cliente}.")
-            return redirect("nueva_renta")
+        # ===============================
+        # CLIENTE (BUSCAR O CREAR)
+        # ===============================
+        cliente = Cliente.objects.filter(telefono=telefono).first()
 
+        if not cliente:
+            if not nombre:
+                messages.error(
+                    request,
+                    "El nombre es obligatorio para crear un nuevo cliente."
+                )
+                return redirect("nueva_renta")
+
+            cliente = Cliente.objects.create(
+                telefono=telefono,
+                nombre=nombre,
+                calle_y_numero=request.POST.get("calle_y_numero", ""),
+                colonia=request.POST.get("colonia", ""),
+                ciudad_o_municipio=request.POST.get("ciudad_o_municipio", "")
+            )
+
+        # ===============================
+        # CUENTA / ANTICIPO
+        # ===============================
         cuenta = None
-
         if anticipo > 0:
             if metodo_pago == "transferencia":
                 cuenta = Cuenta.objects.filter(id=cuenta_id).first()
-                if not cuenta:
-                    messages.error(
-                        request,
-                        "Selecciona una cuenta para la transferencia."
-                    )
-                    return redirect("nueva_renta")
-            else:  # efectivo
+            else:
                 cuenta = Cuenta.objects.filter(tipo__iexact="efectivo").first()
-                if not cuenta:
-                    messages.error(
-                        request,
-                        "No existe una cuenta de efectivo configurada."
-                    )
-                    return redirect("nueva_renta")
 
+            if not cuenta:
+                messages.error(request, "Cuenta inválida para el anticipo.")
+                return redirect("nueva_renta")
+
+        # ===============================
+        # PRODUCTOS
+        # ===============================
         productos_data = request.POST.get("productos_data")
         if not productos_data:
-            messages.error(request, "Debes agregar al menos un producto a la renta.")
+            messages.error(
+                request,
+                "Debes agregar al menos un producto a la renta."
+            )
             return redirect("nueva_renta")
 
         productos_list = json.loads(productos_data)
 
         try:
             with transaction.atomic():
-                # ===== VALIDAR STOCK =====
+
+                # ===============================
+                # VALIDAR STOCK POR HORARIO
+                # ===============================
                 for p in productos_list:
-                    producto = Producto.objects.select_for_update().get(id=p["id"])
+                    producto = Producto.objects.select_for_update().get(
+                        id=p["id"]
+                    )
                     cantidad = int(p.get("cantidad", 1))
 
                     disponible = producto.stock_disponible_en_horario(
@@ -453,58 +475,95 @@ def nueva_renta(request):
 
                     if cantidad > disponible:
                         raise ValueError(
-                            f"Solo hay {disponible} disponibles de '{producto.nombre}'."
+                            f"Solo hay {disponible} disponibles de "
+                            f"'{producto.nombre}'."
                         )
 
-                precio_total = sum(
-                    float(p.get("precio_unitario", 0)) * int(p.get("cantidad", 1))
-                    for p in productos_list
-                )
-
-                # ===== CREAR RENTA =====
+                # ===============================
+                # CREAR RENTA (SIN TOTAL FINAL)
+                # ===============================
                 renta = Renta.objects.create(
                     cliente=cliente,
                     fecha_renta=fecha,
                     hora_inicio=hora_inicio,
                     hora_fin=hora_fin,
-                    calle_y_numero=request.POST.get("calle_y_numero"),
-                    colonia=request.POST.get("colonia"),
-                    ciudad_o_municipio=request.POST.get("ciudad_o_municipio"),
+                    calle_y_numero=request.POST.get("calle_y_numero", ""),
+                    colonia=request.POST.get("colonia", ""),
+                    ciudad_o_municipio=request.POST.get(
+                        "ciudad_o_municipio", ""
+                    ),
                     comentarios=request.POST.get("comentarios", ""),
-                    precio_total=precio_total,
+                    precio_total=Decimal("0.00"),
                     anticipo=anticipo,
-                    pagado=False
+                    pagado=False,
+                    status="ACTIVO"
                 )
 
-                # ===== PRODUCTOS =====
+                # ===============================
+                # RENTAPRODUCTOS + TOTAL REAL
+                # ===============================
+                total = Decimal("0.00")
+
                 for p in productos_list:
-                    RentaProducto.objects.create(
+                    producto = Producto.objects.get(id=p["id"])
+                    cantidad = int(p.get("cantidad", 1))
+                    precio_unitario = Decimal(
+                        str(p.get("precio_unitario", producto.precio))
+                    )
+
+                    rp = RentaProducto.objects.create(
                         renta=renta,
-                        producto_id=p["id"],
-                        cantidad=int(p.get("cantidad", 1)),
-                        precio_unitario=float(p.get("precio_unitario", 0)),
+                        producto=producto,
+                        cantidad=cantidad,
+                        precio_lista=producto.precio,
+                        precio_unitario=precio_unitario,
                         nota=p.get("nota", "")
                     )
 
-                # ===== MOVIMIENTO CONTABLE ANTICIPO =====
+                    total += rp.subtotal
+
+                renta.precio_total = total
+                renta.save()
+
+                # ===============================
+                # MOVIMIENTO CONTABLE (ANTICIPO)
+                # ===============================
                 if anticipo > 0:
                     MovimientoContable.objects.create(
-                        tipo='INGRESO',
+                        tipo="INGRESO",
                         monto=anticipo,
                         metodo_pago=metodo_pago,
                         cuenta=cuenta,
                         fecha=timezone.now(),
-                        descripcion=f"Anticipo renta #{renta.folio or renta.id}"
+                        descripcion=(
+                            f"Anticipo renta #{renta.folio or renta.id}"
+                        )
                     )
 
-            messages.success(request, f"Renta creada correctamente (ID: {renta.id})")
-            return redirect(f"{reverse('nueva_renta')}?renta_creada={renta.id}")
+                # ===============================
+                # 🔥 PEDIDO FINANZAS (CLAVE)
+                # ===============================
+                pedido, _ = PedidoFinanzas.objects.get_or_create(
+                    renta=renta
+                )
+                pedido.total = renta.precio_total - renta.anticipo
+                pedido.save()
+
+            messages.success(
+                request,
+                f"Renta creada correctamente (ID: {renta.id})"
+            )
+            return redirect(
+                f"{reverse('nueva_renta')}?renta_creada={renta.id}"
+            )
 
         except ValueError as e:
             messages.error(request, str(e))
             return redirect("nueva_renta")
 
-    # ===== GET =====
+    # ===============================
+    # GET
+    # ===============================
     form = RentaForm()
     return render(request, "core/form_renta.html", {
         "form": form,
