@@ -260,7 +260,8 @@ def marcar_recolectado(request, pk):
 
         messages.success(request, "Pedido marcado como recolectado")
 
-    return redirect("pedidos_semana")
+    return redirect(request.META.get('HTTP_REFERER', 'pedidos_semana'))
+
 
 @login_required
 def ocupacion_productos(request):
@@ -451,7 +452,11 @@ def nueva_renta(request):
         # ===============================
         productos_data = request.POST.get("productos_data")
         if not productos_data:
-            messages.error(request, "Debes agregar al menos un producto.")
+            messages.error(
+                request,
+                "Debes agregar al menos un producto a la renta."
+            )
+
             return redirect("nueva_renta")
 
         productos_list = json.loads(productos_data)
@@ -460,10 +465,14 @@ def nueva_renta(request):
             with transaction.atomic():
 
                 # ===============================
-                # VALIDAR STOCK
+
+                # VALIDAR STOCK POR HORARIO
+
                 # ===============================
                 for p in productos_list:
-                    producto = Producto.objects.select_for_update().get(id=p["id"])
+                    producto = Producto.objects.select_for_update().get(
+                        id=p["id"]
+                    )
                     cantidad = int(p.get("cantidad", 1))
 
                     disponible = producto.stock_disponible_en_horario(
@@ -477,7 +486,9 @@ def nueva_renta(request):
                         )
 
                 # ===============================
-                # CREAR RENTA (SIN TOTAL AÚN)
+
+                # CREAR RENTA (SIN TOTAL FINAL)
+
                 # ===============================
                 renta = Renta.objects.create(
                     cliente=cliente,
@@ -486,7 +497,9 @@ def nueva_renta(request):
                     hora_fin=hora_fin,
                     calle_y_numero=request.POST.get("calle_y_numero", ""),
                     colonia=request.POST.get("colonia", ""),
-                    ciudad_o_municipio=request.POST.get("ciudad_o_municipio", ""),
+                    ciudad_o_municipio=request.POST.get(
+                        "ciudad_o_municipio", ""
+                    ),
                     comentarios=request.POST.get("comentarios", ""),
                     precio_total=Decimal("0.00"),
                     anticipo=anticipo,
@@ -495,14 +508,19 @@ def nueva_renta(request):
                 )
 
                 # ===============================
-                # CREAR RENTAPRODUCTO
+
+                # RENTAPRODUCTOS + TOTAL REAL
+
                 # ===============================
                 total = Decimal("0.00")
 
                 for p in productos_list:
                     producto = Producto.objects.get(id=p["id"])
                     cantidad = int(p.get("cantidad", 1))
-                    precio_unitario = Decimal(str(p.get("precio_unitario", producto.precio)))
+                    precio_unitario = Decimal(
+                        str(p.get("precio_unitario", producto.precio))
+                    )
+
 
                     rp = RentaProducto.objects.create(
                         renta=renta,
@@ -518,11 +536,15 @@ def nueva_renta(request):
                 # ===============================
                 # TOTAL REAL (BACKEND)
                 # ===============================
+
+
                 renta.precio_total = total
                 renta.save()
 
                 # ===============================
-                # MOVIMIENTO CONTABLE
+
+                # MOVIMIENTO CONTABLE (ANTICIPO)
+
                 # ===============================
                 if anticipo > 0:
                     MovimientoContable.objects.create(
@@ -531,20 +553,38 @@ def nueva_renta(request):
                         metodo_pago=metodo_pago,
                         cuenta=cuenta,
                         fecha=timezone.now(),
-                        descripcion=f"Anticipo renta #{renta.folio or renta.id}"
+                        descripcion=(
+                            f"Anticipo renta #{renta.folio or renta.id}"
+                        )
                     )
+
+
+                # ===============================
+                # 🔥 PEDIDO FINANZAS (CLAVE)
+                # ===============================
+                pedido, _ = PedidoFinanzas.objects.get_or_create(
+                    renta=renta
+                )
+                pedido.total = renta.precio_total - renta.anticipo
+                pedido.save()
+
 
             messages.success(
                 request,
                 f"Renta creada correctamente (ID: {renta.id})"
             )
-            return redirect(f"{reverse('nueva_renta')}?renta_creada={renta.id}")
+
+            return redirect(
+                f"{reverse('nueva_renta')}?renta_creada={renta.id}"
+            )
 
         except ValueError as e:
             messages.error(request, str(e))
             return redirect("nueva_renta")
 
-    # ===== GET =====
+    # ===============================
+    # GET
+    # ===============================
     form = RentaForm()
     return render(request, "core/form_renta.html", {
         "form": form,
@@ -1101,7 +1141,8 @@ def marcar_pagado(request, renta_id):
         renta.save(update_fields=["pagado"])
 
     messages.success(request, "Pago registrado correctamente.")
-    return redirect("pedidos_semana")
+    return redirect(request.META.get('HTTP_REFERER', 'pedidos_semana'))
+
 
 
 @login_required
@@ -1118,7 +1159,8 @@ def marcar_pendiente(request, renta_id):
     pedido.movimientos.all().delete()
 
     messages.info(request, "Pedido marcado como pendiente.")
-    return redirect('pedidos_semana')
+    return redirect(request.META.get('HTTP_REFERER', 'pedidos_semana'))
+
 
 
 @login_required
@@ -1141,7 +1183,10 @@ def pedidos_semana(request):
 
     rentas_qs = (
         Renta.objects
-        .filter(fecha_renta__range=[inicio, fin])
+        .filter(
+            fecha_renta__range=[inicio, fin],
+            status='ACTIVO'
+        )
         .select_related(
             "cliente",
             "finanza",
