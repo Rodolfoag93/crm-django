@@ -258,7 +258,8 @@ def marcar_recolectado(request, pk):
 
         messages.success(request, "Pedido marcado como recolectado")
 
-    return redirect("pedidos_semana")
+    return redirect(request.META.get('HTTP_REFERER', 'pedidos_semana'))
+
 
 @login_required
 def ocupacion_productos(request):
@@ -1119,7 +1120,8 @@ def marcar_pagado(request, renta_id):
         renta.save(update_fields=["pagado"])
 
     messages.success(request, "Pago registrado correctamente.")
-    return redirect("pedidos_semana")
+    return redirect(request.META.get('HTTP_REFERER', 'pedidos_semana'))
+
 
 
 @login_required
@@ -1136,7 +1138,8 @@ def marcar_pendiente(request, renta_id):
     pedido.movimientos.all().delete()
 
     messages.info(request, "Pedido marcado como pendiente.")
-    return redirect('pedidos_semana')
+    return redirect(request.META.get('HTTP_REFERER', 'pedidos_semana'))
+
 
 
 @login_required
@@ -1159,7 +1162,10 @@ def pedidos_semana(request):
 
     rentas_qs = (
         Renta.objects
-        .filter(fecha_renta__range=[inicio, fin])
+        .filter(
+            fecha_renta__range=[inicio, fin],
+            status='ACTIVO'
+        )
         .select_related(
             "cliente",
             "finanza",
