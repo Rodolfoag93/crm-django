@@ -447,7 +447,21 @@ document.addEventListener('DOMContentLoaded', function () {
 
         });
     }
+    // ===============================
+    // AUTO ABRIR TICKET DESPUÉS DE CREAR RENTA
+    // ===============================
+    const params = new URLSearchParams(window.location.search);
+    const rentaCreada = params.get('renta_creada');
 
+    if (rentaCreada) {
+
+        window.open(`/rentas/ticket/${rentaCreada}/`, '_blank');
+
+        // limpiar el parámetro para que no vuelva a abrir si recargas
+        const url = new URL(window.location);
+        url.searchParams.delete('renta_creada');
+        window.history.replaceState({}, document.title, url);
+    }
 });
 </script>
 

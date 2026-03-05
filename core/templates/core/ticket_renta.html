@@ -94,66 +94,9 @@
 
 
 
-<body onload="window.print(); window.close();">
-
-    <!-- LOGO -->
-    <img src="{{ logo_url }}" class="logo" alt="Logo Empresa">
-
-    <h2>Ticket de Renta</h2>
-    <h3>Av. Josefa Ortiz de Domínguez 165-C</h3>
-    <h3>Villa de Álvarez, Colima</h3>
-    <h3>Tel: 312 152 9952</h3>
-    <h3>Folio: {{ renta.folio }}</h3>
-
-    <hr>
-
-    <p><strong>Cliente:</strong> {{ renta.cliente.nombre }}</p>
-    <p><strong>Teléfono:</strong> {{ renta.cliente.telefono }}</p>
-    <p><strong>Fecha:</strong> {{ renta.fecha_renta }} {{ renta.hora_inicio }} - {{ renta.hora_fin }}</p>
-    <p><strong>Dirección:</strong> {{ renta.calle_y_numero }}, {{ renta.colonia }}, {{ renta.ciudad_o_municipio }}</p>
-
-    <hr>
-
-    <!-- TABLA PRODUCTOS -->
-    <table>
-        <thead>
-            <tr>
-                <th>Producto</th>
-                <th>Cant</th>
-                <th>Precio</th>
-                <th>Subtotal</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for p in productos %}
-            <tr>
-                <td>{{ p.nombre }}</td>
-                <td>{{ p.cantidad }}</td>
-                <td>${{ p.precio|floatformat:2 }}</td>
-                <td>${{ p.subtotal|floatformat:2 }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-
-    <hr>
-
-    <!-- TOTALES -->
-    <p class="totales">Total: ${{ total|floatformat:2 }}</p>
-    <p class="totales">Anticipo: ${{ anticipo|floatformat:2 }}</p>
-    <p class="totales">Restante: ${{ restante|floatformat:2 }}</p>
-
-    <hr>
-
-    {% if renta.comentarios %}
-        <p><strong>Comentarios:</strong></p>
-        <p>{{ renta.comentarios }}</p>
-        <hr>
-    {% endif %}
-
-    <div class="footer">
-        <p>¡Gracias por tu preferencia!</p>
-    </div>
+<body>
+{% include "partial/ticket_base.html" with tipo="cliente" %}
 <div class="cut"></div>
+{% include "partial/ticket_base.html" with tipo="admin" %}
 </body>
 </html>
