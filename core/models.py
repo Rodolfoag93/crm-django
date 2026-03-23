@@ -175,6 +175,10 @@ class Renta(models.Model):
     def __str__(self):
         return f"{self.folio} - {self.cliente.nombre}"
 
+    @property
+    def tiene_animacion(self):
+        return self.rentaproductos.filter(producto__tipo='AN').exists()
+
 class Ruta(models.Model):
     fecha = models.DateField()
     cargador = models.ForeignKey(

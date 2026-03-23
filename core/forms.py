@@ -374,5 +374,9 @@ class MaterialAnimacionForm(forms.ModelForm):
         model = MaterialAnimacion
         fields = ['nombre', 'descripcion', 'tipo', 'stock_total', 'foto', 'activo']
         widgets = {
-            'descripcion': forms.Textarea(attrs={'rows': 3}),
+            'nombre': forms.TextInput(attrs={'class': 'form-control'}),
+            'descripcion': forms.Textarea(attrs={'rows': 3, 'class': 'form-control'}),
+            'tipo': forms.Select(attrs={'class': 'form-control'}),
+            'stock_total': forms.NumberInput(attrs={'class': 'form-control'}),
+            'activo': forms.CheckboxInput(),
         }

@@ -2135,7 +2135,7 @@ def asignar_coordinador_animacion(request, renta_id):
     asignacion, _ = AsignacionCoordinador.objects.get_or_create(renta=renta)
 
     if request.method == 'POST':
-        coordinador_id = request.POST.get('coordinador_id')
+        coordinador_id = request.POST.get('coordinador')
         notas = request.POST.get('notas', '')
 
         coordinador = get_object_or_404(User, id=coordinador_id)
