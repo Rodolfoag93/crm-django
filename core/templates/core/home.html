@@ -42,7 +42,43 @@
     </table>
 </div>
 {% endif %}
-
+<!-- 🔴 ALERTA: Rentas sin pago -->
+{% if rentas_sin_pago %}
+<div style="background:#fce4ec; border-left:5px solid #e53935; border-radius:8px;
+            padding:16px 20px; margin-bottom:30px; max-width:900px; margin-left:auto; margin-right:auto;">
+    <div style="font-weight:600; font-size:15px; color:#b71c1c; margin-bottom:10px;">
+        🔴 {{ rentas_sin_pago|length }} renta{{ rentas_sin_pago|length|pluralize }} sin pago registrado
+    </div>
+    <table style="width:100%; border-collapse:collapse; font-size:13px;">
+        <thead>
+            <tr style="color:#b71c1c;">
+                <th style="text-align:left; padding:4px 8px;">Folio</th>
+                <th style="text-align:left; padding:4px 8px;">Cliente</th>
+                <th style="text-align:left; padding:4px 8px;">Fecha</th>
+                <th style="text-align:left; padding:4px 8px;">Total</th>
+                <th style="text-align:left; padding:4px 8px;"></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for renta in rentas_sin_pago %}
+            <tr style="border-top:1px solid #f48fb1;">
+                <td style="padding:6px 8px;">{{ renta.folio }}</td>
+                <td style="padding:6px 8px;">{{ renta.cliente.nombre }}</td>
+                <td style="padding:6px 8px;">{{ renta.fecha_renta }}</td>
+                <td style="padding:6px 8px;">${{ renta.precio_total }}</td>
+                <td style="padding:6px 8px;">
+                    <a href="{% url 'pedidos_semana' %}?q={{ renta.folio }}"
+                       style="background:#e53935; color:white; padding:4px 10px;
+                              border-radius:4px; font-size:12px; text-decoration:none;">
+                        Registrar pago
+                    </a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
 <!-- Tarjetas principales -->
 <div style="display:flex; gap:40px; justify-content:center; flex-wrap:wrap;">
 

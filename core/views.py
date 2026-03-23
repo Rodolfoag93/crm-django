@@ -58,24 +58,30 @@ def home(request):
     es_cargador = request.user.groups.filter(name='cargador').exists()
     es_encargado = es_encargado_material(request.user)
 
-    # Tiene ambos roles → home del encargado (ve todo)
     if es_coordinador and es_encargado:
         return redirect('home_encargado')
 
-    # Solo coordinador → sus eventos
     if es_coordinador:
         return redirect('mis_eventos')
 
-    # Solo encargado → home encargado
     if es_encargado:
         return redirect('home_encargado')
 
     rentas_sin_coordinador = alertas_coordinador(request) if not es_cargador else []
 
+    # 🔴 Rentas activas sin pago registrado
+    hoy = timezone.localdate()
+    rentas_sin_pago = Renta.objects.filter(
+        status='ACTIVO',
+        pagado=False,
+        fecha_renta__lt=hoy
+    ).select_related('cliente').order_by('fecha_renta')
+
     return render(request, 'core/home.html', {
         'es_cargador': es_cargador,
         'es_coordinador': es_coordinador,
         'rentas_sin_coordinador': rentas_sin_coordinador,
+        'rentas_sin_pago': rentas_sin_pago,
     })
 
 @login_required
