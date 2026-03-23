@@ -1,10 +1,19 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.http import JsonResponse, HttpResponse
-from .models import Ruta, Empleado, Nomina, Pedido, MovimientoContable, Cuenta, Compra, HorasExtra, \
-    BitacoraMantenimiento, AsignacionCoordinador
-from .decorators import solo_admin
-from .models import Cliente, Producto, Renta, RentaProducto, PedidoFinanzas, Gasto, Compra, OcupacionDia, calcular_total, TipoPagoExtra, PagoExtraNomina
-from .forms import ClienteForm, ProductoForm, RentaForm, RentaProductoFormSet, EmpleadoForm, NominaForm, GastoForm, CompraForm, HorasExtraForm, PagoExtraForm, TipoPagoExtraForm, PagoExtraNominaForm, TransferenciaForm, MovimientoForm, TraspasoEfectivoBancoForm
+from .models import (
+    Ruta, Empleado, Nomina, Pedido, MovimientoContable, Cuenta, Compra,
+    HorasExtra, BitacoraMantenimiento, AsignacionCoordinador, MaterialEvento,
+    MaterialAnimacion, ListaMaterialEvento, Cliente, Producto, Renta,
+    RentaProducto, PedidoFinanzas, Gasto, OcupacionDia, calcular_total,
+    TipoPagoExtra, PagoExtraNomina
+)
+from .decorators import solo_admin, solo_coordinador, no_coordinador
+from .forms import (
+    ClienteForm, ProductoForm, RentaForm, RentaProductoFormSet, EmpleadoForm,
+    NominaForm, GastoForm, CompraForm, HorasExtraForm, PagoExtraForm,
+    TipoPagoExtraForm, PagoExtraNominaForm, TransferenciaForm, MovimientoForm,
+    TraspasoEfectivoBancoForm
+)
 from django.db.models import Q
 from django.template.loader import render_to_string
 import json
@@ -33,6 +42,7 @@ from .models import (
     Gasto, Compra, OcupacionDia, calcular_total, TipoPagoExtra,
     PagoExtraNomina, MaterialAnimacion, AsignacionCoordinador, MaterialEvento  # 👈 estos 3
 )
+
 #helpers
 def get_caja_efectivo():
     return Cuenta.objects.filter(tipo='EFECTIVO', activa=True).first()
@@ -46,8 +56,21 @@ def get_caja_efectivo():
 def home(request):
     es_coordinador = request.user.groups.filter(name='Coordinador').exists()
     es_cargador = request.user.groups.filter(name='cargador').exists()
+    es_encargado = es_encargado_material(request.user)
 
-    rentas_sin_coordinador = alertas_coordinador(request) if not es_cargador and not es_coordinador else []
+    # Tiene ambos roles → home del encargado (ve todo)
+    if es_coordinador and es_encargado:
+        return redirect('home_encargado')
+
+    # Solo coordinador → sus eventos
+    if es_coordinador:
+        return redirect('mis_eventos')
+
+    # Solo encargado → home encargado
+    if es_encargado:
+        return redirect('home_encargado')
+
+    rentas_sin_coordinador = alertas_coordinador(request) if not es_cargador else []
 
     return render(request, 'core/home.html', {
         'es_cargador': es_cargador,
@@ -56,10 +79,12 @@ def home(request):
     })
 
 @login_required
+@no_coordinador
 def dashboard_ventas(request):
     return render(request, 'core/dashboard_ventas.html')
 
 @login_required
+@no_coordinador
 def dashboard_admin(request):
     return render(request, 'core/dashboard_admin.html')
 
@@ -196,6 +221,7 @@ def api_productos(request):
 # -----------------------------
 @login_required
 @solo_admin
+@no_coordinador
 def lista_rentas(request):
     user = request.user
     hoy = timezone.localdate()
@@ -2154,6 +2180,7 @@ def asignar_coordinador_animacion(request, renta_id):
 
 
 @login_required
+@solo_coordinador
 def mis_eventos(request):
     asignaciones = AsignacionCoordinador.objects.filter(
         coordinador=request.user
@@ -2165,6 +2192,7 @@ def mis_eventos(request):
 
 
 @login_required
+@solo_coordinador
 def detalle_evento(request, asignacion_id):
     asignacion = get_object_or_404(
         AsignacionCoordinador,
@@ -2184,6 +2212,7 @@ def detalle_evento(request, asignacion_id):
 
 @login_required
 @require_POST
+@solo_coordinador
 def agregar_material_evento(request, asignacion_id):
     asignacion = get_object_or_404(
         AsignacionCoordinador,
@@ -2217,12 +2246,17 @@ def agregar_material_evento(request, asignacion_id):
         material.stock_disponible -= cantidad
         material.save()
 
+    ListaMaterialEvento.objects.get_or_create(
+        asignacion=asignacion
+    )
+
     messages.success(request, f'{material.nombre} agregado correctamente.')
     return redirect('detalle_evento', asignacion_id=asignacion_id)
 
 
 @login_required
 @require_POST
+@solo_coordinador
 def eliminar_material_evento(request, material_evento_id):
     material_evento = get_object_or_404(MaterialEvento, id=material_evento_id)
 
@@ -2306,3 +2340,79 @@ def alertas_coordinador(request):
 
     return rentas_sin_coordinador
 
+# =============================================
+# MÓDULO ENCARGADO DE MATERIAL
+# =============================================
+
+
+
+def es_encargado_material(user):
+    return user.groups.filter(name='Encargado Material').exists()
+
+@login_required
+def home_encargado(request):
+    listas_pendientes = ListaMaterialEvento.objects.filter(
+        estado='PENDIENTE'
+    ).select_related(
+        'asignacion__renta__cliente',
+        'asignacion__coordinador'
+    ).order_by('asignacion__renta__fecha_renta')
+
+    return render(request, 'core/home_encargado.html', {
+        'listas_pendientes': listas_pendientes,
+    })
+
+@login_required
+def todas_listas_material(request):
+    estado = request.GET.get('estado', '')
+
+    listas = ListaMaterialEvento.objects.select_related(
+        'asignacion__renta__cliente',
+        'asignacion__coordinador',
+        'revisada_por'
+    ).prefetch_related(
+        'asignacion__materiales__material'
+    ).order_by('asignacion__renta__fecha_renta')
+
+    if estado:
+        listas = listas.filter(estado=estado)
+
+    return render(request, 'core/todas_listas_material.html', {
+        'listas': listas,
+        'estado_seleccionado': estado,
+        'estados': ListaMaterialEvento.ESTADO,
+    })
+
+@login_required
+def detalle_lista_material(request, lista_id):
+    lista = get_object_or_404(ListaMaterialEvento, id=lista_id)
+
+    materiales = lista.asignacion.materiales.select_related('material')
+
+    consumibles = materiales.filter(material__tipo='CONSUMIBLE')
+    reutilizables = materiales.filter(material__tipo='REUTILIZABLE')
+
+    return render(request, 'core/detalle_lista_material.html', {
+        'lista': lista,
+        'consumibles': consumibles,
+        'reutilizables': reutilizables,
+    })
+
+@login_required
+@require_POST
+def cambiar_estado_lista(request, lista_id):
+    lista = get_object_or_404(ListaMaterialEvento, id=lista_id)
+
+    nuevo_estado = request.POST.get('estado')
+    notas = request.POST.get('notas_encargado', '')
+
+    if nuevo_estado in dict(ListaMaterialEvento.ESTADO):
+        lista.estado = nuevo_estado
+        lista.notas_encargado = notas
+        if nuevo_estado in ['REVISADA', 'PREPARADA']:
+            lista.revisada_por = request.user
+            lista.fecha_revision = timezone.now()
+        lista.save()
+        messages.success(request, f'Lista marcada como {lista.get_estado_display()}.')
+
+    return redirect('detalle_lista_material', lista_id=lista.id)

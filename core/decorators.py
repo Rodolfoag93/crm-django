@@ -1,5 +1,7 @@
 from functools import wraps
 from django.shortcuts import redirect
+from django.contrib.auth.decorators import login_required
+from django.core.exceptions import PermissionDenied
 
 def solo_admin(view_func):
     @wraps(view_func)
@@ -16,3 +18,19 @@ def solo_admin(view_func):
         return view_func(request, *args, **kwargs)
 
     return _wrapped_view
+
+def solo_coordinador(view_func):
+    def wrapper(request, *args, **kwargs):
+        if not request.user.groups.filter(name='Coordinador').exists():
+            raise PermissionDenied
+        return view_func(request, *args, **kwargs)
+    return login_required(wrapper)
+
+def no_coordinador(view_func):
+    def wrapper(request, *args, **kwargs):
+        es_coordinador = request.user.groups.filter(name='Coordinador').exists()
+        es_encargado = request.user.groups.filter(name='Encargado Material').exists()
+        if es_coordinador and not es_encargado:
+            return redirect('mis_eventos')
+        return view_func(request, *args, **kwargs)
+    return login_required(wrapper)

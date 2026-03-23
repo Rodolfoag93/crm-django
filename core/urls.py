@@ -139,6 +139,12 @@ urlpatterns = [
     path('mis-eventos/<int:asignacion_id>/', views.detalle_evento, name='detalle_evento'),
     path('mis-eventos/<int:asignacion_id>/agregar-material/', views.agregar_material_evento, name='agregar_material_evento'),
     path('material-evento/<int:material_evento_id>/eliminar/', views.eliminar_material_evento, name='eliminar_material_evento'),
+
+    # Encargado de material
+    path('encargado/', views.home_encargado, name='home_encargado'),
+    path('encargado/listas/', views.todas_listas_material, name='todas_listas_material'),
+    path('encargado/listas/<int:lista_id>/', views.detalle_lista_material, name='detalle_lista_material'),
+    path('encargado/listas/<int:lista_id>/estado/', views.cambiar_estado_lista, name='cambiar_estado_lista'),
 ]
 
 if settings.DEBUG:

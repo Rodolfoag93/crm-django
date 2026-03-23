@@ -1,0 +1,86 @@
+{% extends 'core/base.html' %}
+{% block content %}
+
+<h2 style="font-size:24px; font-weight:bold; margin-bottom:8px;">
+    Bienvenido, {{ request.user.get_full_name|default:request.user.username }}
+</h2>
+<hr style="border:none; height:4px; background:#00897b; margin-bottom:30px;">
+
+<!-- Accesos rápidos -->
+<div style="display:flex; gap:16px; flex-wrap:wrap; margin-bottom:30px;">
+    <a href="{% url 'mis_eventos' %}"
+       style="background:#2196F3; color:white; padding:14px 24px; border-radius:10px;
+              text-decoration:none; font-weight:600; font-size:14px;">
+        🎉 Mis Eventos
+    </a>
+    <a href="{% url 'todas_listas_material' %}"
+       style="background:#00897b; color:white; padding:14px 24px; border-radius:10px;
+              text-decoration:none; font-weight:600; font-size:14px;">
+        📋 Todas las listas
+    </a>
+    <a href="{% url 'todas_listas_material' %}?estado=PENDIENTE"
+       style="background:#ff9800; color:white; padding:14px 24px; border-radius:10px;
+              text-decoration:none; font-weight:600; font-size:14px;">
+        ⏳ Pendientes
+    </a>
+    <a href="{% url 'catalogo_materiales' %}"
+       style="background:#5c6bc0; color:white; padding:14px 24px; border-radius:10px;
+              text-decoration:none; font-weight:600; font-size:14px;">
+        📦 Catálogo de materiales
+    </a>
+    <a href="{% url 'nuevo_material' %}"
+       style="background:#43a047; color:white; padding:14px 24px; border-radius:10px;
+              text-decoration:none; font-weight:600; font-size:14px;">
+        + Nuevo material
+    </a>
+</div>
+
+<!-- Alertas: listas pendientes -->
+{% if listas_pendientes %}
+<div style="background:#fff3e0; border-left:5px solid #ff9800; border-radius:8px;
+            padding:16px 20px; margin-bottom:30px;">
+    <div style="font-weight:600; font-size:15px; color:#e65100; margin-bottom:12px;">
+        ⚠️ {{ listas_pendientes|length }} lista{{ listas_pendientes|length|pluralize }} pendiente{{ listas_pendientes|length|pluralize }} de revisión
+    </div>
+
+    <table style="width:100%; border-collapse:collapse; font-size:13px;">
+        <thead>
+            <tr style="color:#bf360c;">
+                <th style="text-align:left; padding:6px 8px;">Folio</th>
+                <th style="text-align:left; padding:6px 8px;">Cliente</th>
+                <th style="text-align:left; padding:6px 8px;">Fecha evento</th>
+                <th style="text-align:left; padding:6px 8px;">Coordinador</th>
+                <th style="text-align:left; padding:6px 8px;">Materiales</th>
+                <th style="padding:6px 8px;"></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for lista in listas_pendientes %}
+            <tr style="border-top:1px solid #ffe0b2;">
+                <td style="padding:6px 8px;">{{ lista.asignacion.renta.folio }}</td>
+                <td style="padding:6px 8px;">{{ lista.asignacion.renta.cliente.nombre }}</td>
+                <td style="padding:6px 8px;">{{ lista.asignacion.renta.fecha_renta }}</td>
+                <td style="padding:6px 8px;">
+                    {{ lista.asignacion.coordinador.get_full_name|default:lista.asignacion.coordinador.username }}
+                </td>
+                <td style="padding:6px 8px;">{{ lista.asignacion.materiales.count }} item(s)</td>
+                <td style="padding:6px 8px;">
+                    <a href="{% url 'detalle_lista_material' lista.id %}"
+                       style="background:#ff9800; color:white; padding:4px 10px;
+                              border-radius:4px; font-size:12px; text-decoration:none;">
+                        Ver lista
+                    </a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div style="background:#e8f5e9; border-left:5px solid #43a047; border-radius:8px;
+            padding:16px 20px; margin-bottom:30px; color:#2e7d32; font-weight:500;">
+    ✅ No hay listas pendientes de revisión.
+</div>
+{% endif %}
+
+{% endblock %}

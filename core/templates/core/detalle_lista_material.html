@@ -1,0 +1,141 @@
+{% extends 'core/base.html' %}
+{% block content %}
+
+<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+    <h2>Lista de Material — {{ lista.asignacion.renta.folio }}</h2>
+    <a href="{% url 'todas_listas_material' %}" class="btn btn-secondary btn-sm">← Todas las listas</a>
+</div>
+
+<!-- Info del evento -->
+<div style="background:#f9f9f9; border:1px solid #ddd; border-radius:8px; padding:16px; margin-bottom:24px;">
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; font-size:14px;">
+        <div><strong>Cliente:</strong> {{ lista.asignacion.renta.cliente.nombre }}</div>
+        <div><strong>Fecha:</strong> {{ lista.asignacion.renta.fecha_renta }}</div>
+        <div><strong>Hora:</strong> {{ lista.asignacion.renta.hora_inicio }} - {{ lista.asignacion.renta.hora_fin }}</div>
+        <div><strong>Dirección:</strong> {{ lista.asignacion.renta.calle_y_numero }}, {{ lista.asignacion.renta.colonia }}</div>
+        <div><strong>Coordinador:</strong>
+            {{ lista.asignacion.coordinador.get_full_name|default:lista.asignacion.coordinador.username }}
+        </div>
+        <div><strong>Estado lista:</strong>
+            {% if lista.estado == 'PENDIENTE' %}
+                <span style="background:#fff3e0; color:#e65100; padding:2px 10px; border-radius:12px; font-size:12px;">⏳ Pendiente</span>
+            {% elif lista.estado == 'REVISADA' %}
+                <span style="background:#e3f2fd; color:#1565c0; padding:2px 10px; border-radius:12px; font-size:12px;">👁 Revisada</span>
+            {% elif lista.estado == 'PREPARADA' %}
+                <span style="background:#e8f5e9; color:#2e7d32; padding:2px 10px; border-radius:12px; font-size:12px;">✅ Preparada</span>
+            {% endif %}
+        </div>
+    </div>
+    {% if lista.revisada_por %}
+    <div style="margin-top:10px; font-size:13px; color:#555;">
+        Revisada por <strong>{{ lista.revisada_por.get_full_name|default:lista.revisada_por.username }}</strong>
+        el {{ lista.fecha_revision|date:"d/m/Y H:i" }}
+    </div>
+    {% endif %}
+</div>
+
+<div style="display:grid; grid-template-columns:1fr 1fr; gap:24px;">
+
+    <!-- Materiales consumibles -->
+    <div>
+        <h4 style="margin-bottom:12px; color:#e65100;">🔴 Consumibles</h4>
+        {% if consumibles %}
+        <table style="width:100%; border-collapse:collapse; font-size:14px;">
+            <thead>
+                <tr style="background:#fff3e0;">
+                    <th style="padding:8px; text-align:left;">Material</th>
+                    <th style="padding:8px; text-align:center;">Cantidad</th>
+                    <th style="padding:8px; text-align:center;">Stock disponible</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for me in consumibles %}
+                <tr style="border-bottom:1px solid #eee;">
+                    <td style="padding:8px;">
+                        {% if me.material.foto %}
+                            <img src="{{ me.material.foto.url }}"
+                                 style="width:32px; height:32px; object-fit:cover; border-radius:4px; margin-right:6px; vertical-align:middle;">
+                        {% endif %}
+                        {{ me.material.nombre }}
+                    </td>
+                    <td style="padding:8px; text-align:center;">{{ me.cantidad }}</td>
+                    <td style="padding:8px; text-align:center;">
+                        {% if me.material.stock_disponible == 0 %}
+                            <span style="color:#e53935; font-weight:600;">Sin stock</span>
+                        {% else %}
+                            {{ me.material.stock_disponible }}
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+            <div style="color:#888; font-size:13px;">Sin materiales consumibles.</div>
+        {% endif %}
+    </div>
+
+    <!-- Materiales reutilizables -->
+    <div>
+        <h4 style="margin-bottom:12px; color:#2e7d32;">🟢 Reutilizables</h4>
+        {% if reutilizables %}
+        <table style="width:100%; border-collapse:collapse; font-size:14px;">
+            <thead>
+                <tr style="background:#e8f5e9;">
+                    <th style="padding:8px; text-align:left;">Material</th>
+                    <th style="padding:8px; text-align:center;">Cantidad</th>
+                    <th style="padding:8px; text-align:center;">Stock disponible</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for me in reutilizables %}
+                <tr style="border-bottom:1px solid #eee;">
+                    <td style="padding:8px;">
+                        {% if me.material.foto %}
+                            <img src="{{ me.material.foto.url }}"
+                                 style="width:32px; height:32px; object-fit:cover; border-radius:4px; margin-right:6px; vertical-align:middle;">
+                        {% endif %}
+                        {{ me.material.nombre }}
+                    </td>
+                    <td style="padding:8px; text-align:center;">{{ me.cantidad }}</td>
+                    <td style="padding:8px; text-align:center;">{{ me.material.stock_disponible }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+            <div style="color:#888; font-size:13px;">Sin materiales reutilizables.</div>
+        {% endif %}
+    </div>
+
+</div>
+
+<!-- Cambiar estado -->
+<div style="margin-top:30px; background:#f9f9f9; border:1px solid #ddd; border-radius:8px; padding:20px;">
+    <h4 style="margin-bottom:16px;">Actualizar estado de la lista</h4>
+    <form method="post" action="{% url 'cambiar_estado_lista' lista.id %}">
+        {% csrf_token %}
+        <div style="display:flex; gap:16px; align-items:flex-start; flex-wrap:wrap;">
+            <div>
+                <label style="display:block; font-size:13px; margin-bottom:4px;">Estado</label>
+                <select name="estado" class="form-control" style="min-width:200px;">
+                    {% for valor, etiqueta in lista.ESTADO %}
+                        <option value="{{ valor }}" {% if lista.estado == valor %}selected{% endif %}>
+                            {{ etiqueta }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div style="flex:1; min-width:200px;">
+                <label style="display:block; font-size:13px; margin-bottom:4px;">Notas (opcional)</label>
+                <textarea name="notas_encargado" class="form-control" rows="2"
+                          placeholder="Observaciones sobre la lista...">{{ lista.notas_encargado|default:'' }}</textarea>
+            </div>
+            <div style="align-self:flex-end;">
+                <button type="submit" class="btn btn-primary">Guardar estado</button>
+            </div>
+        </div>
+    </form>
+</div>
+
+{% endblock %}

@@ -578,6 +578,7 @@ class MaterialAnimacion(models.Model):
     descripcion = models.TextField(blank=True, null=True)
     tipo = models.CharField(max_length=20, choices=TIPO, default='REUTILIZABLE')
     stock_total = models.PositiveIntegerField(default=0)
+    stock_disponible = models.PositiveIntegerField(default=0)
     foto = models.ImageField(upload_to='materiales/', blank=True, null=True)
     activo = models.BooleanField(default=True)
 
@@ -628,3 +629,34 @@ class MaterialEvento(models.Model):
     class Meta:
         verbose_name = "Material del Evento"
         unique_together = ('asignacion', 'material')
+class ListaMaterialEvento(models.Model):
+    ESTADO = [
+        ('PENDIENTE', 'Pendiente revisión'),
+        ('REVISADA', 'Revisada'),
+        ('PREPARADA', 'Preparada'),
+    ]
+
+    asignacion = models.OneToOneField(
+        AsignacionCoordinador,
+        on_delete=models.CASCADE,
+        related_name='lista_material'
+    )
+    estado = models.CharField(max_length=20, choices=ESTADO, default='PENDIENTE')
+    revisada_por = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='listas_revisadas'
+    )
+    fecha_revision = models.DateTimeField(null=True, blank=True)
+    notas_encargado = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Lista {self.asignacion.renta.folio} - {self.get_estado_display()}"
+
+    class Meta:
+        verbose_name = "Lista de material por evento"
+        ordering = ['-created_at']
