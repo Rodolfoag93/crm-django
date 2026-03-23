@@ -7,6 +7,79 @@
 
 <hr style="border:none; height:4px; background:#5ccb5f; margin-bottom:30px;">
 
+<!-- ⚠️ ALERTA: Rentas con animación sin coordinador asignado -->
+{% if rentas_sin_coordinador %}
+<div style="background:#fff3e0; border-left:5px solid #ff9800; border-radius:8px;
+            padding:16px 20px; margin-bottom:30px; max-width:900px; margin-left:auto; margin-right:auto;">
+    <div style="font-weight:600; font-size:15px; color:#e65100; margin-bottom:10px;">
+        ⚠️ {{ rentas_sin_coordinador|length }} renta{{ rentas_sin_coordinador|length|pluralize }} con animación sin coordinador asignado en los próximos 7 días
+    </div>
+    <table style="width:100%; border-collapse:collapse; font-size:13px;">
+        <thead>
+            <tr style="color:#bf360c;">
+                <th style="text-align:left; padding:4px 8px;">Folio</th>
+                <th style="text-align:left; padding:4px 8px;">Cliente</th>
+                <th style="text-align:left; padding:4px 8px;">Fecha</th>
+                <th style="text-align:left; padding:4px 8px;"></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for renta in rentas_sin_coordinador %}
+            <tr style="border-top:1px solid #ffe0b2;">
+                <td style="padding:6px 8px;">{{ renta.folio }}</td>
+                <td style="padding:6px 8px;">{{ renta.cliente.nombre }}</td>
+                <td style="padding:6px 8px;">{{ renta.fecha_renta }}</td>
+                <td style="padding:6px 8px;">
+                    <a href="{% url 'asignar_coordinador_animacion' renta.id %}"
+                       style="background:#ff9800; color:white; padding:4px 10px;
+                              border-radius:4px; font-size:12px; text-decoration:none;">
+                        Asignar coordinador
+                    </a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+<!-- 🔴 ALERTA: Rentas sin pago -->
+{% if rentas_sin_pago %}
+<div style="background:#fce4ec; border-left:5px solid #e53935; border-radius:8px;
+            padding:16px 20px; margin-bottom:30px; max-width:900px; margin-left:auto; margin-right:auto;">
+    <div style="font-weight:600; font-size:15px; color:#b71c1c; margin-bottom:10px;">
+        🔴 {{ rentas_sin_pago|length }} renta{{ rentas_sin_pago|length|pluralize }} sin pago registrado
+    </div>
+    <table style="width:100%; border-collapse:collapse; font-size:13px;">
+        <thead>
+            <tr style="color:#b71c1c;">
+                <th style="text-align:left; padding:4px 8px;">Folio</th>
+                <th style="text-align:left; padding:4px 8px;">Cliente</th>
+                <th style="text-align:left; padding:4px 8px;">Fecha</th>
+                <th style="text-align:left; padding:4px 8px;">Total</th>
+                <th style="text-align:left; padding:4px 8px;"></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for renta in rentas_sin_pago %}
+            <tr style="border-top:1px solid #f48fb1;">
+                <td style="padding:6px 8px;">{{ renta.folio }}</td>
+                <td style="padding:6px 8px;">{{ renta.cliente.nombre }}</td>
+                <td style="padding:6px 8px;">{{ renta.fecha_renta }}</td>
+                <td style="padding:6px 8px;">${{ renta.precio_total }}</td>
+                <td style="padding:6px 8px;">
+                    <a href="{% url 'pedidos_semana' %}?q={{ renta.folio }}"
+                       style="background:#e53935; color:white; padding:4px 10px;
+                              border-radius:4px; font-size:12px; text-decoration:none;">
+                        Registrar pago
+                    </a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+<!-- Tarjetas principales -->
 <div style="display:flex; gap:40px; justify-content:center; flex-wrap:wrap;">
 
     <!-- VENTAS -->
@@ -33,23 +106,33 @@
         <a href="{% url 'dashboard' %}" class="main-btn">Entrar</a>
     </div>
 
+    <!-- MIS EVENTOS (solo coordinadores) -->
+    {% if es_coordinador %}
+    <div style="width:300px; background:#00897b; color:white; border-radius:15px;
+                padding:40px; text-align:center; box-shadow:0 6px 12px rgba(0,0,0,0.2);">
+        <h3>🎉 Mis Eventos</h3>
+        <p>Animaciones asignadas</p>
+        <a href="{% url 'mis_eventos' %}" class="main-btn">Entrar</a>
+    </div>
+    {% endif %}
+
 </div>
 
 <style>
-.main-btn{
-    display:inline-block;
-    margin-top:20px;
-    padding:12px 25px;
-    background:white;
-    color:#333;
-    border-radius:8px;
-    font-weight:bold;
-    text-decoration:none;
+.main-btn {
+    display: inline-block;
+    margin-top: 20px;
+    padding: 12px 25px;
+    background: white;
+    color: #333;
+    border-radius: 8px;
+    font-weight: bold;
+    text-decoration: none;
     transition: background 0.3s, color 0.3s;
 }
-.main-btn:hover{
-    background:#f1f1f1;
-    color:#000;
+.main-btn:hover {
+    background: #f1f1f1;
+    color: #000;
 }
 </style>
 

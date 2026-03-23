@@ -65,6 +65,13 @@
                     <a href="{% url 'editar_renta' renta.id %}" style="background:#2196F3;color:white;padding:5px 8px;border-radius:3px;">✏️</a>
                 {% endif %}
 
+                {% if renta.tiene_animacion %}
+                    <a href="{% url 'asignar_coordinador_animacion' renta.id %}"
+                       style="background:#ff9800;color:white;padding:5px 8px;border-radius:3px;text-decoration:none;font-size:12px;">
+                        🎉 Coordinador
+                    </a>
+                {% endif %}
+
                 {% if renta.estado_entrega != 'ENTREGADO' and renta.estado_entrega != 'CANCELADO' %}
                 <form method="post" action="{% url 'cancelar_renta' renta.id %}" style="display:inline;" onsubmit="return confirm('¿Deseas cancelar esta renta?');">
                     {% csrf_token %}

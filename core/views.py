@@ -1,9 +1,19 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.http import JsonResponse, HttpResponse
-from .models import Ruta, Empleado, Nomina, Pedido, MovimientoContable, Cuenta, Compra, HorasExtra, BitacoraMantenimiento
-from .decorators import solo_admin
-from .models import Cliente, Producto, Renta, RentaProducto, PedidoFinanzas, Gasto, Compra, OcupacionDia, calcular_total, TipoPagoExtra, PagoExtraNomina
-from .forms import ClienteForm, ProductoForm, RentaForm, RentaProductoFormSet, EmpleadoForm, NominaForm, GastoForm, CompraForm, HorasExtraForm, PagoExtraForm, TipoPagoExtraForm, PagoExtraNominaForm, TransferenciaForm, MovimientoForm, TraspasoEfectivoBancoForm
+from .models import (
+    Ruta, Empleado, Nomina, Pedido, MovimientoContable, Cuenta, Compra,
+    HorasExtra, BitacoraMantenimiento, AsignacionCoordinador, MaterialEvento,
+    MaterialAnimacion, ListaMaterialEvento, Cliente, Producto, Renta,
+    RentaProducto, PedidoFinanzas, Gasto, OcupacionDia, calcular_total,
+    TipoPagoExtra, PagoExtraNomina
+)
+from .decorators import solo_admin, solo_coordinador, no_coordinador
+from .forms import (
+    ClienteForm, ProductoForm, RentaForm, RentaProductoFormSet, EmpleadoForm,
+    NominaForm, GastoForm, CompraForm, HorasExtraForm, PagoExtraForm,
+    TipoPagoExtraForm, PagoExtraNominaForm, TransferenciaForm, MovimientoForm,
+    TraspasoEfectivoBancoForm
+)
 from django.db.models import Q
 from django.template.loader import render_to_string
 import json
@@ -26,13 +36,12 @@ from decimal import Decimal
 from django.utils.timezone import now
 from core.utils import saldo_efectivo, sincronizar_gasto_nomina, calcular_total
 from core.services.ocupacion import recalcular_ocupacion_producto_dia
-import inspect
 from django.views.decorators.http import require_POST
-
-print("🔍 Cuenta viene de:", inspect.getmodule(Cuenta))
-
-
-print("🔥 VISTA CARGADA DESDE:", __file__)
+from .models import (
+    Cliente, Producto, Renta, RentaProducto, PedidoFinanzas,
+    Gasto, Compra, OcupacionDia, calcular_total, TipoPagoExtra,
+    PagoExtraNomina, MaterialAnimacion, AsignacionCoordinador, MaterialEvento  # 👈 estos 3
+)
 
 #helpers
 def get_caja_efectivo():
@@ -45,21 +54,43 @@ def get_caja_efectivo():
 # -----------------------------
 @login_required
 def home(request):
-    return render(request, 'core/home.html')
-
-@login_required
-def home(request):
+    es_coordinador = request.user.groups.filter(name='Coordinador').exists()
     es_cargador = request.user.groups.filter(name='cargador').exists()
+    es_encargado = es_encargado_material(request.user)
+
+    if es_coordinador and es_encargado:
+        return redirect('home_encargado')
+
+    if es_coordinador:
+        return redirect('mis_eventos')
+
+    if es_encargado:
+        return redirect('home_encargado')
+
+    rentas_sin_coordinador = alertas_coordinador(request) if not es_cargador else []
+
+    # 🔴 Rentas activas sin pago registrado
+    hoy = timezone.localdate()
+    rentas_sin_pago = Renta.objects.filter(
+        status='ACTIVO',
+        pagado=False,
+        fecha_renta__lt=hoy
+    ).select_related('cliente').order_by('fecha_renta')
 
     return render(request, 'core/home.html', {
-        'es_cargador': es_cargador
+        'es_cargador': es_cargador,
+        'es_coordinador': es_coordinador,
+        'rentas_sin_coordinador': rentas_sin_coordinador,
+        'rentas_sin_pago': rentas_sin_pago,
     })
 
 @login_required
+@no_coordinador
 def dashboard_ventas(request):
     return render(request, 'core/dashboard_ventas.html')
 
 @login_required
+@no_coordinador
 def dashboard_admin(request):
     return render(request, 'core/dashboard_admin.html')
 
@@ -196,6 +227,7 @@ def api_productos(request):
 # -----------------------------
 @login_required
 @solo_admin
+@no_coordinador
 def lista_rentas(request):
     user = request.user
     hoy = timezone.localdate()
@@ -1013,6 +1045,7 @@ def lista_rutas(request):
 # -----------------------------
 # CONTABILIDAD
 # -----------------------------
+@login_required
 def contabilidad_home(request):
     categoria = request.GET.get("categoria")
     semana_param = request.GET.get("semana")  # formato YYYY-MM-DD
@@ -1432,10 +1465,12 @@ def es_cargador(user):
 
 
 # ---------------- Empleados ----------------
+@login_required
 def lista_empleados(request):
     empleados = Empleado.objects.all()
     return render(request, 'core/empleados_lista.html', {'empleados': empleados, "module": 'admin',})
 
+@login_required
 def nuevo_empleado(request):
     if request.method == "POST":
         form = EmpleadoForm(request.POST)
@@ -1446,6 +1481,7 @@ def nuevo_empleado(request):
         form = EmpleadoForm()
     return render(request, 'core/empleado_form.html', {'form': form})
 
+@login_required
 def editar_empleado(request, pk):
     empleado = get_object_or_404(Empleado, pk=pk)
     if request.method == "POST":
@@ -1458,7 +1494,7 @@ def editar_empleado(request, pk):
     return render(request, 'core/empleado_form.html', {'form': form})
 
 # ---------------- Nómina ----------------
-
+@login_required
 def lista_nomina(request):
     # Obtener lunes de la semana a mostrar desde GET
     semana_param = request.GET.get('semana')  # formato 'YYYY-MM-DD'
@@ -1502,7 +1538,7 @@ def lista_nomina(request):
     }
 
     return render(request, 'core/nomina_lista.html', contexto)
-
+@login_required
 def pagos_extra_nomina(request, nomina_id):
     nomina = get_object_or_404(Nomina, id=nomina_id)
     pagos = nomina.pagos_extras.select_related('tipo')
@@ -1511,7 +1547,7 @@ def pagos_extra_nomina(request, nomina_id):
         'nomina': nomina,
         'pagos': pagos,
     })
-
+@login_required
 def crear_pago_extra(request, nomina_id):
     nomina = get_object_or_404(Nomina, pk=nomina_id)
     if request.method == "POST":
@@ -1529,12 +1565,14 @@ def crear_pago_extra(request, nomina_id):
         'pago_extra_form': form,
     })
 
+@login_required
 def eliminar_pago_extra(request, pago_id):
     pago = get_object_or_404(PagoExtraNomina, id=pago_id)
     nomina_id = pago.nomina.id
     pago.delete()
     return redirect('editar_nomina', pk=nomina_id)
 
+@login_required
 def catalogo_pagos_extra(request, tipo_id=None):
     """
     Lista y permite crear/editar conceptos de pago extra.
@@ -1565,7 +1603,7 @@ def catalogo_pagos_extra(request, tipo_id=None):
         'tipo': tipo
     })
 
-
+@login_required
 def crear_editar_tipo_pago_extra(request, tipo_id=None):
     # Inicializamos tipo (None si es creación)
     tipo = None
@@ -1590,7 +1628,7 @@ def crear_editar_tipo_pago_extra(request, tipo_id=None):
 
 
 
-
+@login_required
 def eliminar_tipo_pago_extra(request, tipo_id):
     tipo = get_object_or_404(TipoPagoExtra, id=tipo_id)
 
@@ -1605,6 +1643,7 @@ def eliminar_tipo_pago_extra(request, tipo_id):
 
     return redirect('catalogo_pagos_extra')
 
+@login_required
 def nueva_nomina(request):
     print("➡️ Entró a nueva_nomina")
 
@@ -1646,7 +1685,7 @@ def nueva_nomina(request):
         'nomina': None,
     })
 
-
+@login_required
 def editar_nomina(request, pk):
     nomina = get_object_or_404(Nomina, pk=pk)
     pago_extra_form = PagoExtraNominaForm(request.POST or None)
@@ -1683,7 +1722,7 @@ def editar_nomina(request, pk):
         'pagos': pagos,  # <-- importante
     })
 
-
+@login_required
 def recibo_nomina_pdf(request, nomina_id):
     nomina = get_object_or_404(Nomina, id=nomina_id)
 
@@ -1713,11 +1752,11 @@ def recibo_nomina_pdf(request, nomina_id):
 
     HTML(string=html_string).write_pdf(response)
     return response
-
+@login_required
 def lista_horas_extra(request):
     horas = HorasExtra.objects.order_by('-semana_inicio')
     return render(request, 'nomina/horas_extra_list.html', {'horas': horas})
-
+@login_required
 def crear_horas_extra(request):
     initial = {}
 
@@ -1761,7 +1800,7 @@ def crear_horas_extra(request):
 
     return render(request, 'nomina/horas_extra_form.html', {'form': form})
 
-
+@login_required
 def pagar_horas_extra(request, id):
     horas = get_object_or_404(HorasExtra, id=id)
     horas.pagado = True
@@ -1769,7 +1808,7 @@ def pagar_horas_extra(request, id):
     horas.save()
     messages.success(request, "Horas extra pagadas")
     return redirect('lista_horas_extra')
-
+@login_required
 def recibo_horas_extra_pdf(request, horas_id):
     horas = get_object_or_404(HorasExtra, id=horas_id)
 
@@ -2116,3 +2155,270 @@ def crear_producto_ajax(request):
         "nombre": producto.nombre,
         "precio": float(producto.precio)
     })
+
+#===================================
+# Modulo Animacion - Coordinador
+#==================================
+
+@login_required
+def asignar_coordinador_animacion(request, renta_id):
+    renta = get_object_or_404(Renta, id=renta_id)
+
+    asignacion, _ = AsignacionCoordinador.objects.get_or_create(renta=renta)
+
+    if request.method == 'POST':
+        coordinador_id = request.POST.get('coordinador')
+        notas = request.POST.get('notas', '')
+
+        coordinador = get_object_or_404(User, id=coordinador_id)
+        asignacion.coordinador = coordinador
+        asignacion.notas = notas
+        asignacion.save()
+
+        messages.success(request, f'Coordinador asignado correctamente')
+        return redirect('lista_rentas')
+    coordinadores = User.objects.filter(groups__name='Coordinador')
+    return render(request, 'core/asignar_coordinador_animacion.html', {
+        'renta': renta,
+        'asignacion': asignacion,
+        'coordinadores': coordinadores,
+    })
+
+
+@login_required
+@solo_coordinador
+def mis_eventos(request):
+    asignaciones = AsignacionCoordinador.objects.filter(
+        coordinador=request.user
+    ).select_related('renta', 'renta__cliente').order_by('renta__fecha_renta')
+
+    return render(request, 'core/mis_eventos.html', {
+        'asignaciones': asignaciones,
+    })
+
+
+@login_required
+@solo_coordinador
+def detalle_evento(request, asignacion_id):
+    asignacion = get_object_or_404(
+        AsignacionCoordinador,
+        id=asignacion_id,
+        coordinador=request.user
+    )
+
+    materiales_agregados = asignacion.materiales.select_related('material')
+    catalogo = MaterialAnimacion.objects.filter(activo=True)
+
+    return render(request, 'core/detalle_evento.html', {
+        'asignacion': asignacion,
+        'materiales_agregados': materiales_agregados,
+        'catalogo': catalogo,
+    })
+
+
+@login_required
+@require_POST
+@solo_coordinador
+def agregar_material_evento(request, asignacion_id):
+    asignacion = get_object_or_404(
+        AsignacionCoordinador,
+        id=asignacion_id,
+        coordinador=request.user
+    )
+
+    material_id = request.POST.get('material_id')
+    cantidad = int(request.POST.get('cantidad', 1))
+
+    material = get_object_or_404(MaterialAnimacion, id=material_id)
+
+    if cantidad > material.stock_disponible:
+        messages.error(
+            request,
+            f'Solo hay {material.stock_disponible} disponibles de {material.nombre}.'
+        )
+        return redirect('detalle_evento', asignacion_id=asignacion_id)
+
+    material_evento, created = MaterialEvento.objects.get_or_create(
+        asignacion=asignacion,
+        material=material,
+        defaults={'cantidad': cantidad}
+    )
+
+    if not created:
+        material_evento.cantidad += cantidad
+        material_evento.save()
+
+    if material.tipo == 'CONSUMIBLE':
+        material.stock_disponible -= cantidad
+        material.save()
+
+    ListaMaterialEvento.objects.get_or_create(
+        asignacion=asignacion
+    )
+
+    messages.success(request, f'{material.nombre} agregado correctamente.')
+    return redirect('detalle_evento', asignacion_id=asignacion_id)
+
+
+@login_required
+@require_POST
+@solo_coordinador
+def eliminar_material_evento(request, material_evento_id):
+    material_evento = get_object_or_404(MaterialEvento, id=material_evento_id)
+
+    asignacion_id = material_evento.asignacion.id
+
+    if material_evento.material.tipo == 'CONSUMIBLE':
+        material_evento.material.stock_disponible += material_evento.cantidad
+        material_evento.material.save()
+
+    material_evento.delete()
+    messages.success(request, 'Material eliminado.')
+    return redirect('detalle_evento', asignacion_id=asignacion_id)
+
+
+@login_required
+def catalogo_materiales(request):
+    q = request.GET.get('q', '').strip()
+    tipo = request.GET.get('tipo', '')
+
+    materiales = MaterialAnimacion.objects.filter(activo=True)
+
+    if q:
+        materiales = materiales.filter(nombre__icontains=q)
+    if tipo:
+        materiales = materiales.filter(tipo=tipo)
+
+    return render(request, 'core/catalogo_materiales.html', {
+        'materiales': materiales,
+        'tipos': MaterialAnimacion.TIPO,
+        'tipo_seleccionado': tipo,
+        'q': q,
+        'module': 'ventas',
+    })
+
+
+@login_required
+def nuevo_material(request):
+    from .forms import MaterialAnimacionForm
+    if request.method == 'POST':
+        form = MaterialAnimacionForm(request.POST, request.FILES)
+        if form.is_valid():
+            material = form.save(commit=False)
+            material.stock_disponible = material.stock_total
+            material.save()
+            messages.success(request, 'Material agregado al catálogo.')
+            return redirect('catalogo_materiales')
+    else:
+        form = MaterialAnimacionForm()
+
+    return render(request, 'core/form_material.html', {'form': form})
+
+
+@login_required
+def editar_material(request, material_id):
+    from .forms import MaterialAnimacionForm
+    material = get_object_or_404(MaterialAnimacion, id=material_id)
+
+    if request.method == 'POST':
+        form = MaterialAnimacionForm(request.POST, request.FILES, instance=material)
+        if form.is_valid():
+            form.save()
+            messages.success(request, 'Material actualizado.')
+            return redirect('catalogo_materiales')
+    else:
+        form = MaterialAnimacionForm(instance=material)
+
+    return render(request, 'core/form_material.html', {'form': form, 'editando': True})
+
+
+def alertas_coordinador(request):
+    hoy = timezone.localdate()
+    limite = hoy + timedelta(days=7)
+
+    rentas_sin_coordinador = Renta.objects.filter(
+        fecha_renta__range=[hoy, limite],
+        status='ACTIVO',
+        rentaproductos__producto__tipo='AN'
+    ).exclude(
+        asignacion_coordinador__coordinador__isnull=False
+    ).distinct()
+
+    return rentas_sin_coordinador
+
+# =============================================
+# MÓDULO ENCARGADO DE MATERIAL
+# =============================================
+
+
+
+def es_encargado_material(user):
+    return user.groups.filter(name='Encargado Material').exists()
+
+@login_required
+def home_encargado(request):
+    listas_pendientes = ListaMaterialEvento.objects.filter(
+        estado='PENDIENTE'
+    ).select_related(
+        'asignacion__renta__cliente',
+        'asignacion__coordinador'
+    ).order_by('asignacion__renta__fecha_renta')
+
+    return render(request, 'core/home_encargado.html', {
+        'listas_pendientes': listas_pendientes,
+    })
+
+@login_required
+def todas_listas_material(request):
+    estado = request.GET.get('estado', '')
+
+    listas = ListaMaterialEvento.objects.select_related(
+        'asignacion__renta__cliente',
+        'asignacion__coordinador',
+        'revisada_por'
+    ).prefetch_related(
+        'asignacion__materiales__material'
+    ).order_by('asignacion__renta__fecha_renta')
+
+    if estado:
+        listas = listas.filter(estado=estado)
+
+    return render(request, 'core/todas_listas_material.html', {
+        'listas': listas,
+        'estado_seleccionado': estado,
+        'estados': ListaMaterialEvento.ESTADO,
+    })
+
+@login_required
+def detalle_lista_material(request, lista_id):
+    lista = get_object_or_404(ListaMaterialEvento, id=lista_id)
+
+    materiales = lista.asignacion.materiales.select_related('material')
+
+    consumibles = materiales.filter(material__tipo='CONSUMIBLE')
+    reutilizables = materiales.filter(material__tipo='REUTILIZABLE')
+
+    return render(request, 'core/detalle_lista_material.html', {
+        'lista': lista,
+        'consumibles': consumibles,
+        'reutilizables': reutilizables,
+    })
+
+@login_required
+@require_POST
+def cambiar_estado_lista(request, lista_id):
+    lista = get_object_or_404(ListaMaterialEvento, id=lista_id)
+
+    nuevo_estado = request.POST.get('estado')
+    notas = request.POST.get('notas_encargado', '')
+
+    if nuevo_estado in dict(ListaMaterialEvento.ESTADO):
+        lista.estado = nuevo_estado
+        lista.notas_encargado = notas
+        if nuevo_estado in ['REVISADA', 'PREPARADA']:
+            lista.revisada_por = request.user
+            lista.fecha_revision = timezone.now()
+        lista.save()
+        messages.success(request, f'Lista marcada como {lista.get_estado_display()}.')
+
+    return redirect('detalle_lista_material', lista_id=lista.id)

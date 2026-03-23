@@ -1,0 +1,54 @@
+{% extends 'core/base.html' %}
+{% block content %}
+
+<div style="max-width:500px; margin:0 auto;">
+    <h2>Asignar Coordinador de Animación</h2>
+
+    <div style="background:#f9f9f9; border:1px solid #ddd; border-radius:8px; padding:16px; margin:20px 0;">
+        <div><strong>Folio:</strong> {{ renta.folio }}</div>
+        <div><strong>Cliente:</strong> {{ renta.cliente.nombre }}</div>
+        <div><strong>Fecha:</strong> {{ renta.fecha_renta }}</div>
+        <div><strong>Hora:</strong> {{ renta.hora_inicio }} - {{ renta.hora_fin }}</div>
+    </div>
+
+    {% if asignacion.coordinador %}
+        <div style="background:#e8f5e9; border:1px solid #a5d6a7; border-radius:8px; padding:12px; margin-bottom:20px; color:#2e7d32;">
+            Coordinador actual: <strong>{{ asignacion.coordinador.get_full_name|default:asignacion.coordinador.username }}</strong>
+        </div>
+    {% endif %}
+
+    <form method="post">
+        {% csrf_token %}
+
+        <div style="margin-bottom:16px;">
+            <label style="display:block; font-weight:500; margin-bottom:6px;">Coordinador</label>
+            <select name="coordinador" class="form-control" required>
+                <option value="">— Selecciona un coordinador —</option>
+                {% for coord in coordinadores %}
+                    <option value="{{ coord.id }}"
+                        {% if asignacion.coordinador.id == coord.id %}selected{% endif %}>
+                        {{ coord.get_full_name|default:coord.username }}
+                    </option>
+                {% endfor %}
+            </select>
+            {% if not coordinadores %}
+                <div style="color:#e65100; font-size:13px; margin-top:6px;">
+                    No hay usuarios con el grupo "Coordinador". Crea uno primero en el panel de administración.
+                </div>
+            {% endif %}
+        </div>
+
+        <div style="margin-bottom:16px;">
+            <label style="display:block; font-weight:500; margin-bottom:6px;">Notas (opcional)</label>
+            <textarea name="notas" class="form-control" rows="3"
+                      placeholder="Indicaciones especiales para el coordinador...">{{ asignacion.notas|default:'' }}</textarea>
+        </div>
+
+        <div style="display:flex; gap:10px;">
+            <button type="submit" class="btn btn-primary">Guardar asignación</button>
+            <a href="{% url 'lista_rentas' %}" class="btn btn-secondary">Cancelar</a>
+        </div>
+    </form>
+</div>
+
+{% endblock %}

@@ -1,0 +1,131 @@
+{% extends 'core/base.html' %}
+{% block content %}
+
+<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+    <h2>Detalle del Evento</h2>
+    <a href="{% url 'mis_eventos' %}" class="btn btn-secondary btn-sm">← Mis eventos</a>
+</div>
+
+<!-- Info del evento -->
+<div style="background:#f9f9f9; border:1px solid #ddd; border-radius:8px; padding:16px; margin-bottom:24px;">
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; font-size:14px;">
+        <div><strong>Cliente:</strong> {{ asignacion.renta.cliente.nombre }}</div>
+        <div><strong>Folio:</strong> {{ asignacion.renta.folio }}</div>
+        <div><strong>Fecha:</strong> {{ asignacion.renta.fecha_renta }}</div>
+        <div><strong>Hora:</strong> {{ asignacion.renta.hora_inicio }} - {{ asignacion.renta.hora_fin }}</div>
+        <div><strong>Dirección:</strong> {{ asignacion.renta.calle_y_numero }}, {{ asignacion.renta.colonia }}</div>
+        <div><strong>Ciudad:</strong> {{ asignacion.renta.ciudad_o_municipio }}</div>
+    </div>
+    {% if asignacion.notas %}
+        <div style="margin-top:10px; padding:10px; background:#fff8e1; border-radius:6px; font-size:13px;">
+            <strong>Notas:</strong> {{ asignacion.notas }}
+        </div>
+    {% endif %}
+</div>
+
+<div style="display:grid; grid-template-columns:1fr 1fr; gap:24px;">
+
+    <!-- CARRITO: materiales agregados -->
+    <div>
+        <h4 style="margin-bottom:12px;">🛒 Materiales del evento</h4>
+
+        {% if materiales_agregados %}
+        <table style="width:100%; border-collapse:collapse; font-size:14px;">
+            <thead>
+                <tr style="background:#f5f5f5;">
+                    <th style="padding:8px; text-align:left;">Material</th>
+                    <th style="padding:8px; text-align:center;">Tipo</th>
+                    <th style="padding:8px; text-align:center;">Cantidad</th>
+                    <th style="padding:8px;"></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for me in materiales_agregados %}
+                <tr style="border-bottom:1px solid #eee;">
+                    <td style="padding:8px;">
+                        {% if me.material.foto %}
+                            <img src="{{ me.material.foto.url }}" style="width:36px; height:36px; object-fit:cover; border-radius:4px; margin-right:8px; vertical-align:middle;">
+                        {% endif %}
+                        {{ me.material.nombre }}
+                    </td>
+                    <td style="padding:8px; text-align:center;">
+                        {% if me.material.tipo == 'CONSUMIBLE' %}
+                            <span style="background:#fff3e0; color:#e65100; padding:2px 8px; border-radius:12px; font-size:11px;">Consumible</span>
+                        {% else %}
+                            <span style="background:#e8f5e9; color:#2e7d32; padding:2px 8px; border-radius:12px; font-size:11px;">Reutilizable</span>
+                        {% endif %}
+                    </td>
+                    <td style="padding:8px; text-align:center;">{{ me.cantidad }}</td>
+                    <td style="padding:8px; text-align:center;">
+                        <form method="post" action="{% url 'eliminar_material_evento' me.id %}"
+                              onsubmit="return confirm('¿Quitar este material?')">
+                            {% csrf_token %}
+                            <button type="submit" style="background:none; border:none; color:#e53935; cursor:pointer; font-size:16px;">✕</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+            <div style="color:#888; font-size:14px; padding:20px 0;">
+                Aún no has agregado materiales a este evento.
+            </div>
+        {% endif %}
+    </div>
+
+    <!-- CATÁLOGO: agregar materiales -->
+    <div>
+        <h4 style="margin-bottom:12px;">📦 Catálogo de materiales</h4>
+
+        <input type="text" id="buscador" placeholder="Buscar material..."
+               class="form-control" style="margin-bottom:12px;"
+               onkeyup="filtrarMateriales()">
+
+        <div id="lista-catalogo" style="max-height:480px; overflow-y:auto; display:flex; flex-direction:column; gap:8px;">
+            {% for material in catalogo %}
+            <div class="item-catalogo" data-nombre="{{ material.nombre|lower }}"
+                 style="border:1px solid #eee; border-radius:8px; padding:10px; display:flex; align-items:center; gap:10px; background:#fff;">
+
+                {% if material.foto %}
+                    <img src="{{ material.foto.url }}" style="width:48px; height:48px; object-fit:cover; border-radius:6px; flex-shrink:0;">
+                {% else %}
+                    <div style="width:48px; height:48px; background:#f0f0f0; border-radius:6px; flex-shrink:0;"></div>
+                {% endif %}
+
+                <div style="flex:1; min-width:0;">
+                    <div style="font-weight:500; font-size:14px;">{{ material.nombre }}</div>
+                    <div style="font-size:12px; color:#888;">Disponible: {{ material.stock_disponible }}</div>
+                </div>
+
+                <form method="post" action="{% url 'agregar_material_evento' asignacion.id %}"
+                      style="display:flex; align-items:center; gap:6px;">
+                    {% csrf_token %}
+                    <input type="hidden" name="material_id" value="{{ material.id }}">
+                    <input type="number" name="cantidad" value="1" min="1"
+                           max="{{ material.stock_disponible }}"
+                           style="width:52px; padding:4px; border:1px solid #ddd; border-radius:4px; text-align:center;">
+                    <button type="submit" class="btn btn-sm btn-primary"
+                            {% if material.stock_disponible == 0 %}disabled{% endif %}>
+                        +
+                    </button>
+                </form>
+            </div>
+            {% empty %}
+                <div style="color:#888; font-size:14px;">No hay materiales en el catálogo.</div>
+            {% endfor %}
+        </div>
+    </div>
+
+</div>
+
+<script>
+function filtrarMateriales() {
+    const q = document.getElementById('buscador').value.toLowerCase();
+    document.querySelectorAll('.item-catalogo').forEach(item => {
+        item.style.display = item.dataset.nombre.includes(q) ? 'flex' : 'none';
+    });
+}
+</script>
+
+{% endblock %}

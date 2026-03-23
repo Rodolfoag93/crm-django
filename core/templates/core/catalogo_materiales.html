@@ -1,0 +1,67 @@
+{% extends 'core/base.html' %}
+{% block content %}
+
+<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+    <h2>Catálogo de Materiales - Animación</h2>
+    <a href="{% url 'nuevo_material' %}" class="btn btn-primary">+ Nuevo Material</a>
+</div>
+
+<!-- Filtros -->
+<form method="get" style="margin-bottom:20px; display:flex; gap:10px; align-items:center;">
+    <input type="text" name="q" placeholder="Buscar material..." value="{{ q }}" class="form-control" style="max-width:300px;">
+    <select name="tipo" class="form-control" style="max-width:200px;">
+        <option value="">Todos los tipos</option>
+        {% for valor, etiqueta in tipos %}
+            <option value="{{ valor }}" {% if tipo_seleccionado == valor %}selected{% endif %}>{{ etiqueta }}</option>
+        {% endfor %}
+    </select>
+    <button type="submit" class="btn btn-secondary">Buscar</button>
+    <a href="{% url 'catalogo_materiales' %}" class="btn btn-outline-secondary">Limpiar</a>
+</form>
+
+<!-- Catálogo en tarjetas -->
+<div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap:20px;">
+    {% for material in materiales %}
+    <div style="border:1px solid #ddd; border-radius:10px; overflow:hidden; background:#fff; box-shadow:0 2px 6px rgba(0,0,0,0.07);">
+
+        <!-- Foto -->
+        {% if material.foto %}
+            <img src="{{ material.foto.url }}" alt="{{ material.nombre }}"
+                 style="width:100%; height:160px; object-fit:cover;">
+        {% else %}
+            <div style="width:100%; height:160px; background:#f0f0f0; display:flex; align-items:center; justify-content:center; color:#aaa; font-size:13px;">
+                Sin foto
+            </div>
+        {% endif %}
+
+        <!-- Info -->
+        <div style="padding:12px;">
+            <div style="font-weight:600; font-size:15px; margin-bottom:4px;">{{ material.nombre }}</div>
+
+            <!-- Badge tipo -->
+            {% if material.tipo == 'CONSUMIBLE' %}
+                <span style="background:#fff3e0; color:#e65100; padding:2px 8px; border-radius:12px; font-size:12px;">Consumible</span>
+            {% else %}
+                <span style="background:#e8f5e9; color:#2e7d32; padding:2px 8px; border-radius:12px; font-size:12px;">Reutilizable</span>
+            {% endif %}
+
+            <div style="margin-top:10px; font-size:13px; color:#555;">
+                <div>Stock total: <strong>{{ material.stock_total }}</strong></div>
+                <div>Disponible: <strong>{{ material.stock_disponible }}</strong></div>
+            </div>
+
+            {% if material.descripcion %}
+                <div style="margin-top:8px; font-size:12px; color:#888;">{{ material.descripcion|truncatechars:60 }}</div>
+            {% endif %}
+
+            <div style="margin-top:12px; display:flex; gap:8px;">
+                <a href="{% url 'editar_material' material.id %}" class="btn btn-sm btn-outline-primary">Editar</a>
+            </div>
+        </div>
+    </div>
+    {% empty %}
+        <p style="color:#888;">No hay materiales registrados aún.</p>
+    {% endfor %}
+</div>
+
+{% endblock %}
