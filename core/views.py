@@ -44,10 +44,15 @@ def get_caja_efectivo():
 # -----------------------------
 @login_required
 def home(request):
+    es_coordinador = request.user.groups.filter(name='Coordinador').exists()
     es_cargador = request.user.groups.filter(name='cargador').exists()
 
+    rentas_sin_coordinador = alertas_coordinador(request) if not es_cargador and not es_coordinador else []
+
     return render(request, 'core/home.html', {
-        'es_cargador': es_cargador
+        'es_cargador': es_cargador,
+        'es_coordinador': es_coordinador,
+        'rentas_sin_coordinador': rentas_sin_coordinador,
     })
 
 @login_required

@@ -4,7 +4,7 @@ from django.contrib.auth.models import User
 from django.forms import inlineformset_factory
 from core.utils import saldo_efectivo
 from django.core.exceptions import ValidationError
-from .models import RentaProducto, Gasto, Compra, HorasExtra, TipoPagoExtra, PagoExtraNomina, MovimientoContable, Cuenta
+from .models import RentaProducto, Gasto, Compra, HorasExtra, TipoPagoExtra, PagoExtraNomina, MovimientoContable, Cuenta, MaterialAnimacion
 from django.utils import timezone
 # ----------------------------
 # Formulario Cliente
@@ -368,3 +368,11 @@ class TraspasoEfectivoBancoForm(forms.Form):
                 raise forms.ValidationError("Saldo insuficiente en la cuenta bancaria.")
 
         return cleaned
+
+class MaterialAnimacionForm(forms.ModelForm):
+    class Meta:
+        model = MaterialAnimacion
+        fields = ['nombre', 'descripcion', 'tipo', 'stock_total', 'foto', 'activo']
+        widgets = {
+            'descripcion': forms.Textarea(attrs={'rows': 3}),
+        }
