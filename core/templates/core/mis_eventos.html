@@ -3,6 +3,13 @@
 
 <h2>Mis Eventos</h2>
 
+<div style="margin-bottom: 20px;">
+    <a href="{% url 'catalogo_materiales_coordinador' %}"
+       style="background:#1976d2; color:white; padding:8px 16px; border-radius:6px; text-decoration:none; font-size:14px;">
+        📦 Ver Catálogo de Material
+    </a>
+</div>
+
 {% if not asignaciones %}
     <div style="margin-top:30px; text-align:center; color:#888;">
         No tienes eventos asignados por el momento.

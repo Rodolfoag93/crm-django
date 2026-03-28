@@ -133,7 +133,7 @@ urlpatterns = [
     path('animacion/catalogo/', views.catalogo_materiales, name='catalogo_materiales'),
     path('animacion/catalogo/nuevo/', views.nuevo_material, name='nuevo_material'),
     path('animacion/catalogo/<int:material_id>/editar/', views.editar_material, name='editar_material'),
-
+    path('animacion/catalogo/ver', views.catalogo_materiales_coordinador, name='catalogo_materiales_coordinador'),
     # 🎉 Animación - Coordinador
     path('mis-eventos/', views.mis_eventos, name='mis_eventos'),
     path('mis-eventos/<int:asignacion_id>/', views.detalle_evento, name='detalle_evento'),

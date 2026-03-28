@@ -2196,6 +2196,16 @@ def mis_eventos(request):
         'asignaciones': asignaciones,
     })
 
+@solo_coordinador
+def catalogo_materiales_coordinador(request):
+    materiales = MaterialAnimacion.objects.filter(activo=True)
+    tipo = request.GET.get('tipo', '')
+    if tipo:
+        materiales = materiales.filter(tipo=tipo)
+    return render(request, 'core/catalogo_materiales_coordinador.html', {
+            'materiales': materiales,
+            'tipo_filtro': tipo,
+        })
 
 @login_required
 @solo_coordinador

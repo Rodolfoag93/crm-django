@@ -88,7 +88,11 @@
                  style="border:1px solid #eee; border-radius:8px; padding:10px; display:flex; align-items:center; gap:10px; background:#fff;">
 
                 {% if material.foto %}
-                    <img src="{{ material.foto.url }}" style="width:48px; height:48px; object-fit:cover; border-radius:6px; flex-shrink:0;">
+                    <img src="{{ material.foto.url }}"
+                         id="img-{{ material.id }}"
+                         onclick="expandirImagen('{{ material.foto.url }}', '{{ material.nombre }}')"
+                         style="width:48px; height:48px; object-fit:cover; border-radius:6px; flex-shrink:0; cursor:pointer; transition: transform 0.2s;"
+                         title="Clic para ampliar">
                 {% else %}
                     <div style="width:48px; height:48px; background:#f0f0f0; border-radius:6px; flex-shrink:0;"></div>
                 {% endif %}
@@ -96,9 +100,32 @@
                 <div style="flex:1; min-width:0;">
                     <div style="font-weight:500; font-size:14px;">{{ material.nombre }}</div>
                     <div style="font-size:12px; color:#888;">Disponible: {{ material.stock_disponible }}</div>
+                    {% if material.descripcion %}
+                    <div style="font-size:12px; color:#555; margin-top:3px; word-break:break-word; overflow-wrap:break-word;">
+                        <span id="desc-corta-cat-{{ material.id }}">{{ material.descripcion|truncatechars:20 }}</span>
+                        <span id="desc-completa-cat-{{ material.id }}" style="display:none;">{{ material.descripcion }}</span>
+                        {% if material.descripcion|length > 20 %}
+                        <a href="#" id="btn-mas-cat-{{ material.id }}"
+                           onclick="
+                               document.getElementById('desc-corta-cat-{{ material.id }}').style.display='none';
+                               document.getElementById('desc-completa-cat-{{ material.id }}').style.display='inline';
+                               document.getElementById('btn-mas-cat-{{ material.id }}').style.display='none';
+                               document.getElementById('btn-menos-cat-{{ material.id }}').style.display='inline';
+                               return false;"
+                           style="font-size:11px; color:#1976d2;">leer más</a>
+                        <a href="#" id="btn-menos-cat-{{ material.id }}" style="display:none; font-size:11px; color:#1976d2;"
+                           onclick="
+                               document.getElementById('desc-corta-cat-{{ material.id }}').style.display='inline';
+                               document.getElementById('desc-completa-cat-{{ material.id }}').style.display='none';
+                               document.getElementById('btn-mas-cat-{{ material.id }}').style.display='inline';
+                               document.getElementById('btn-menos-cat-{{ material.id }}').style.display='none';
+                               return false;">leer menos</a>
+                        {% endif %}
+                    </div>
+                    {% endif %}
                 </div>
 
-                <form method="post" action="{% url 'agregar_material_evento' asignacion.id %}"
+               <form method="post" action="{% url 'agregar_material_evento' asignacion.id %}"
                       style="display:flex; align-items:center; gap:6px;">
                     {% csrf_token %}
                     <input type="hidden" name="material_id" value="{{ material.id }}">
@@ -119,7 +146,28 @@
 
 </div>
 
+<!-- Modal imagen -->
+<div id="modal-imagen" onclick="cerrarModal()"
+     style="display:none; position:fixed; top:0; left:0; width:100%; height:100%;
+            background:rgba(0,0,0,0.8); z-index:9999;
+            justify-content:center; align-items:center; flex-direction:column;">
+    <img id="modal-img" src="" style="max-width:90%; max-height:80vh; border-radius:10px; object-fit:contain;">
+    <div id="modal-titulo" style="color:white; margin-top:12px; font-size:16px; font-weight:500;"></div>
+    <div style="color:#ccc; font-size:13px; margin-top:6px;">Toca en cualquier parte para cerrar</div>
+</div>
+
 <script>
+
+// Modal para expandir imagen
+function expandirImagen(url, nombre) {
+    document.getElementById('modal-img').src = url;
+    document.getElementById('modal-titulo').innerText = nombre;
+    document.getElementById('modal-imagen').style.display = 'flex';
+}
+function cerrarModal() {
+    document.getElementById('modal-imagen').style.display = 'none';
+}
+
 function filtrarMateriales() {
     const q = document.getElementById('buscador').value.toLowerCase();
     document.querySelectorAll('.item-catalogo').forEach(item => {

@@ -21,10 +21,12 @@ def solo_admin(view_func):
 
 def solo_coordinador(view_func):
     def wrapper(request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return redirect('login')
         if not request.user.groups.filter(name='Coordinador').exists():
-            raise PermissionDenied
+            return redirect('home')
         return view_func(request, *args, **kwargs)
-    return login_required(wrapper)
+    return wrapper
 
 def no_coordinador(view_func):
     def wrapper(request, *args, **kwargs):
