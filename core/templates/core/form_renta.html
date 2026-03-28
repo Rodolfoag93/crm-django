@@ -307,16 +307,26 @@ document.addEventListener('DOMContentLoaded', function () {
             const sub = p.cantidad * p.precio_unitario;
             total += sub;
 
-            tbody.innerHTML += `
-                <tr>
-                    <td>${p.nombre}</td>
-                    <td><input type="number" class="form-control cantidad" data-i="${i}" value="${p.cantidad}"></td>
-                    <td><input type="number" class="form-control precio" data-i="${i}" value="${p.precio_unitario}"></td>
-                    <td>$${sub.toFixed(2)}</td>
-                    <td><button type="button" class="btn btn-danger btn-sm del" data-i="${i}">X</button></td>
-                </tr>`;
+            const tr = document.createElement('tr');
+            tr.dataset.i = i;
+            tr.innerHTML = `
+                <td>${p.nombre}</td>
+                <td><input type="number" class="form-control cantidad" data-i="${i}" value="${p.cantidad}"></td>
+                <td><input type="number" class="form-control precio" data-i="${i}" value="${p.precio_unitario}"></td>
+                <td class="subtotal-cell">$${sub.toFixed(2)}</td>
+                <td><button type="button" class="btn btn-danger btn-sm del" data-i="${i}">X</button></td>
+            `;
+            tbody.appendChild(tr);
         });
 
+        actualizarTotales();
+    }
+
+    function actualizarTotales() {
+        let total = 0;
+        productos.forEach(p => {
+            total += p.cantidad * p.precio_unitario;
+        });
         document.getElementById('productos_data').value = JSON.stringify(productos);
         document.getElementById('precio_total').value = total.toFixed(2);
         document.getElementById('total_visual').value = `$${total.toFixed(2)}`;
@@ -327,12 +337,17 @@ document.addEventListener('DOMContentLoaded', function () {
         if (i === undefined) return;
 
         if (e.target.classList.contains('cantidad')) {
-            productos[i].cantidad = parseInt(e.target.value) || 1;
+            productos[i].cantidad = parseInt(e.target.value) || 0;
         }
         if (e.target.classList.contains('precio')) {
             productos[i].precio_unitario = parseFloat(e.target.value) || 0;
         }
-        renderProductos();
+
+        // Solo actualiza el subtotal de esta fila y el total — sin reconstruir la tabla
+        const tr = e.target.closest('tr');
+        const sub = productos[i].cantidad * productos[i].precio_unitario;
+        tr.querySelector('.subtotal-cell').textContent = `$${sub.toFixed(2)}`;
+        actualizarTotales();
     });
 
     document.querySelector('#productos-table').addEventListener('click', e => {

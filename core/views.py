@@ -754,8 +754,8 @@ def editar_renta(request, renta_id):
                                 renta=renta,
                                 producto=producto,
                                 cantidad=cantidad,
-                                precio_unitario=producto.precio,
-                                subtotal=producto.precio * cantidad
+                                precio_unitario=Decimal(str(p.get('precio_unitario', producto.precio))),
+                                subtotal=Decimal(str(p.get('precio_unitario', producto.precio))) * cantidad
                             )
 
                             total += producto.precio * cantidad
