@@ -38,44 +38,56 @@
 <!-- Alertas: listas pendientes -->
 {% if listas_pendientes %}
 <div style="background:#fff3e0; border-left:5px solid #ff9800; border-radius:8px;
-            padding:16px 20px; margin-bottom:30px;">
+            padding:16px 20px; margin-bottom:30px; width:100%; box-sizing:border-box;">
     <div style="font-weight:600; font-size:15px; color:#e65100; margin-bottom:12px;">
         ⚠️ {{ listas_pendientes|length }} lista{{ listas_pendientes|length|pluralize }} pendiente{{ listas_pendientes|length|pluralize }} de revisión
     </div>
 
-    <table style="width:100%; border-collapse:collapse; font-size:13px;">
+    <div class="table-responsive">
+    <table class="home-encargado-pendientes-table" style="width:100%; border-collapse:collapse; font-size:13px;">
         <thead>
             <tr style="color:#bf360c;">
-                <th style="text-align:left; padding:6px 8px;">Folio</th>
+                <th class="home-encargado-folio" style="text-align:left; padding:6px 8px;" title="Últimos 4 del folio">Folio</th>
                 <th style="text-align:left; padding:6px 8px;">Cliente</th>
-                <th style="text-align:left; padding:6px 8px;">Fecha evento</th>
+                <th style="text-align:left; padding:6px 8px;">Día / mes</th>
                 <th style="text-align:left; padding:6px 8px;">Coordinador</th>
                 <th style="text-align:left; padding:6px 8px;">Materiales</th>
-                <th style="padding:6px 8px;"></th>
+                <th style="padding:6px 8px; white-space:nowrap;"></th>
             </tr>
         </thead>
         <tbody>
             {% for lista in listas_pendientes %}
             <tr style="border-top:1px solid #ffe0b2;">
-                <td style="padding:6px 8px;">{{ lista.asignacion.renta.folio }}</td>
+                <td class="home-encargado-folio" style="padding:6px 8px; white-space:nowrap;" title="{{ lista.asignacion.renta.folio }}">{{ lista.asignacion.renta.folio|slice:"-4:" }}</td>
                 <td style="padding:6px 8px;">{{ lista.asignacion.renta.cliente.nombre }}</td>
-                <td style="padding:6px 8px;">{{ lista.asignacion.renta.fecha_renta }}</td>
+                <td style="padding:6px 8px; white-space:nowrap;" title="{{ lista.asignacion.renta.fecha_renta|date:'d/m/Y' }}">{{ lista.asignacion.renta.fecha_renta|date:"d/m" }}</td>
                 <td style="padding:6px 8px;">
                     {{ lista.asignacion.coordinador.get_full_name|default:lista.asignacion.coordinador.username }}
                 </td>
                 <td style="padding:6px 8px;">{{ lista.asignacion.materiales.count }} item(s)</td>
-                <td style="padding:6px 8px;">
+                <td style="padding:6px 8px; vertical-align:middle;">
                     <a href="{% url 'detalle_lista_material' lista.id %}"
-                       style="background:#ff9800; color:white; padding:4px 10px;
+                       class="home-encargado-btn-lista d-inline-block text-center text-nowrap"
+                       style="background:#ff9800; color:white; padding:6px 10px;
                               border-radius:4px; font-size:12px; text-decoration:none;">
-                        Ver lista
+                        <span class="d-inline d-sm-none">Ver</span><span class="d-none d-sm-inline">Ver lista</span>
                     </a>
                 </td>
             </tr>
             {% endfor %}
         </tbody>
     </table>
+    </div>
 </div>
+<style>
+@media (max-width: 575.98px) {
+    .home-encargado-btn-lista {
+        font-size: 11px !important;
+        padding: 6px 10px !important;
+    }
+}
+</style>
+
 {% else %}
 <div style="background:#e8f5e9; border-left:5px solid #43a047; border-radius:8px;
             padding:16px 20px; margin-bottom:30px; color:#2e7d32; font-weight:500;">

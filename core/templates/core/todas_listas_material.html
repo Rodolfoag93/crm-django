@@ -1,8 +1,8 @@
 {% extends 'core/base.html' %}
 {% block content %}
 
-<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
-    <h2>Listas de Material por Evento</h2>
+<div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:20px;">
+    <h2 style="margin:0; font-size:clamp(1.1rem, 4vw, 1.5rem);">Listas de Material por Evento</h2>
     <a href="{% url 'home_encargado' %}" class="btn btn-secondary btn-sm">← Inicio</a>
 </div>
 
@@ -21,24 +21,24 @@
 </form>
 
 {% if listas %}
-<table style="width:100%; border-collapse:collapse; font-size:14px;">
+<div class="listas-material-tabla-wrap" style="background:#fff3e0; border-left:5px solid #ff9800; border-radius:8px; padding:12px 14px;">
+<div class="table-responsive">
+<table class="tabla-listas-material" style="width:100%; border-collapse:collapse; font-size:14px;">
     <thead>
-        <tr style="background:#f5f5f5;">
-            <th style="padding:10px; text-align:left;">Folio</th>
+        <tr style="background:#ffe0b2; color:#e65100;">
             <th style="padding:10px; text-align:left;">Cliente</th>
-            <th style="padding:10px; text-align:left;">Fecha evento</th>
+            <th style="padding:10px; text-align:left; white-space:nowrap;">Fecha</th>
             <th style="padding:10px; text-align:left;">Coordinador</th>
-            <th style="padding:10px; text-align:center;">Materiales</th>
+            <th style="padding:10px; text-align:center;" title="Materiales">Mat.</th>
             <th style="padding:10px; text-align:center;">Estado</th>
-            <th style="padding:10px;"></th>
+            <th style="padding:10px; white-space:nowrap;"></th>
         </tr>
     </thead>
     <tbody>
         {% for lista in listas %}
-        <tr style="border-bottom:1px solid #eee;">
-            <td style="padding:10px;">{{ lista.asignacion.renta.folio }}</td>
+        <tr style="border-bottom:1px solid #ffcc80;">
             <td style="padding:10px;">{{ lista.asignacion.renta.cliente.nombre }}</td>
-            <td style="padding:10px;">{{ lista.asignacion.renta.fecha_renta }}</td>
+            <td style="padding:10px; white-space:nowrap;" title="{{ lista.asignacion.renta.fecha_renta|date:'d/m/Y' }}">{{ lista.asignacion.renta.fecha_renta|date:"d/m" }}</td>
             <td style="padding:10px;">
                 {{ lista.asignacion.coordinador.get_full_name|default:lista.asignacion.coordinador.username }}
             </td>
@@ -47,27 +47,48 @@
             </td>
             <td style="padding:10px; text-align:center;">
                 {% if lista.estado == 'PENDIENTE' %}
-                    <span style="background:#fff3e0; color:#e65100; padding:3px 10px; border-radius:12px; font-size:12px;">
+                    <span style="background:#fff3e0; color:#e65100; padding:3px 8px; border-radius:12px; font-size:12px;">
                         ⏳ Pendiente
                     </span>
                 {% elif lista.estado == 'REVISADA' %}
-                    <span style="background:#e3f2fd; color:#1565c0; padding:3px 10px; border-radius:12px; font-size:12px;">
+                    <span style="background:#e3f2fd; color:#1565c0; padding:3px 8px; border-radius:12px; font-size:12px;">
                         👁 Revisada
                     </span>
                 {% elif lista.estado == 'PREPARADA' %}
-                    <span style="background:#e8f5e9; color:#2e7d32; padding:3px 10px; border-radius:12px; font-size:12px;">
+                    <span style="background:#e8f5e9; color:#2e7d32; padding:3px 8px; border-radius:12px; font-size:12px;">
                         ✅ Preparada
                     </span>
                 {% endif %}
             </td>
-            <td style="padding:10px;">
+            <td style="padding:10px; vertical-align:middle;">
                 <a href="{% url 'detalle_lista_material' lista.id %}"
-                   class="btn btn-sm btn-outline-primary">Ver detalle</a>
+                   class="btn btn-sm btn-outline-warning text-nowrap" style="border-color:#ff9800; color:#e65100;">
+                    <span class="d-inline d-sm-none">Detalle</span><span class="d-none d-sm-inline">Ver detalle</span>
+                </a>
             </td>
         </tr>
         {% endfor %}
     </tbody>
 </table>
+</div>
+</div>
+<style>
+.listas-material-tabla-wrap .tabla-listas-material tbody tr:hover {
+    background: rgba(255, 152, 0, 0.12);
+}
+.listas-material-tabla-wrap .btn-outline-warning:hover {
+    background-color: #ff9800;
+    border-color: #ff9800;
+    color: #fff;
+}
+@media (max-width: 575.98px) {
+    .tabla-listas-material th,
+    .tabla-listas-material td {
+        padding: 8px 6px !important;
+        font-size: 13px;
+    }
+}
+</style>
 {% else %}
     <div style="color:#888; margin-top:30px; text-align:center;">
         No hay listas registradas aún.

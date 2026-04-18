@@ -81,13 +81,34 @@ WSGI_APPLICATION = 'crm_trota.wsgi.application'
 
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
+#
+# Local: por defecto SQLite (db.sqlite3).
+# Producción: define POSTGRES_DB (y usuario/clave/host) o USE_POSTGRES=true
+# con las mismas variables; en el servidor ejecuta migrate con esa .env.
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+if os.environ.get("POSTGRES_DB") or os.environ.get("USE_POSTGRES", "").lower() in (
+    "1",
+    "true",
+    "yes",
+):
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": os.environ.get("POSTGRES_DB") or os.environ.get("DB_NAME", ""),
+            "USER": os.environ.get("POSTGRES_USER") or os.environ.get("DB_USER", ""),
+            "PASSWORD": os.environ.get("POSTGRES_PASSWORD")
+            or os.environ.get("DB_PASSWORD", ""),
+            "HOST": os.environ.get("POSTGRES_HOST") or os.environ.get("DB_HOST", "localhost"),
+            "PORT": os.environ.get("POSTGRES_PORT") or os.environ.get("DB_PORT", "5432"),
+        }
     }
-}
+else:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / "db.sqlite3",
+        }
+    }
 
 
 # Password validation

@@ -1,7 +1,33 @@
 from functools import wraps
 from django.shortcuts import redirect
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied
+
+# Coordinador, encargado y administración de listas de material por evento
+_GRUPOS_LISTAS_MATERIAL = frozenset({
+    'Coordinador',
+    'Encargado Material',
+    'Administrador',
+})
+
+
+def acceso_listas_material(view_func):
+    """Solo Coordinador, Encargado Material, Administrador o superusuario."""
+    @wraps(view_func)
+    def _wrapped(request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return redirect('login')
+        u = request.user
+        if u.is_superuser or u.groups.filter(name__in=_GRUPOS_LISTAS_MATERIAL).exists():
+            return view_func(request, *args, **kwargs)
+        messages.error(
+            request,
+            'No tienes permiso para acceder a las listas de material.',
+        )
+        return redirect('home')
+
+    return _wrapped
 
 def solo_admin(view_func):
     @wraps(view_func)

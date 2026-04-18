@@ -17,6 +17,34 @@
         </div>
         {% endfor %}
 
+        <!-- FOTOS EXISTENTES (solo en edición) -->
+        {% if editando and material.fotos.all %}
+        <div style="margin-bottom:16px;">
+            <label style="display:block; font-weight:500; margin-bottom:8px;">Fotos adicionales actuales</label>
+            <div style="display:flex; flex-wrap:wrap; gap:10px;">
+                {% for foto in material.fotos.all %}
+                <div style="position:relative; display:inline-block;">
+                    <img src="{{ foto.foto.url }}" style="width:80px; height:80px; object-fit:cover; border-radius:6px;">
+                    <label style="position:absolute; top:2px; right:2px; background:rgba(220,0,0,0.8); color:white;
+                                  border-radius:50%; width:20px; height:20px; display:flex; align-items:center;
+                                  justify-content:center; cursor:pointer; font-size:12px;">
+                        <input type="checkbox" name="eliminar_foto" value="{{ foto.id }}" style="display:none;">
+                        ✕
+                    </label>
+                </div>
+                {% endfor %}
+            </div>
+            <div style="font-size:12px; color:#888; margin-top:4px;">Haz clic en ✕ para marcar una foto para eliminar</div>
+        </div>
+        {% endif %}
+
+        <!-- SUBIR FOTOS ADICIONALES -->
+        <div style="margin-bottom:16px;">
+            <label style="display:block; font-weight:500; margin-bottom:4px;">Fotos adicionales</label>
+            <input type="file" name="fotos_extra" multiple accept="image/*" class="form-control">
+            <div style="font-size:12px; color:#888; margin-top:4px;">Puedes seleccionar varias fotos a la vez</div>
+        </div>
+
         <div style="display:flex; gap:10px; margin-top:24px;">
             <button type="submit" class="btn btn-primary">
                 {% if editando %}Guardar cambios{% else %}Agregar material{% endif %}

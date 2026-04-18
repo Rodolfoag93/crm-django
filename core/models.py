@@ -587,6 +587,22 @@ class MaterialAnimacion(models.Model):
         verbose_name_plural = "Materiales nimación"
         ordering = ('nombre',)
 
+class FotoMaterial (models.Model):
+    material = models.ForeignKey(
+        MaterialAnimacion,
+        on_delete=models.CASCADE,
+        related_name='fotos'
+    )
+    foto = models.ImageField(upload_to='materiales/')
+    orden = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ('orden',)
+
+    def __str__(self):
+        return f"Foto de {self.material.nombre}"
+
+
 class AsignacionCoordinador(models.Model):
     renta = models.OneToOneField(
         Renta,

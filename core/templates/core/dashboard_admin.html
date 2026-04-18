@@ -13,6 +13,10 @@
     <a href="{% url 'lista_compras' %}" class="admin-card">Compras</a>
     <a href="{% url 'lista_cuentas' %}" class="admin-card">Cuentas bancarias</a>
 
+    <a href="{% url 'todas_listas_material' %}" class="admin-card admin-card--material">
+        📋 Listas de material
+    </a>
+
     <!-- 🔥 NUEVO: FINANZAS -->
     <a href="{% url 'balance_cuentas' %}" class="admin-card finanzas">
         💰 Finanzas
@@ -52,6 +56,13 @@
 }
 .admin-card.finanzas:hover{
     background:#1B5E20;
+}
+
+.admin-card--material{
+    background:#00695c;
+}
+.admin-card--material:hover{
+    background:#004d40;
 }
 </style>
 

@@ -5,9 +5,9 @@ from .models import (
     HorasExtra, BitacoraMantenimiento, AsignacionCoordinador, MaterialEvento,
     MaterialAnimacion, ListaMaterialEvento, Cliente, Producto, Renta,
     RentaProducto, PedidoFinanzas, Gasto, OcupacionDia, calcular_total,
-    TipoPagoExtra, PagoExtraNomina
+    TipoPagoExtra, PagoExtraNomina, FotoMaterial
 )
-from .decorators import solo_admin, solo_coordinador, no_coordinador
+from .decorators import solo_admin, solo_coordinador, no_coordinador, acceso_listas_material
 from .forms import (
     ClienteForm, ProductoForm, RentaForm, RentaProductoFormSet, EmpleadoForm,
     NominaForm, GastoForm, CompraForm, HorasExtraForm, PagoExtraForm,
@@ -2317,6 +2317,8 @@ def nuevo_material(request):
             material = form.save(commit=False)
             material.stock_disponible = material.stock_total
             material.save()
+            for foto in request.FILES.getlist('fotos_extra'):
+                FotoMaterial.objects.create(material=material, foto=foto)
             messages.success(request, 'Material agregado al catálogo.')
             return redirect('catalogo_materiales')
     else:
@@ -2334,12 +2336,18 @@ def editar_material(request, material_id):
         form = MaterialAnimacionForm(request.POST, request.FILES, instance=material)
         if form.is_valid():
             form.save()
+            # Eliminar fotos marcadas para borrar
+            for foto_id in request.POST.getlist('eliminar_foto'):
+                FotoMaterial.objects.filter(id=foto_id, material=material).delete()
+            # Agregar fotos nuevas
+            for foto in request.FILES.getlist('fotos_extra'):
+                FotoMaterial.objects.create(material=material, foto=foto)
             messages.success(request, 'Material actualizado.')
             return redirect('catalogo_materiales')
     else:
         form = MaterialAnimacionForm(instance=material)
 
-    return render(request, 'core/form_material.html', {'form': form, 'editando': True})
+    return render(request, 'core/form_material.html', {'form': form, 'editando': True, 'material': material})
 
 
 def alertas_coordinador(request):
@@ -2366,6 +2374,7 @@ def es_encargado_material(user):
     return user.groups.filter(name='Encargado Material').exists()
 
 @login_required
+@acceso_listas_material
 def home_encargado(request):
     listas_pendientes = ListaMaterialEvento.objects.filter(
         estado='PENDIENTE'
@@ -2379,6 +2388,7 @@ def home_encargado(request):
     })
 
 @login_required
+@acceso_listas_material
 def todas_listas_material(request):
     estado = request.GET.get('estado', '')
 
@@ -2400,6 +2410,7 @@ def todas_listas_material(request):
     })
 
 @login_required
+@acceso_listas_material
 def detalle_lista_material(request, lista_id):
     lista = get_object_or_404(ListaMaterialEvento, id=lista_id)
 
@@ -2415,6 +2426,7 @@ def detalle_lista_material(request, lista_id):
     })
 
 @login_required
+@acceso_listas_material
 @require_POST
 def cambiar_estado_lista(request, lista_id):
     lista = get_object_or_404(ListaMaterialEvento, id=lista_id)
