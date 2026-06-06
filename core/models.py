@@ -165,6 +165,14 @@ class Renta(models.Model):
 
     estado_entrega = models.CharField(max_length=20, choices=ESTADO_ENTREGA, default='PENDIENTE')
 
+    class Meta:
+        indexes = [
+            models.Index(fields=['fecha_renta', 'status']),
+            models.Index(fields=['status', 'pagado']),
+            models.Index(fields=['estado_entrega']),
+            models.Index(fields=['cliente']),
+        ]
+
     def save(self, *args, **kwargs):
         # Generar folio automático si no existe
         if not self.folio:
@@ -352,6 +360,12 @@ class Nomina(models.Model):
     fecha_fin = models.DateField()
     dias_trabajados = models.PositiveIntegerField(default=0)
     total = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+
+      class Meta:
+        indexes = [
+            models.Index(fields=['empleado', 'fecha_inicio']),
+            models.Index(fields=['fecha_fin']),
+        ]
 
     def pago_eventos_extra(self):
         if not self.pk:
@@ -545,6 +559,12 @@ class MovimientoContable(models.Model):
     fecha = models.DateTimeField()
     descripcion = models.CharField(max_length=255, blank=True)
     creado_en = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['fecha', 'tipo']),
+            models.Index(fields=['cuenta', 'tipo']),
+        ]
 
     def __str__(self):
         return f"{self.tipo} - {self.monto} ({self.metodo_pago})"
