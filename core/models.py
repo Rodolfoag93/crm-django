@@ -361,7 +361,7 @@ class Nomina(models.Model):
     dias_trabajados = models.PositiveIntegerField(default=0)
     total = models.DecimalField(max_digits=10, decimal_places=2, default=0)
 
-   class Meta:
+    class Meta:
         indexes = [
             models.Index(fields=['empleado', 'fecha_inicio']),
             models.Index(fields=['fecha_fin']),
