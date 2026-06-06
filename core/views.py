@@ -105,22 +105,24 @@ def lista_clientes(request):
 
     clientes = Cliente.objects.all()
 
-    # 🔎 Filtro por nombre o teléfono
     if q:
         clientes = clientes.filter(
             Q(nombre__icontains=q) |
             Q(telefono__icontains=q)
         )
 
-    # ↕️ Ordenamiento seguro
     if orden in ["nombre", "telefono"]:
         clientes = clientes.order_by(orden)
+
+    paginator = Paginator(clientes, 25)
+    page_obj = paginator.get_page(request.GET.get('page'))
 
     return render(
         request,
         "core/lista_clientes.html",
         {
-            "clientes": clientes,
+            "clientes": page_obj,
+            "page_obj": page_obj,
             "module": 'ventas',
         }
     )
@@ -1459,8 +1461,13 @@ def es_cargador(user):
 # ---------------- Empleados ----------------
 @login_required
 def lista_empleados(request):
-    empleados = Empleado.objects.all()
-    return render(request, 'core/empleados_lista.html', {'empleados': empleados, "module": 'admin',})
+    empleados = Empleado.objects.filter(activo=True).order_by('nombre')
+    paginator = Paginator(empleados, 25)
+    page_obj = paginator.get_page(request.GET.get('page'))
+    return render(request, 'core/empleados_lista.html', {
+        'empleados': page_obj,
+        'page_obj': page_obj,
+    })
 
 @login_required
 def nuevo_empleado(request):
@@ -1529,6 +1536,11 @@ def lista_nomina(request):
         "module": 'admin',
     }
 
+    paginator = Paginator(nominas, 25)
+    page_obj = paginator.get_page(request.GET.get('page'))
+    contexto['page_obj'] = page_obj
+    contexto['nominas'] = page_obj
+    
     return render(request, 'core/nomina_lista.html', contexto)
 @login_required
 def pagos_extra_nomina(request, nomina_id):
@@ -1852,7 +1864,8 @@ def bitacora_list(request):
 
 
 # Marcar mantenimiento
-@csrf_exempt
+@login_required
+@require_POST
 def marcar_mantenimiento(request):
     if request.method == "POST":
         data = json.loads(request.body)
@@ -1920,7 +1933,7 @@ def transferir_entre_cuentas(request):
     else:
         form = TransferenciaForm()
     return render(request, 'finanzas/transferencia.html', {'form': form})
-
+@login_required
 def balance_cuentas(request):
     cuentas = Cuenta.objects.filter(activa=True)
 
@@ -1939,7 +1952,7 @@ def balance_cuentas(request):
         'total': total,
         "module": 'admin',
     })
-
+@login_required
 def movimientos_cuenta(request, cuenta_id):
     cuenta = Cuenta.objects.get(id=cuenta_id)
     movimientos = MovimientoContable.objects.filter(
@@ -1951,6 +1964,7 @@ def movimientos_cuenta(request, cuenta_id):
         'movimientos': movimientos
     })
 
+@login_required
 def registrar_movimiento(request):
     if request.method == 'POST':
         form = MovimientoForm(request.POST)
@@ -1964,6 +1978,7 @@ def registrar_movimiento(request):
         'form': form
     })
 
+@login_required
 def transferencia_cuentas(request):
     if request.method == 'POST':
         form = TransferenciaForm(request.POST)
@@ -2003,6 +2018,7 @@ def transferencia_cuentas(request):
         'form': form
     })
 
+@login_required
 def movimientos_efectivo(request):
     caja = get_caja_efectivo()
 
@@ -2014,6 +2030,7 @@ def movimientos_efectivo(request):
         'movimientos': movimientos
     })
 
+@login_required
 def traspaso_efectivo_banco(request):
     if request.method == 'POST':
         form = TraspasoEfectivoBancoForm(request.POST)
