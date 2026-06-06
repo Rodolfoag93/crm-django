@@ -667,12 +667,8 @@ def editar_renta(request, renta_id):
                     # ===============================
                     # GUARDAR RENTA
                     # ===============================
-                    print("FORM cleaned precio_total:", form.cleaned_data.get('precio_total'))
-                    print("FORM changed_data:", form.changed_data)
-                    print("RENTA precio antes:", renta.precio_total)
 
                     renta = form.save(commit=False)
-                    print("RENTA precio tras form.save:", renta.precio_total)
                     renta.anticipo = anticipo_nuevo
                     renta.save()
 
@@ -682,9 +678,6 @@ def editar_renta(request, renta_id):
                     # ===============================
                     # MOVIMIENTO CONTABLE (AJUSTE)
                     # ===============================
-                    print("DIF:", diferencia_anticipo)
-                    print("PEDIDO:", renta_id)
-                    print("CUENTA:", cuentas)
 
                     if diferencia_anticipo != 0:
 
@@ -712,8 +705,7 @@ def editar_renta(request, renta_id):
                     # LIBERAR STOCK ANTERIOR
                     # ===============================
                     for rp in renta.rentaproductos.select_related('producto'):
-                        rp.producto.liberar_stock(rp.cantidad)
-                    print("ANTES PRODUCTOS precio:", renta.precio_total)
+                        rp.producto.liberar_stock(rp.cantidad)      
                     renta.rentaproductos.all().delete()
 
                     # ===============================
@@ -1594,9 +1586,6 @@ def catalogo_pagos_extra(request, tipo_id=None):
         form.save()
         return redirect('catalogo_pagos_extra')
 
-    # Depuración
-    print("Conceptos:", conceptos)
-
     return render(request, 'nomina/catalogo_pagos_extra.html', {
         'form': form,
         'conceptos': conceptos,
@@ -1645,41 +1634,19 @@ def eliminar_tipo_pago_extra(request, tipo_id):
 
 @login_required
 def nueva_nomina(request):
-    print("➡️ Entró a nueva_nomina")
-
     if request.method == 'POST':
-        print("🟡 Método POST recibido")
-        print("POST DATA:", request.POST)
-
         form = NominaForm(request.POST)
 
-        if 'guardar_nomina' in request.POST:
-            print("🟢 Se presionó guardar_nomina")
-
         if form.is_valid():
-            print("✅ Form válido")
-
             nomina = form.save()
-            print("🧾 Nómina creada con ID:", nomina.id)
-
             nomina.total = nomina.calcular_total()
             nomina.save()
-            print("💰 Total calculado:", nomina.total)
-
-
-
+            sincronizar_gasto_nomina(nomina)
             return redirect('editar_nomina', nomina.id)
 
-        else:
-            print("❌ Form NO válido")
-            print("ERRORES:", form.errors)
-
     else:
-        print("🔵 Método GET")
-
         form = NominaForm()
 
-    print("🔴 Renderizando nomina_form.html (NO guardó)")
     return render(request, 'core/nomina_form.html', {
         'form': form,
         'nomina': None,
@@ -2414,8 +2381,15 @@ def todas_listas_material(request):
 def detalle_lista_material(request, lista_id):
     lista = get_object_or_404(ListaMaterialEvento, id=lista_id)
 
-    materiales = lista.asignacion.materiales.select_related('material')
+    # Auto-marcar como REVISADA al abrir
+    if lista.estado == 'PENDIENTE':
+        lista.estado = 'REVISADA'
+        lista.revisada_por = request.user
+        lista.fecha_revision = timezone.now()
+        lista.save()
+        messages.success(request, 'Lista marcada como revisada automáticamente.')
 
+    materiales = lista.asignacion.materiales.select_related('material')
     consumibles = materiales.filter(material__tipo='CONSUMIBLE')
     reutilizables = materiales.filter(material__tipo='REUTILIZABLE')
 
