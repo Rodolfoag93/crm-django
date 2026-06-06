@@ -380,13 +380,14 @@ class Gasto(models.Model):
     ]
 
     CATEGORIA = [
-        ('INSUMOS', 'Insumos'),
-        ('GASOLINA', 'Gasolina'),
-        ('REFACCIONES', 'Refacciones'),
-        ('CONSUMIBLES', 'Consumibles'),
-        ('SEGURO', 'Seguro'),
-        ('IMPUESTOS', 'Impuestos'),
-    ]
+    ('INSUMOS', 'Insumos'),
+    ('GASOLINA', 'Gasolina'),
+    ('REFACCIONES', 'Refacciones'),
+    ('CONSUMIBLES', 'Consumibles'),
+    ('SEGURO', 'Seguro'),
+    ('IMPUESTOS', 'Impuestos'),
+    ('NOMINA', 'Nómina'),
+]
 
     tipo = models.CharField(
         max_length=10,
