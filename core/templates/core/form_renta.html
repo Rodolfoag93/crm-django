@@ -507,7 +507,7 @@ document.addEventListener('DOMContentLoaded', function () {
     
         // Solo recuperar si el formulario está vacío
         const clienteNombre = form.querySelector('[name="cliente_nombre"]');
-        if (clienteNombre && clienteNombre.value.trim() !== '') return;
+        if (clienteNombre && clienteNombre.value.trim() !== '' && !window.location.search.includes('recuperar')) return;
     
         Object.keys(datos).forEach(nombre => {
             const campo = form.querySelector(`[name="${nombre}"]`);
@@ -553,20 +553,29 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     
     function limpiarAlGuardar() {
-        const form = document.getElementById('renta-form');
-        if (form) {
-            form.addEventListener('submit', () => {
-                localStorage.removeItem(FORM_KEY);
-            });
-        }
+    const form = document.getElementById('renta-form');
+    if (form) {
+        form.addEventListener('submit', (e) => {
+            // Solo limpiar si hay sesión activa
+            fetch('/home/', { method: 'HEAD' })
+                .then(r => {
+                    if (r.ok || r.redirected === false) {
+                        localStorage.removeItem(FORM_KEY);
+                    }
+                })
+                .catch(() => {
+                    // Si falla no limpiar - sesión probablemente expirada
+                });
+        });
     }
+}
     
     // Iniciar
     recuperarFormulario();
     limpiarAlGuardar();
     
     // Guardar cada 10 segundos
-    setInterval(guardarFormulario, 10000);
+    setInterval(guardarFormulario, 2000);
     
     // Guardar también cuando el usuario escribe o cambia algo
     document.getElementById('renta-form')?.addEventListener('input', guardarFormulario);
