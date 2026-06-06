@@ -479,6 +479,98 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 });
 </script>
-
+<script>
+    const FORM_KEY = 'renta_autosave_{{ renta.id|default:"nueva" }}';
+    
+    function guardarFormulario() {
+        const form = document.getElementById('renta-form');
+        if (!form) return;
+    
+        const datos = {};
+        const campos = form.querySelectorAll('input, select, textarea');
+        campos.forEach(campo => {
+            if (campo.name && campo.type !== 'hidden' && campo.name !== 'csrfmiddlewaretoken') {
+                datos[campo.name] = campo.value;
+            }
+        });
+    
+        localStorage.setItem(FORM_KEY, JSON.stringify(datos));
+    }
+    
+    function recuperarFormulario() {
+        const guardado = localStorage.getItem(FORM_KEY);
+        if (!guardado) return;
+    
+        const datos = JSON.parse(guardado);
+        const form = document.getElementById('renta-form');
+        if (!form) return;
+    
+        // Solo recuperar si el formulario está vacío
+        const clienteNombre = form.querySelector('[name="cliente_nombre"]');
+        if (clienteNombre && clienteNombre.value.trim() !== '') return;
+    
+        Object.keys(datos).forEach(nombre => {
+            const campo = form.querySelector(`[name="${nombre}"]`);
+            if (campo && datos[nombre]) {
+                campo.value = datos[nombre];
+            }
+        });
+    
+        if (Object.keys(datos).length > 0) {
+            mostrarAlertaRecuperacion();
+        }
+    }
+    
+    function mostrarAlertaRecuperacion() {
+        const alerta = document.createElement('div');
+        alerta.style.cssText = `
+            position: fixed; top: 20px; right: 20px; z-index: 9999;
+            background: #fff3cd; border: 1px solid #ffc107;
+            border-radius: 8px; padding: 15px 20px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            max-width: 350px; font-size: 14px;
+        `;
+        alerta.innerHTML = `
+            <strong>📋 Datos recuperados</strong><br>
+            Se recuperaron los datos que estabas capturando antes.<br>
+            <div style="margin-top: 10px; display: flex; gap: 8px;">
+                <button onclick="limpiarYDescartar()" 
+                    style="background:#dc3545;color:white;border:none;padding:5px 12px;border-radius:4px;cursor:pointer;font-size:13px;">
+                    Descartar
+                </button>
+                <button onclick="this.parentElement.parentElement.remove()" 
+                    style="background:#28a745;color:white;border:none;padding:5px 12px;border-radius:4px;cursor:pointer;font-size:13px;">
+                    Usar datos
+                </button>
+            </div>
+        `;
+        document.body.appendChild(alerta);
+    }
+    
+    function limpiarYDescartar() {
+        localStorage.removeItem(FORM_KEY);
+        location.reload();
+    }
+    
+    function limpiarAlGuardar() {
+        const form = document.getElementById('renta-form');
+        if (form) {
+            form.addEventListener('submit', () => {
+                localStorage.removeItem(FORM_KEY);
+            });
+        }
+    }
+    
+    // Iniciar
+    recuperarFormulario();
+    limpiarAlGuardar();
+    
+    // Guardar cada 10 segundos
+    setInterval(guardarFormulario, 10000);
+    
+    // Guardar también cuando el usuario escribe o cambia algo
+    document.getElementById('renta-form')?.addEventListener('input', guardarFormulario);
+    document.getElementById('renta-form')?.addEventListener('change', guardarFormulario);
+    </script>
 
 {% endblock %}

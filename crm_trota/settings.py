@@ -85,20 +85,15 @@ WSGI_APPLICATION = 'crm_trota.wsgi.application'
 # Producción: define POSTGRES_DB (y usuario/clave/host) o USE_POSTGRES=true
 # con las mismas variables; en el servidor ejecuta migrate con esa .env.
 
-if os.environ.get("POSTGRES_DB") or os.environ.get("USE_POSTGRES", "").lower() in (
-    "1",
-    "true",
-    "yes",
-):
+if os.environ.get("DB_NAME"):
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.postgresql",
-            "NAME": os.environ.get("POSTGRES_DB") or os.environ.get("DB_NAME", ""),
-            "USER": os.environ.get("POSTGRES_USER") or os.environ.get("DB_USER", ""),
-            "PASSWORD": os.environ.get("POSTGRES_PASSWORD")
-            or os.environ.get("DB_PASSWORD", ""),
-            "HOST": os.environ.get("POSTGRES_HOST") or os.environ.get("DB_HOST", "localhost"),
-            "PORT": os.environ.get("POSTGRES_PORT") or os.environ.get("DB_PORT", "5432"),
+            "NAME": os.environ.get("DB_NAME", ""),
+            "USER": os.environ.get("DB_USER", ""),
+            "PASSWORD": os.environ.get("DB_PASSWORD", ""),
+            "HOST": os.environ.get("DB_HOST", "localhost"),
+            "PORT": os.environ.get("DB_PORT", "5432"),
         }
     }
 else:
