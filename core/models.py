@@ -165,6 +165,14 @@ class Renta(models.Model):
 
     estado_entrega = models.CharField(max_length=20, choices=ESTADO_ENTREGA, default='PENDIENTE')
 
+    class Meta:
+        indexes = [
+            models.Index(fields=['fecha_renta', 'status']),
+            models.Index(fields=['status', 'pagado']),
+            models.Index(fields=['estado_entrega']),
+            models.Index(fields=['cliente']),
+        ]
+
     def save(self, *args, **kwargs):
         # Generar folio automático si no existe
         if not self.folio:
@@ -353,6 +361,12 @@ class Nomina(models.Model):
     dias_trabajados = models.PositiveIntegerField(default=0)
     total = models.DecimalField(max_digits=10, decimal_places=2, default=0)
 
+    class Meta:
+        indexes = [
+            models.Index(fields=['empleado', 'fecha_inicio']),
+            models.Index(fields=['fecha_fin']),
+        ]
+
     def pago_eventos_extra(self):
         if not self.pk:
             return 0
@@ -380,13 +394,14 @@ class Gasto(models.Model):
     ]
 
     CATEGORIA = [
-        ('INSUMOS', 'Insumos'),
-        ('GASOLINA', 'Gasolina'),
-        ('REFACCIONES', 'Refacciones'),
-        ('CONSUMIBLES', 'Consumibles'),
-        ('SEGURO', 'Seguro'),
-        ('IMPUESTOS', 'Impuestos'),
-    ]
+    ('INSUMOS', 'Insumos'),
+    ('GASOLINA', 'Gasolina'),
+    ('REFACCIONES', 'Refacciones'),
+    ('CONSUMIBLES', 'Consumibles'),
+    ('SEGURO', 'Seguro'),
+    ('IMPUESTOS', 'Impuestos'),
+    ('NOMINA', 'Nómina'),
+]
 
     tipo = models.CharField(
         max_length=10,
@@ -545,6 +560,12 @@ class MovimientoContable(models.Model):
     descripcion = models.CharField(max_length=255, blank=True)
     creado_en = models.DateTimeField(auto_now_add=True)
 
+    class Meta:
+        indexes = [
+            models.Index(fields=['fecha', 'tipo']),
+            models.Index(fields=['cuenta', 'tipo']),
+        ]
+
     def __str__(self):
         return f"{self.tipo} - {self.monto} ({self.metodo_pago})"
 
@@ -583,8 +604,11 @@ class MaterialAnimacion(models.Model):
     activo = models.BooleanField(default=True)
 
     def __str__(self):
-        verbose_name = "Material Animación"
-        verbose_name_plural = "Materiales nimación"
+        return self.nombre
+
+    class Meta:
+        verbose_name = "Material de Animación"
+        verbose_name_plural = "Materiales de Animación"
         ordering = ('nombre',)
 
 class FotoMaterial (models.Model):
@@ -630,26 +654,37 @@ class MaterialEvento(models.Model):
         on_delete=models.CASCADE,
         related_name='materiales'
     )
-    material =models.ForeignKey(
+    material = models.ForeignKey(
         MaterialAnimacion,
         on_delete=models.CASCADE,
         related_name='usos'
     )
     cantidad = models.PositiveIntegerField(default=1)
-    nota = models.CharField(
-        max_length=255,
-        blank=True,
-    )
+    nota = models.CharField(max_length=255, blank=True)
+
+    # Checklist despacho
+    despachado = models.BooleanField(default=False)
+
+    # Checklist recepción
+    recibido = models.BooleanField(default=False)
+    observacion = models.CharField(max_length=255, blank=True, null=True)
+
+    # Control de stock
+    stock_restaurado = models.BooleanField(default=False)
+
     def __str__(self):
         return f"{self.material.nombre} x{self.cantidad}"
+
     class Meta:
         verbose_name = "Material del Evento"
         unique_together = ('asignacion', 'material')
+
 class ListaMaterialEvento(models.Model):
     ESTADO = [
         ('PENDIENTE', 'Pendiente revisión'),
         ('REVISADA', 'Revisada'),
         ('PREPARADA', 'Preparada'),
+        ('RECIBIDA', 'Recibida'),  # ← nuevo
     ]
 
     asignacion = models.OneToOneField(
@@ -661,18 +696,20 @@ class ListaMaterialEvento(models.Model):
     revisada_por = models.ForeignKey(
         User,
         on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
+        null=True, blank=True,
         related_name='listas_revisadas'
     )
     fecha_revision = models.DateTimeField(null=True, blank=True)
-    notas_encargado = models.TextField(blank=True, null=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+
+    # Recepción
+    recibida_por = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True, blank=True,
+        related_name='listas_recibidas'
+    )
+    fecha_recepcion = models.DateTimeField(null=True, blank=True)
+    observaciones_recepcion = models.TextField(blank=True, null=True)
 
     def __str__(self):
-        return f"Lista {self.asignacion.renta.folio} - {self.get_estado_display()}"
-
-    class Meta:
-        verbose_name = "Lista de material por evento"
-        ordering = ['-created_at']
+        return f"Lista {self.asignacion.renta.folio} - {self.estado}"

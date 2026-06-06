@@ -45,5 +45,17 @@
 
     </tbody>
 </table>
+{% if page_obj.has_other_pages %}
+<div style="margin-top: 20px; display: flex; gap: 8px; align-items: center;">
+    {% if page_obj.has_previous %}
+        <a href="?page={{ page_obj.previous_page_number }}" class="btn btn-secondary btn-sm">← Anterior</a>
+    {% endif %}
 
+    <span>Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span>
+
+    {% if page_obj.has_next %}
+        <a href="?page={{ page_obj.next_page_number }}" class="btn btn-primary btn-sm">Siguiente →</a>
+    {% endif %}
+</div>
+{% endif %}
 {% endblock %}

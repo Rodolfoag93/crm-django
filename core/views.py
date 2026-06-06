@@ -105,22 +105,24 @@ def lista_clientes(request):
 
     clientes = Cliente.objects.all()
 
-    # 🔎 Filtro por nombre o teléfono
     if q:
         clientes = clientes.filter(
             Q(nombre__icontains=q) |
             Q(telefono__icontains=q)
         )
 
-    # ↕️ Ordenamiento seguro
     if orden in ["nombre", "telefono"]:
         clientes = clientes.order_by(orden)
+
+    paginator = Paginator(clientes, 25)
+    page_obj = paginator.get_page(request.GET.get('page'))
 
     return render(
         request,
         "core/lista_clientes.html",
         {
-            "clientes": clientes,
+            "clientes": page_obj,
+            "page_obj": page_obj,
             "module": 'ventas',
         }
     )
@@ -667,12 +669,8 @@ def editar_renta(request, renta_id):
                     # ===============================
                     # GUARDAR RENTA
                     # ===============================
-                    print("FORM cleaned precio_total:", form.cleaned_data.get('precio_total'))
-                    print("FORM changed_data:", form.changed_data)
-                    print("RENTA precio antes:", renta.precio_total)
 
                     renta = form.save(commit=False)
-                    print("RENTA precio tras form.save:", renta.precio_total)
                     renta.anticipo = anticipo_nuevo
                     renta.save()
 
@@ -682,9 +680,6 @@ def editar_renta(request, renta_id):
                     # ===============================
                     # MOVIMIENTO CONTABLE (AJUSTE)
                     # ===============================
-                    print("DIF:", diferencia_anticipo)
-                    print("PEDIDO:", renta_id)
-                    print("CUENTA:", cuentas)
 
                     if diferencia_anticipo != 0:
 
@@ -712,8 +707,7 @@ def editar_renta(request, renta_id):
                     # LIBERAR STOCK ANTERIOR
                     # ===============================
                     for rp in renta.rentaproductos.select_related('producto'):
-                        rp.producto.liberar_stock(rp.cantidad)
-                    print("ANTES PRODUCTOS precio:", renta.precio_total)
+                        rp.producto.liberar_stock(rp.cantidad)      
                     renta.rentaproductos.all().delete()
 
                     # ===============================
@@ -1467,8 +1461,13 @@ def es_cargador(user):
 # ---------------- Empleados ----------------
 @login_required
 def lista_empleados(request):
-    empleados = Empleado.objects.all()
-    return render(request, 'core/empleados_lista.html', {'empleados': empleados, "module": 'admin',})
+    empleados = Empleado.objects.filter(activo=True).order_by('nombre')
+    paginator = Paginator(empleados, 25)
+    page_obj = paginator.get_page(request.GET.get('page'))
+    return render(request, 'core/empleados_lista.html', {
+        'empleados': page_obj,
+        'page_obj': page_obj,
+    })
 
 @login_required
 def nuevo_empleado(request):
@@ -1537,6 +1536,11 @@ def lista_nomina(request):
         "module": 'admin',
     }
 
+    paginator = Paginator(nominas, 25)
+    page_obj = paginator.get_page(request.GET.get('page'))
+    contexto['page_obj'] = page_obj
+    contexto['nominas'] = page_obj
+    
     return render(request, 'core/nomina_lista.html', contexto)
 @login_required
 def pagos_extra_nomina(request, nomina_id):
@@ -1594,9 +1598,6 @@ def catalogo_pagos_extra(request, tipo_id=None):
         form.save()
         return redirect('catalogo_pagos_extra')
 
-    # Depuración
-    print("Conceptos:", conceptos)
-
     return render(request, 'nomina/catalogo_pagos_extra.html', {
         'form': form,
         'conceptos': conceptos,
@@ -1645,41 +1646,19 @@ def eliminar_tipo_pago_extra(request, tipo_id):
 
 @login_required
 def nueva_nomina(request):
-    print("➡️ Entró a nueva_nomina")
-
     if request.method == 'POST':
-        print("🟡 Método POST recibido")
-        print("POST DATA:", request.POST)
-
         form = NominaForm(request.POST)
 
-        if 'guardar_nomina' in request.POST:
-            print("🟢 Se presionó guardar_nomina")
-
         if form.is_valid():
-            print("✅ Form válido")
-
             nomina = form.save()
-            print("🧾 Nómina creada con ID:", nomina.id)
-
             nomina.total = nomina.calcular_total()
             nomina.save()
-            print("💰 Total calculado:", nomina.total)
-
-
-
+            sincronizar_gasto_nomina(nomina)
             return redirect('editar_nomina', nomina.id)
 
-        else:
-            print("❌ Form NO válido")
-            print("ERRORES:", form.errors)
-
     else:
-        print("🔵 Método GET")
-
         form = NominaForm()
 
-    print("🔴 Renderizando nomina_form.html (NO guardó)")
     return render(request, 'core/nomina_form.html', {
         'form': form,
         'nomina': None,
@@ -1885,7 +1864,8 @@ def bitacora_list(request):
 
 
 # Marcar mantenimiento
-@csrf_exempt
+@login_required
+@require_POST
 def marcar_mantenimiento(request):
     if request.method == "POST":
         data = json.loads(request.body)
@@ -1953,7 +1933,7 @@ def transferir_entre_cuentas(request):
     else:
         form = TransferenciaForm()
     return render(request, 'finanzas/transferencia.html', {'form': form})
-
+@login_required
 def balance_cuentas(request):
     cuentas = Cuenta.objects.filter(activa=True)
 
@@ -1972,7 +1952,7 @@ def balance_cuentas(request):
         'total': total,
         "module": 'admin',
     })
-
+@login_required
 def movimientos_cuenta(request, cuenta_id):
     cuenta = Cuenta.objects.get(id=cuenta_id)
     movimientos = MovimientoContable.objects.filter(
@@ -1984,6 +1964,7 @@ def movimientos_cuenta(request, cuenta_id):
         'movimientos': movimientos
     })
 
+@login_required
 def registrar_movimiento(request):
     if request.method == 'POST':
         form = MovimientoForm(request.POST)
@@ -1997,6 +1978,7 @@ def registrar_movimiento(request):
         'form': form
     })
 
+@login_required
 def transferencia_cuentas(request):
     if request.method == 'POST':
         form = TransferenciaForm(request.POST)
@@ -2036,6 +2018,7 @@ def transferencia_cuentas(request):
         'form': form
     })
 
+@login_required
 def movimientos_efectivo(request):
     caja = get_caja_efectivo()
 
@@ -2047,6 +2030,7 @@ def movimientos_efectivo(request):
         'movimientos': movimientos
     })
 
+@login_required
 def traspaso_efectivo_banco(request):
     if request.method == 'POST':
         form = TraspasoEfectivoBancoForm(request.POST)
@@ -2414,8 +2398,15 @@ def todas_listas_material(request):
 def detalle_lista_material(request, lista_id):
     lista = get_object_or_404(ListaMaterialEvento, id=lista_id)
 
-    materiales = lista.asignacion.materiales.select_related('material')
+    # Auto-marcar como REVISADA al abrir
+    if lista.estado == 'PENDIENTE':
+        lista.estado = 'REVISADA'
+        lista.revisada_por = request.user
+        lista.fecha_revision = timezone.now()
+        lista.save()
+        messages.success(request, 'Lista marcada como revisada automáticamente.')
 
+    materiales = lista.asignacion.materiales.select_related('material')
     consumibles = materiales.filter(material__tipo='CONSUMIBLE')
     reutilizables = materiales.filter(material__tipo='REUTILIZABLE')
 
