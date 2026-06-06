@@ -32,7 +32,6 @@ ALLOWED_HOSTS = os.environ.get(
 ).split(",")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
 ALLOWED_HOSTS = ['trotacrm.com', 'www.trotacrm.com', '178.128.182.227', '127.0.0.1', 'localhost']
 
 
