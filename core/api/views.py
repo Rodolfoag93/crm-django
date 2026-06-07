@@ -1,7 +1,7 @@
 from rest_framework import viewsets, filters, status
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from django_filters.rest_framework import DjangoFilterBackend
 from django.utils import timezone
 from datetime import timedelta
@@ -9,12 +9,12 @@ from datetime import timedelta
 
 from core.models import (
     Cliente, Producto, Renta, Empleado,
-    Nomina, Gasto, MovimientoContable, Asistencia
+    Nomina, Gasto, MovimientoContable, Asistencia, SolicitudRegistro
 )
 from core.api.serializers import (
     ClienteSerializer, ProductoSerializer, RentaSerializer,
     EmpleadoSerializer, NominaSerializer, GastoSerializer,
-    MovimientoContableSerializer, AsistenciaSerializer
+    MovimientoContableSerializer, AsistenciaSerializer, SolicitudRegistroSerializer
 )
 
 
@@ -185,4 +185,87 @@ class AsistenciaViewSet(viewsets.ModelViewSet):
         hoy = timezone.localdate()
         asistencias = self.get_queryset().filter(fecha=hoy)
         serializer = self.get_serializer(asistencias, many=True)
+        return Response(serializer.data)
+
+class SolicitudRegistroViewSet(viewsets.GenericViewSet):
+    serializer_class = SolicitudRegistroSerializer
+
+    @action(detail=False, methods=['post'], permission_classes=[AllowAny])
+    def registro(self, request):
+        serializer = SolicitudRegistroSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(
+                {'mensaje': 'Solicitud enviada correctamente. El administrador revisará tu solicitud.'},
+                status=status.HTTP_201_CREATED
+            )
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
+    def aprobar(self, request, pk=None):
+        solicitud = get_object_or_404(SolicitudRegistro, pk=pk)
+
+        if solicitud.estado != 'PENDIENTE':
+            return Response({'error': 'Esta solicitud ya fue procesada'}, status=status.HTTP_400_BAD_REQUEST)
+
+        from django.contrib.auth.models import User
+        from django.utils import timezone as tz
+
+        # Crear usuario
+        username = solicitud.telefono
+        if User.objects.filter(username=username).exists():
+            username = f"{solicitud.telefono}_{solicitud.id}"
+
+        user = User.objects.create(
+            username=username,
+            first_name=solicitud.nombre.split()[0],
+            last_name=' '.join(solicitud.nombre.split()[1:]),
+            email=solicitud.email or '',
+            password=solicitud.password_hash
+        )
+
+        # Crear empleado
+        empleado = Empleado.objects.create(
+            nombre=solicitud.nombre,
+            telefono=solicitud.telefono,
+            correo=solicitud.email or '',
+            tipo_empleado=solicitud.tipo_empleado,
+            sueldo_diario=0,
+            activo=True
+        )
+
+        # Actualizar solicitud
+        solicitud.estado = 'APROBADA'
+        solicitud.revisada_por = request.user
+        solicitud.fecha_revision = tz.now()
+        solicitud.user_creado = user
+        solicitud.save()
+
+        return Response({
+            'mensaje': f'Solicitud aprobada. Usuario {username} creado correctamente.',
+            'user_id': user.id,
+            'empleado_id': empleado.id
+        })
+
+    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
+    def rechazar(self, request, pk=None):
+        solicitud = get_object_or_404(SolicitudRegistro, pk=pk)
+
+        if solicitud.estado != 'PENDIENTE':
+            return Response({'error': 'Esta solicitud ya fue procesada'}, status=status.HTTP_400_BAD_REQUEST)
+
+        from django.utils import timezone as tz
+
+        solicitud.estado = 'RECHAZADA'
+        solicitud.revisada_por = request.user
+        solicitud.fecha_revision = tz.now()
+        solicitud.notas_admin = request.data.get('notas', '')
+        solicitud.save()
+
+        return Response({'mensaje': 'Solicitud rechazada.'})
+
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
+    def pendientes(self, request):
+        solicitudes = SolicitudRegistro.objects.filter(estado='PENDIENTE')
+        serializer = SolicitudRegistroSerializer(solicitudes, many=True)
         return Response(serializer.data)

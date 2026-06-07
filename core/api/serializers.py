@@ -1,8 +1,9 @@
 from rest_framework import serializers
 from core.models import (
     Cliente, Producto, Renta, RentaProducto,
-    Empleado, Nomina, Gasto, MovimientoContable, Asistencia
+    Empleado, Nomina, Gasto, MovimientoContable, Asistencia, SolicitudRegistro
 )
+from django.contrib.auth.hashers import make_password
 
 
 class ClienteSerializer(serializers.ModelSerializer):
@@ -78,3 +79,16 @@ class AsistenciaSerializer(serializers.ModelSerializer):
             'ubicacion_salida', 'tipo_jornada', 'notas', 'horas_trabajadas'
         ]
         read_only_fields = ['horas_trabajadas']
+
+class SolicitudRegistroSerializer(serializers.ModelSerializer):
+    password = serializers.CharField(write_only=True)
+
+    class Meta:
+        model = SolicitudRegistro
+        fields = ['id', 'nombre', 'telefono', 'email', 'password', 'tipo_empleado', 'estado', 'fecha_solicitud']
+        read_only_fields = ['estado', 'fecha_solicitud']
+
+    def create(self, validated_data):
+        password = validated_data.pop('password')
+        validated_data['password_hash'] = make_password(password)
+        return super().create(validated_data)
