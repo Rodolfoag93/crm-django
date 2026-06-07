@@ -1,10 +1,11 @@
 from rest_framework import viewsets, filters
-from rest_framework.decorators import action
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
 from django.utils import timezone
 from datetime import timedelta
+
 
 from core.models import (
     Cliente, Producto, Renta, Empleado,
@@ -93,3 +94,21 @@ class MovimientoContableViewSet(viewsets.ModelViewSet):
     queryset = MovimientoContable.objects.all().order_by('-fecha')
     serializer_class = MovimientoContableSerializer
     permission_classes = [IsAuthenticated]
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def me(request):
+    user = request.user
+    grupos = list(user.groups.values_list('name', flat=True))
+
+    return Response({
+        'id': user.id,
+        'username': user.username,
+        'nombre': f"{user.first_name} {user.last_name}".strip() or user.username,
+        'email': user.email,
+        'es_admin': user.is_superuser or user.is_staff,
+        'grupos': grupos,
+        'es_coordinador': 'Coordinador' in grupos,
+        'es_cargador': 'cargador' in grupos or 'Cargador' in grupos,
+        'es_encargado_material': 'Encargado Material' in grupos,
+    })
