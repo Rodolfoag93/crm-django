@@ -197,3 +197,9 @@ LOGGING = {
         },
     },
 }
+
+# ── Seguridad: headers manejados por Nginx, desactivar en Django ──
+SECURE_BROWSER_XSS_FILTER = False
+SECURE_CONTENT_TYPE_NOSNIFF = False
+X_FRAME_OPTIONS = None
+SECURE_REFERRER_POLICY = None
