@@ -3,6 +3,10 @@ from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from core.models import Producto
 from core.forms import ProductoForm
+import json
+from django.db import transaction
+from django.views.decorators.http import require_POST
+from django.http import JsonResponse
 
 
 @login_required
@@ -45,3 +49,31 @@ def api_productos(request):
         [{"id": p.id, "nombre": p.nombre, "precio": float(p.precio)} for p in productos],
         safe=False
     )
+
+@require_POST
+def crear_producto_ajax(request):
+    data = json.loads(request.body)
+    nombre = data["nombre"].strip()
+    tipo = data["tipo"]
+    precio = float(data["precio"])
+    stock = int(data["stock"])
+    if Producto.objects.filter(nombre__iexact=nombre, activo=True).exists():
+        return JsonResponse(
+            {"error": "Ya existe un producto con ese nombre"},
+            status=400
+        )
+    with transaction.atomic():
+        producto = Producto.objects.create(
+            nombre=nombre,
+            tipo=tipo,
+            precio=precio,
+            stock_total=stock,
+            stock_disponible=stock,
+            stock=stock,
+            activo=True
+        )
+    return JsonResponse({
+        "id": producto.id,
+        "nombre": producto.nombre,
+        "precio": float(producto.precio)
+    })
