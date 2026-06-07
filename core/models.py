@@ -1,14 +1,14 @@
-from tabnanny import verbose
-
 from django.db import models
 from django.utils import timezone
 from django.contrib.auth.models import User
-from django.db.models import Sum
+from django.db.models import Sum, Max
 from datetime import timedelta
 from django.core.exceptions import ValidationError
 from decimal import Decimal, ROUND_HALF_UP
 
-
+# =============================================
+# CLIENTES
+# =============================================
 
 class Cliente(models.Model):
     nombre = models.CharField(max_length=100)
@@ -19,6 +19,10 @@ class Cliente(models.Model):
 
     def __str__(self):
         return self.nombre
+
+# =============================================
+# PRODUCTOS E INVENTARIO
+# =============================================
 
 class Producto(models.Model):
 
@@ -116,6 +120,11 @@ class OcupacionDia(models.Model):
             models.Index(fields=['producto', 'fecha']),
         ]
 
+
+# =============================================
+# RENTAS
+# =============================================
+
 class Renta(models.Model):
     STATUS = [
         ('ACTIVO', 'Activo'),
@@ -207,7 +216,7 @@ class Ruta(models.Model):
     def __str__(self):
         return f"Ruta {self.fecha} - {self.cargador}"
 
-from django.db.models import Max
+
 
 class RentaProducto(models.Model):
     renta = models.ForeignKey(
@@ -258,6 +267,9 @@ class RentaProducto(models.Model):
     def __str__(self):
         return f"{self.producto.nombre} x{self.cantidad} - {self.renta.folio}"
 
+# =============================================
+# CONTABILIDAD
+# =============================================
 
 class Cuenta(models.Model):
     nombre = models.CharField(max_length=50)
@@ -330,6 +342,10 @@ class PedidoFinanzas(models.Model):
     def __str__(self):
         return f"Renta {self.renta.id} - {'Pagado' if self.pagado else 'Pendiente'}"
 
+
+# =============================================
+# EMPLEADOS Y NÓMINA
+# =============================================
 class Empleado(models.Model):
     telefono = models.CharField(max_length=20, blank=True)
     correo = models.EmailField(blank=True, null=True)
@@ -589,6 +605,11 @@ class BitacoraMantenimiento(models.Model):
 
     def __str__(self):
         return f"{self.producto.nombre} - Mantto"
+
+
+# =============================================
+# ANIMACIÓN Y MATERIALES
+# =============================================
 
 class MaterialAnimacion(models.Model):
     TIPO = [
