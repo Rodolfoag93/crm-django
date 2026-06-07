@@ -789,3 +789,51 @@ class Asistencia(models.Model):
 
     def __str__(self):
         return f"{self.empleado.nombre} - {self.fecha}"
+
+
+# =============================================
+# REGISTRO DE EMPLEADOS
+# =============================================
+class SolicitudRegistro(models.Model):
+    ESTADO = [
+        ('PENDIENTE', 'Pendiente'),
+        ('APROBADA', 'Aprobada'),
+        ('RECHAZADA', 'Rechazada'),
+    ]
+
+    nombre = models.CharField(max_length=100)
+    telefono = models.CharField(max_length=20)
+    email = models.EmailField(blank=True, null=True)
+    password_hash = models.CharField(max_length=255)
+    tipo_empleado = models.CharField(
+        max_length=20,
+        choices=Empleado.TIPO_EMPLEADO,
+        default='REPARTIDOR'
+    )
+    estado = models.CharField(max_length=10, choices=ESTADO, default='PENDIENTE')
+    fecha_solicitud = models.DateTimeField(auto_now_add=True)
+    revisada_por = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='solicitudes_revisadas'
+    )
+    fecha_revision = models.DateTimeField(null=True, blank=True)
+    notas_admin = models.TextField(blank=True, null=True)
+    user_creado = models.OneToOneField(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='solicitud_origen'
+    )
+
+    def __str__(self):
+        return f"{self.nombre} - {self.estado}"
+
+    class Meta:
+        ordering = ['-fecha_solicitud']
+        verbose_name = "Solicitud de Registro"
+        verbose_name_plural = "Solicitudes de Registro"
+        
