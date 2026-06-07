@@ -1,5 +1,31 @@
-from django.shortcuts import render, redirect, get_object_or_404
+# ── Stdlib ────────────────────────────────────────────────────────────
+import json
+from datetime import date, timedelta, datetime
+from decimal import Decimal
+
+# ── Django core ───────────────────────────────────────────────────────
+from django.contrib import messages
+from django.contrib.auth.decorators import login_required
+from django.contrib.auth.models import User
+from django.core.paginator import Paginator
+from django.core.serializers.json import DjangoJSONEncoder
+from django.db import transaction
+from django.db.models import Q, Case, When, Value, IntegerField, Sum, F
 from django.http import JsonResponse, HttpResponse
+from django.shortcuts import render, redirect, get_object_or_404
+from django.template.loader import render_to_string
+from django.templatetags.static import static
+from django.urls import reverse
+from django.utils import timezone
+from django.utils.timezone import now
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_POST
+
+# ── Terceros ──────────────────────────────────────────────────────────
+import weasyprint
+from weasyprint import HTML
+
+# ── Modelos ───────────────────────────────────────────────────────────
 from .models import (
     Ruta, Empleado, Nomina, Pedido, MovimientoContable, Cuenta, Compra,
     HorasExtra, BitacoraMantenimiento, AsignacionCoordinador, MaterialEvento,
@@ -7,41 +33,19 @@ from .models import (
     RentaProducto, PedidoFinanzas, Gasto, OcupacionDia, calcular_total,
     TipoPagoExtra, PagoExtraNomina, FotoMaterial
 )
-from .decorators import solo_admin, solo_coordinador, no_coordinador, acceso_listas_material
+
+# ── Forms ─────────────────────────────────────────────────────────────
 from .forms import (
     ClienteForm, ProductoForm, RentaForm, RentaProductoFormSet, EmpleadoForm,
     NominaForm, GastoForm, CompraForm, HorasExtraForm, PagoExtraForm,
     TipoPagoExtraForm, PagoExtraNominaForm, TransferenciaForm, MovimientoForm,
     TraspasoEfectivoBancoForm
 )
-from django.db.models import Q
-from django.template.loader import render_to_string
-import json
-import weasyprint
-from django.templatetags.static import static
-from datetime import date, timedelta, datetime
-from django.contrib.auth.decorators import login_required
-from django.utils import timezone
-from django.db.models import Case, When, Value, IntegerField, Sum, F, Q
-from django.contrib.auth.models import User
-from core.decorators import solo_admin
-from django.db import transaction
-from django.contrib import messages
-from django.core.serializers.json import DjangoJSONEncoder
-from django.urls import reverse
-from django.views.decorators.csrf import csrf_exempt
-from django.core.paginator import Paginator
-from weasyprint import HTML
-from decimal import Decimal
-from django.utils.timezone import now
+
+# ── Decorators & utils ────────────────────────────────────────────────
+from .decorators import solo_admin, solo_coordinador, no_coordinador, acceso_listas_material
 from core.utils import saldo_efectivo, sincronizar_gasto_nomina, calcular_total
 from core.services.ocupacion import recalcular_ocupacion_producto_dia
-from django.views.decorators.http import require_POST
-from .models import (
-    Cliente, Producto, Renta, RentaProducto, PedidoFinanzas,
-    Gasto, Compra, OcupacionDia, calcular_total, TipoPagoExtra,
-    PagoExtraNomina, MaterialAnimacion, AsignacionCoordinador, MaterialEvento  # 👈 estos 3
-)
 
 #helpers
 def get_caja_efectivo():
@@ -1540,7 +1544,7 @@ def lista_nomina(request):
     page_obj = paginator.get_page(request.GET.get('page'))
     contexto['page_obj'] = page_obj
     contexto['nominas'] = page_obj
-    
+
     return render(request, 'core/nomina_lista.html', contexto)
 @login_required
 def pagos_extra_nomina(request, nomina_id):
