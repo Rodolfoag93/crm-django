@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from core.models import (
     Cliente, Producto, Renta, RentaProducto,
-    Empleado, Nomina, Gasto, MovimientoContable
+    Empleado, Nomina, Gasto, MovimientoContable, Asistencia
 )
 
 
@@ -65,3 +65,16 @@ class MovimientoContableSerializer(serializers.ModelSerializer):
     class Meta:
         model = MovimientoContable
         fields = '__all__'
+
+class AsistenciaSerializer(serializers.ModelSerializer):
+    empleado_nombre = serializers.CharField(source='empleado.nombre', read_only=True)
+    horas_trabajadas = serializers.DecimalField(max_digits=5, decimal_places=2, read_only=True)
+
+    class Meta:
+        model = Asistencia
+        fields = [
+            'id', 'empleado', 'empleado_nombre', 'fecha',
+            'hora_entrada', 'hora_salida', 'ubicacion_entrada',
+            'ubicacion_salida', 'tipo_jornada', 'notas', 'horas_trabajadas'
+        ]
+        read_only_fields = ['horas_trabajadas']
