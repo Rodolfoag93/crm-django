@@ -7,8 +7,8 @@ class SessionExpiradaMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
-        # Ignorar completamente rutas de API
-        if request.path.startswith('/api/'):
+        # Ignorar rutas de API REST
+        if request.path.startswith('/api/') or request.path.startswith('/v1/'):
             return self.get_response(request)
 
         urls_publicas = ['/', '/accounts/logout/', '/admin/', '/accounts/login/']
