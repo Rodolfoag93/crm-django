@@ -10,80 +10,93 @@
 <!-- ⚠️ ALERTA: Rentas con animación sin coordinador asignado -->
 {% if rentas_sin_coordinador %}
 <div class="home-alert-card" style="background:#fff3e0; border-left:5px solid #ff9800; border-radius:8px;
-            padding:16px 20px; margin-bottom:30px; max-width:900px; width:100%; margin-left:auto; margin-right:auto; box-sizing:border-box;">
-    <div style="font-weight:600; font-size:15px; color:#e65100; margin-bottom:10px;">
-        ⚠️ {{ rentas_sin_coordinador|length }} renta{{ rentas_sin_coordinador|length|pluralize }} con animación sin coordinador asignado en los próximos 7 días
+            padding:16px 20px; margin-bottom:20px; max-width:900px; width:100%; margin-left:auto; margin-right:auto; box-sizing:border-box;">
+    <div style="display:flex; justify-content:space-between; align-items:center; cursor:pointer;"
+         onclick="toggleAlerta('alerta-coordinador', this)">
+        <div style="font-weight:600; font-size:15px; color:#e65100;">
+            ⚠️ {{ rentas_sin_coordinador|length }} renta{{ rentas_sin_coordinador|length|pluralize }} con animación sin coordinador asignado en los próximos 7 días
+        </div>
+        <span style="font-size:20px; color:#e65100; transition:transform 0.3s;" id="icon-coordinador">▼</span>
     </div>
-    <div class="table-responsive">
-    <table class="home-alert-table" style="width:100%; border-collapse:collapse; font-size:13px;">
-        <thead>
-            <tr style="color:#bf360c;">
-                <th class="home-alert-folio" style="text-align:left; padding:4px 8px;" title="Últimos 4 del folio">Folio</th>
-                <th style="text-align:left; padding:4px 8px;">Cliente</th>
-                <th style="text-align:left; padding:4px 8px;">Día / mes</th>
-                <th style="text-align:left; padding:4px 8px;"></th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for renta in rentas_sin_coordinador %}
-            <tr style="border-top:1px solid #ffe0b2;">
-                <td class="home-alert-folio" style="padding:6px 8px; white-space:nowrap;" title="{{ renta.folio }}">{{ renta.folio|slice:"-4:" }}</td>
-                <td style="padding:6px 8px;">{{ renta.cliente.nombre }}</td>
-                <td style="padding:6px 8px; white-space:nowrap;" title="{{ renta.fecha_renta|date:'d/m/Y' }}">{{ renta.fecha_renta|date:"d/m" }}</td>
-                <td style="padding:6px 8px;">
-                    <a href="{% url 'asignar_coordinador_animacion' renta.id %}"
-                       style="background:#ff9800; color:white; padding:4px 10px;
-                              border-radius:4px; font-size:12px; text-decoration:none;">
-                        Asignar coordinador
-                    </a>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+    <div id="alerta-coordinador" style="overflow:hidden; transition:max-height 0.3s ease; max-height:0;">
+        <div class="table-responsive" style="margin-top:12px;">
+            <table class="home-alert-table" style="width:100%; border-collapse:collapse; font-size:13px;">
+                <thead>
+                    <tr style="color:#bf360c;">
+                        <th style="text-align:left; padding:4px 8px;">Folio</th>
+                        <th style="text-align:left; padding:4px 8px;">Cliente</th>
+                        <th style="text-align:left; padding:4px 8px;">Día / mes</th>
+                        <th style="text-align:left; padding:4px 8px;"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for renta in rentas_sin_coordinador %}
+                    <tr style="border-top:1px solid #ffe0b2;">
+                        <td style="padding:6px 8px; white-space:nowrap;" title="{{ renta.folio }}">{{ renta.folio|slice:"-4:" }}</td>
+                        <td style="padding:6px 8px;">{{ renta.cliente.nombre }}</td>
+                        <td style="padding:6px 8px; white-space:nowrap;">{{ renta.fecha_renta|date:"d/m" }}</td>
+                        <td style="padding:6px 8px;">
+                            <a href="{% url 'asignar_coordinador_animacion' renta.id %}"
+                               style="background:#ff9800; color:white; padding:4px 10px;
+                                      border-radius:4px; font-size:12px; text-decoration:none;">
+                                Asignar coordinador
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
     </div>
 </div>
 {% endif %}
+
 <!-- 🔴 ALERTA: Rentas sin pago -->
 {% if rentas_sin_pago %}
 <div class="home-alert-card" style="background:#fce4ec; border-left:5px solid #e53935; border-radius:8px;
             padding:16px 20px; margin-bottom:30px; max-width:900px; width:100%; margin-left:auto; margin-right:auto; box-sizing:border-box;">
-    <div style="font-weight:600; font-size:15px; color:#b71c1c; margin-bottom:10px;">
-        🔴 {{ rentas_sin_pago|length }} renta{{ rentas_sin_pago|length|pluralize }} sin pago registrado
+    <div style="display:flex; justify-content:space-between; align-items:center; cursor:pointer;"
+         onclick="toggleAlerta('alerta-pagos', this)">
+        <div style="font-weight:600; font-size:15px; color:#b71c1c;">
+            🔴 {{ rentas_sin_pago|length }} renta{{ rentas_sin_pago|length|pluralize }} sin pago registrado
+        </div>
+        <span style="font-size:20px; color:#b71c1c; transition:transform 0.3s;" id="icon-pagos">▼</span>
     </div>
-    <div class="table-responsive">
-    <table class="home-alert-table" style="width:100%; border-collapse:collapse; font-size:13px;">
-        <thead>
-            <tr style="color:#b71c1c;">
-                <th class="home-alert-folio" style="text-align:left; padding:4px 8px;" title="Últimos 4 del folio">Folio</th>
-                <th style="text-align:left; padding:4px 8px;">Cliente</th>
-                <th style="text-align:left; padding:4px 8px;">Día / mes</th>
-                <th style="text-align:left; padding:4px 8px;">Total</th>
-                <th style="text-align:left; padding:4px 8px; white-space:nowrap;">Acción</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for renta in rentas_sin_pago %}
-            <tr style="border-top:1px solid #f48fb1;">
-                <td class="home-alert-folio" style="padding:6px 8px; white-space:nowrap;" title="{{ renta.folio }}">{{ renta.folio|slice:"-4:" }}</td>
-                <td style="padding:6px 8px;">{{ renta.cliente.nombre }}</td>
-                <td style="padding:6px 8px; white-space:nowrap;" title="{{ renta.fecha_renta|date:'d/m/Y' }}">{{ renta.fecha_renta|date:"d/m" }}</td>
-                <td style="padding:6px 8px;">${{ renta.precio_total }}</td>
-                <td style="padding:6px 8px; vertical-align:middle;">
-                    <a href="{% url 'pedidos_semana' %}?q={{ renta.folio }}"
-                       class="home-alert-btn-pago d-inline-block text-center text-nowrap"
-                       style="background:#e53935; color:white; padding:6px 10px;
-                              border-radius:4px; font-size:12px; text-decoration:none;">
-                        <span class="d-inline d-sm-none">Pago</span><span class="d-none d-sm-inline">Registrar pago</span>
-                    </a>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+    <div id="alerta-pagos" style="overflow:hidden; transition:max-height 0.3s ease; max-height:0;">
+        <div class="table-responsive" style="margin-top:12px;">
+            <table class="home-alert-table" style="width:100%; border-collapse:collapse; font-size:13px;">
+                <thead>
+                    <tr style="color:#b71c1c;">
+                        <th style="text-align:left; padding:4px 8px;">Folio</th>
+                        <th style="text-align:left; padding:4px 8px;">Cliente</th>
+                        <th style="text-align:left; padding:4px 8px;">Día / mes</th>
+                        <th style="text-align:left; padding:4px 8px;">Total</th>
+                        <th style="text-align:left; padding:4px 8px;">Acción</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for renta in rentas_sin_pago %}
+                    <tr style="border-top:1px solid #f48fb1;">
+                        <td style="padding:6px 8px; white-space:nowrap;" title="{{ renta.folio }}">{{ renta.folio|slice:"-4:" }}</td>
+                        <td style="padding:6px 8px;">{{ renta.cliente.nombre }}</td>
+                        <td style="padding:6px 8px; white-space:nowrap;">{{ renta.fecha_renta|date:"d/m" }}</td>
+                        <td style="padding:6px 8px;">${{ renta.precio_total }}</td>
+                        <td style="padding:6px 8px;">
+                            <a href="{% url 'pedidos_semana' %}?q={{ renta.folio }}"
+                               style="background:#e53935; color:white; padding:6px 10px;
+                                      border-radius:4px; font-size:12px; text-decoration:none;">
+                                Registrar pago
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
     </div>
 </div>
 {% endif %}
+
 <!-- Tarjetas principales -->
 <div style="display:flex; gap:40px; justify-content:center; flex-wrap:wrap;">
 
@@ -124,12 +137,6 @@
 </div>
 
 <style>
-@media (max-width: 575.98px) {
-    .home-alert-btn-pago {
-        font-size: 11px !important;
-        padding: 6px 10px !important;
-    }
-}
 .main-btn {
     display: inline-block;
     margin-top: 20px;
@@ -146,5 +153,23 @@
     color: #000;
 }
 </style>
+
+{% block extra_js %}
+<script>
+function toggleAlerta(id, header) {
+    const contenido = document.getElementById(id);
+    const iconId = 'icon-' + id.replace('alerta-', '');
+    const icon = document.getElementById(iconId);
+    
+    if (contenido.style.maxHeight === '0px' || contenido.style.maxHeight === '0') {
+        contenido.style.maxHeight = contenido.scrollHeight + 'px';
+        icon.style.transform = 'rotate(180deg)';
+    } else {
+        contenido.style.maxHeight = '0';
+        icon.style.transform = 'rotate(0deg)';
+    }
+}
+</script>
+{% endblock %}
 
 {% endblock %}
