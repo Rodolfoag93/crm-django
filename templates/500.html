@@ -1,0 +1,47 @@
+{% load static %}
+{% extends "core/base.html" %}
+
+{% block title %}Error del servidor - 500{% endblock %}
+
+{% block extra_css %}
+<style>
+    .error-page {
+        min-height: 70vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .error-code {
+        font-size: 8rem;
+        font-weight: 900;
+        line-height: 1;
+        background: linear-gradient(135deg, #e74c3c, #c0392b);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
+    .error-illustration {
+        max-width: 280px;
+        opacity: 0.85;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="error-page">
+    <div class="text-center">
+        <img 
+            src="{% static 'img/img2.jpg' %}" 
+            alt="Perrito triste" 
+            class="error-illustration mb-4"
+        >
+        <div class="error-code">500</div>
+        <h2 class="mt-2 mb-3">Error interno del servidor</h2>
+        <p class="text-muted mb-4 fs-5">
+            Algo salió mal de nuestro lado. Por favor intenta de nuevo en unos minutos o contacta a soporte trota.admin@gmail.com.
+        </p>
+        <a href="/" class="btn btn-danger btn-lg px-5">
+            <i class="bi bi-house-fill me-2"></i> Volver al inicio
+        </a>
+    </div>
+</div>
+{% endblock %}
