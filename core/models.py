@@ -734,3 +734,58 @@ class ListaMaterialEvento(models.Model):
 
     def __str__(self):
         return f"Lista {self.asignacion.renta.folio} - {self.estado}"
+
+# ==================================
+# ASISTENCIA
+# ==================================
+
+class Asistencia(models.Model):
+    TIPO_JORNADA = [
+        ('COMPLETA', 'Jornada completa'),
+        ('MEDIO_TIEMPO', 'Medio tiempo'),
+        ('EVENTO', 'Por evento'),
+    ]
+
+    empleado = models.ForeignKey(
+        Empleado,
+        on_delete=models.CASCADE,
+        related_name='asistencias'
+    )
+
+    fecha = models.DateField()
+    hora_entrada = models.DateTimeField(null=True, blank=True)
+    hora_salida = models.DateTimeField(null=True, blank=True)
+    ubicacion_entrada = models.CharField(max_length=255, blank=True, null=True)
+    ubicacion_salida = models.CharField(max_length=255, blank=True, null=True)
+    tipo_jornada = models.CharField(
+        max_length=20,
+        choices=TIPO_JORNADA,
+        default='COMPLETA'
+    )
+    notas = models.TextField(blank=True, null=True)
+    horas_trabajadas = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True
+    )
+
+    class Meta:
+        unique_together = ('empleado', 'fecha')
+        ordering = ['-fecha']
+        indexes = [
+            models.Index(fields=['empleado', 'fecha']),
+            models.Index(fields=['fecha']),
+        ]
+
+    def calcular_horas(self):
+        if self.hora_entrada and self.hora_salida:
+            diferencia = self.hora_salida - self.hora_entrada
+            self.horas_trabajadas = Decimal(str(round(diferencia.total_seconds() / 3600, 2)))
+
+    def save(self, *args, **kwargs):
+        self.calcular_horas()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.empleado.nombre} - {self.fecha}"
