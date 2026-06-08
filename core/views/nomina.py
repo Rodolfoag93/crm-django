@@ -261,6 +261,10 @@ def crear_horas_extra(request):
                     fecha=horas.semana_fin
                 )
             return redirect(f"{reverse('lista_nomina')}?recibo_horas_extra={horas.id}")
+   return render(request, 'nomina/horas_extra_form.html', {
+        'form': form,
+        'preview': preview,
+    })
 
 
 @login_required
