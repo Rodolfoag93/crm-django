@@ -354,7 +354,7 @@ class Empleado(models.Model):
     activo = models.BooleanField(default=True)
     TIPO_EMPLEADO = [
         ('REPARTIDOR', 'Repartidor'),
-        ('SOCIO', 'Socio'),
+        ('COORDINADOR', 'Coordinador'),
         ('ENCARGADO', 'Encargado de Material'),
     ]
 
