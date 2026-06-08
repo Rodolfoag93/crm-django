@@ -1,68 +1,71 @@
 {% extends "core/base.html" %}
-
 {% block content %}
 <div class="container mt-4 mb-5">
-
   <div class="row justify-content-center">
     <div class="col-lg-6 col-md-8">
-
       <div class="card shadow">
         <div class="card-body">
-
-          <h4 class="mb-4 text-center fw-bold">
-            Registrar horas extra
-          </h4>
-
+          <h4 class="mb-4 text-center fw-bold">Registrar Horas Extra</h4>
           <form method="post">
             {% csrf_token %}
 
             <!-- Empleado -->
             <div class="mb-3 text-center">
               <label class="form-label">Empleado</label>
-              <div class="w-75 mx-auto">
-                {{ form.empleado }}
-              </div>
+              <div class="w-75 mx-auto">{{ form.empleado }}</div>
             </div>
 
             <!-- Semana inicio -->
             <div class="mb-3 text-center">
               <label class="form-label">Inicio de semana</label>
-              <div class="w-50 mx-auto">
-                {{ form.semana_inicio }}
-              </div>
+              <div class="w-50 mx-auto">{{ form.semana_inicio }}</div>
+              <div class="form-text">El sistema calculará automáticamente del lunes al domingo</div>
             </div>
 
-            <!-- Horas trabajadas -->
-            <div class="mb-3 text-center">
-              <label class="form-label">Horas trabajadas</label>
-              <div class="w-50 mx-auto">
-                {{ form.horas_trabajadas }}
-              </div>
-              <div class="form-text">
-                Jornada semanal: 44 hrs · Horas extra se pagan al doble
+            <!-- Preview automático -->
+            {% if preview %}
+            <div class="card bg-light border-success mb-4">
+              <div class="card-body">
+                <h6 class="fw-bold text-success mb-3">📊 Resumen calculado automáticamente</h6>
+                <table class="table table-sm mb-0">
+                  <tr>
+                    <td class="text-muted">Horas trabajadas</td>
+                    <td class="fw-bold text-end">{{ preview.horas_trabajadas }} hrs</td>
+                  </tr>
+                  <tr>
+                    <td class="text-muted">Horas descontadas (eventos)</td>
+                    <td class="fw-bold text-end text-danger">- {{ preview.horas_descontadas }} hrs</td>
+                  </tr>
+                  <tr class="border-top">
+                    <td class="text-muted">Horas computables</td>
+                    <td class="fw-bold text-end">{{ preview.horas_computables }} hrs</td>
+                  </tr>
+                  <tr>
+                    <td class="text-muted">Horas extra</td>
+                    <td class="fw-bold text-end text-success">{{ preview.horas_extra }} hrs</td>
+                  </tr>
+                  <tr class="border-top">
+                    <td class="fw-bold">Total a pagar</td>
+                    <td class="fw-bold text-end text-success fs-5">${{ preview.total_pago }}</td>
+                  </tr>
+                </table>
               </div>
             </div>
+            {% endif %}
 
             <!-- Botones -->
             <div class="d-flex justify-content-between mt-4">
-              <a href="{% url 'lista_horas_extra' %}"
-                 class="btn btn-outline-secondary px-4">
+              <a href="{% url 'lista_horas_extra' %}" class="btn btn-outline-secondary px-4">
                 Cancelar
               </a>
-
-              <button type="submit"
-                      class="btn btn-success px-4">
+              <button type="submit" class="btn btn-success px-4">
                 Guardar
               </button>
             </div>
-
           </form>
-
         </div>
       </div>
-
     </div>
   </div>
-
 </div>
 {% endblock %}
