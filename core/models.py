@@ -347,26 +347,24 @@ class PedidoFinanzas(models.Model):
 # EMPLEADOS Y NÓMINA
 # =============================================
 class Empleado(models.Model):
+    TIPO_EMPLEADO = [
+        ('REPARTIDOR', 'Repartidor'),
+        ('COORDINADOR', 'Coordinador'),
+        ('ENCARGADO', 'Encargado de Material'),
+        ('ANIMADOR', 'Animador'),
+    ]
+    nombre = models.CharField(max_length=100)
     telefono = models.CharField(max_length=20, blank=True)
     correo = models.EmailField(blank=True, null=True)
     sueldo_diario = models.DecimalField(max_digits=8, decimal_places=2)
     comentarios = models.TextField(blank=True, null=True)
     activo = models.BooleanField(default=True)
-    TIPO_EMPLEADO = [
-        ('REPARTIDOR', 'Repartidor'),
-        ('COORDINADOR', 'Coordinador'),
-        ('ENCARGADO', 'Encargado de Material'),
-    ]
-
-    nombre = models.CharField(max_length=100)
-    # ... tus campos actuales
-
     tipo_empleado = models.CharField(
         max_length=20,
         choices=TIPO_EMPLEADO,
         default='REPARTIDOR'
     )
-
+    es_eventual = models.BooleanField(default=False, verbose_name='Empleado eventual')
     user = models.OneToOneField(
         User,
         on_delete=models.SET_NULL,
@@ -378,6 +376,7 @@ class Empleado(models.Model):
     def __str__(self):
         return self.nombre
 
+        
 class Nomina(models.Model):
     empleado = models.ForeignKey(Empleado, on_delete=models.CASCADE)
     fecha_inicio = models.DateField()
