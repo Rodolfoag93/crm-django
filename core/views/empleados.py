@@ -50,25 +50,54 @@ def lista_solicitudes(request):
 
 @login_required
 def aprobar_solicitud(request, solicitud_id):
-    import requests
-    from django.conf import settings
-
     solicitud = get_object_or_404(SolicitudRegistro, id=solicitud_id)
 
     if request.method == 'POST':
-        # Llamar al endpoint de la API internamente
-        from rest_framework.authtoken.models import Token
-        token, _ = Token.objects.get_or_create(user=request.user)
+        if solicitud.estado != 'PENDIENTE':
+            messages.error(request, 'Esta solicitud ya fue procesada.')
+            return redirect('lista_solicitudes')
 
-        response = requests.post(
-            f'http://localhost/v1/solicitudes/{solicitud_id}/aprobar/',
-            headers={'Authorization': f'Token {token.key}'},
+        from django.contrib.auth.models import User
+        from django.utils import timezone as tz
+
+        # Crear usuario
+        username = solicitud.telefono
+        if User.objects.filter(username=username).exists():
+            username = f"{solicitud.telefono}_{solicitud.id}"
+
+        user = User.objects.create(
+            username=username,
+            first_name=solicitud.nombre.split()[0],
+            last_name=' '.join(solicitud.nombre.split()[1:]),
+            email=solicitud.email or '',
+            password=solicitud.password_hash
         )
 
-        if response.status_code == 200:
-            messages.success(request, f'Solicitud de {solicitud.nombre} aprobada correctamente.')
+        # Buscar empleado existente por teléfono
+        empleado = Empleado.objects.filter(telefono=solicitud.telefono).first()
+
+        if empleado:
+            empleado.user = user
+            empleado.save()
         else:
-            messages.error(request, 'Error al aprobar la solicitud.')
+            empleado = Empleado.objects.create(
+                nombre=solicitud.nombre,
+                telefono=solicitud.telefono,
+                correo=solicitud.email or '',
+                tipo_empleado=solicitud.tipo_empleado,
+                sueldo_diario=0,
+                activo=True,
+                user=user
+            )
+
+        # Actualizar solicitud
+        solicitud.estado = 'APROBADA'
+        solicitud.revisada_por = request.user
+        solicitud.fecha_revision = tz.now()
+        solicitud.user_creado = user
+        solicitud.save()
+
+        messages.success(request, f'Solicitud de {solicitud.nombre} aprobada. Usuario {username} creado.')
 
     return redirect('lista_solicitudes')
 
