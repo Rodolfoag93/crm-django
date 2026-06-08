@@ -65,13 +65,14 @@ def aprobar_solicitud(request, solicitud_id):
         if User.objects.filter(username=username).exists():
             username = f"{solicitud.telefono}_{solicitud.id}"
 
-        user = User.objects.create(
+        user = User(
             username=username,
             first_name=solicitud.nombre.split()[0],
             last_name=' '.join(solicitud.nombre.split()[1:]),
             email=solicitud.email or '',
-            password=solicitud.password_hash
         )
+        user.password = solicitud.password_hash  # asigna el hash ya generado sin re-hashear
+        user.save()
 
         # Buscar empleado existente por teléfono
         empleado = Empleado.objects.filter(telefono=solicitud.telefono).first()
