@@ -266,25 +266,59 @@ class SolicitudRegistroViewSet(viewsets.GenericViewSet):
             'empleado_id': empleado.id
         })
 
-    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
-    def rechazar(self, request, pk=None):
-        solicitud = get_object_or_404(SolicitudRegistro, pk=pk)
+    @action(detail=False, methods=['post'])
+    def checkin(self, request):
+        ubicacion = request.data.get('ubicacion', '')
 
-        if solicitud.estado != 'PENDIENTE':
-            return Response({'error': 'Esta solicitud ya fue procesada'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            empleado = request.user.empleado
+        except:
+            empleado_id = request.data.get('empleado_id')
+            if not empleado_id:
+                return Response({'error': 'No tienes un empleado vinculado'}, status=status.HTTP_400_BAD_REQUEST)
+            empleado = get_object_or_404(Empleado, id=empleado_id)
 
-        from django.utils import timezone as tz
+        hoy = timezone.localdate()
+        asistencia, created = Asistencia.objects.get_or_create(
+            empleado=empleado,
+            fecha=hoy,
+            defaults={
+                'hora_entrada': timezone.now(),
+                'ubicacion_entrada': ubicacion,
+            }
+        )
 
-        solicitud.estado = 'RECHAZADA'
-        solicitud.revisada_por = request.user
-        solicitud.fecha_revision = tz.now()
-        solicitud.notas_admin = request.data.get('notas', '')
-        solicitud.save()
+        if not created and asistencia.hora_entrada:
+            return Response({'error': 'Ya registraste tu entrada hoy'}, status=status.HTTP_400_BAD_REQUEST)
 
-        return Response({'mensaje': 'Solicitud rechazada.'})
+        serializer = self.get_serializer(asistencia)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
-    def pendientes(self, request):
-        solicitudes = SolicitudRegistro.objects.filter(estado='PENDIENTE')
-        serializer = SolicitudRegistroSerializer(solicitudes, many=True)
+
+    @action(detail=False, methods=['post'])
+    def checkout(self, request):
+        ubicacion = request.data.get('ubicacion', '')
+
+        try:
+            empleado = request.user.empleado
+        except:
+            empleado_id = request.data.get('empleado_id')
+            if not empleado_id:
+                return Response({'error': 'No tienes un empleado vinculado'}, status=status.HTTP_400_BAD_REQUEST)
+            empleado = get_object_or_404(Empleado, id=empleado_id)
+
+        hoy = timezone.localdate()
+        try:
+            asistencia = Asistencia.objects.get(empleado=empleado, fecha=hoy)
+        except Asistencia.DoesNotExist:
+            return Response({'error': 'No has registrado tu entrada hoy'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if asistencia.hora_salida:
+            return Response({'error': 'Ya registraste tu salida hoy'}, status=status.HTTP_400_BAD_REQUEST)
+
+        asistencia.hora_salida = timezone.now()
+        asistencia.ubicacion_salida = ubicacion
+        asistencia.save()
+
+        serializer = self.get_serializer(asistencia)
         return Response(serializer.data)

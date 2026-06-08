@@ -53,40 +53,38 @@ export default function Asistencia() {
   }
 
   const handleCheckin = async () => {
-    setProcesando(true)
-    setError('')
-    try {
-      const ubicacion = await obtenerUbicacion()
-      const { data } = await api.post('/asistencias/checkin/', {
-        empleado_id: user?.id,
-        ubicacion,
-      })
-      setAsistencia(data)
-      setMensaje('✅ Entrada registrada correctamente')
-    } catch (e: any) {
-      setError(e.response?.data?.error || 'Error al registrar entrada')
-    } finally {
-      setProcesando(false)
+        setProcesando(true)
+        setError('')
+        try {
+        const ubicacion = await obtenerUbicacion()
+        const { data } = await api.post('/asistencias/checkin/', {
+            ubicacion,
+        })
+        setAsistencia(data)
+        setMensaje('✅ Entrada registrada correctamente')
+        } catch (e: any) {
+        setError(e.response?.data?.error || 'Error al registrar entrada')
+        } finally {
+        setProcesando(false)
+        }
     }
-  }
 
-  const handleCheckout = async () => {
-    setProcesando(true)
-    setError('')
-    try {
-      const ubicacion = await obtenerUbicacion()
-      const { data } = await api.post('/asistencias/checkout/', {
-        empleado_id: user?.id,
-        ubicacion,
-      })
-      setAsistencia(data)
-      setMensaje('✅ Salida registrada correctamente')
-    } catch (e: any) {
-      setError(e.response?.data?.error || 'Error al registrar salida')
-    } finally {
-      setProcesando(false)
+    const handleCheckout = async () => {
+        setProcesando(true)
+        setError('')
+        try {
+        const ubicacion = await obtenerUbicacion()
+        const { data } = await api.post('/asistencias/checkout/', {
+            ubicacion,
+        })
+        setAsistencia(data)
+        setMensaje('✅ Salida registrada correctamente')
+        } catch (e: any) {
+        setError(e.response?.data?.error || 'Error al registrar salida')
+        } finally {
+        setProcesando(false)
+        }
     }
-  }
 
   const formatHora = (dt: string | null) => {
     if (!dt) return '--:--'
