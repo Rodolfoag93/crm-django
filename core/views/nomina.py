@@ -211,6 +211,8 @@ def lista_horas_extra(request):
 @login_required
 def crear_horas_extra(request):
     initial = {}
+    preview = None
+
     if request.method == 'GET':
         empleado_id = request.GET.get('empleado')
         inicio = request.GET.get('inicio')
@@ -218,22 +220,47 @@ def crear_horas_extra(request):
             initial['empleado'] = empleado_id
         if inicio:
             initial['semana_inicio'] = inicio
+
+        # Preview automático si tenemos empleado y semana
+        if empleado_id and inicio:
+            try:
+                from core.models import Empleado, HorasExtra
+                from datetime import date
+                empleado = Empleado.objects.get(id=empleado_id)
+                semana_inicio = date.fromisoformat(inicio)
+                # Calcular sin guardar
+                preview_obj = HorasExtra(
+                    empleado=empleado,
+                    semana_inicio=semana_inicio,
+                    semana_fin=semana_inicio + timedelta(days=6)
+                )
+                preview_obj.calcular()
+                preview = {
+                    'horas_trabajadas': preview_obj.horas_trabajadas,
+                    'horas_descontadas': preview_obj.horas_descontadas,
+                    'horas_computables': preview_obj.horas_computables,
+                    'horas_extra': preview_obj.horas_extra,
+                    'total_pago': preview_obj.total_pago,
+                }
+            except Exception:
+                pass
+
         form = HorasExtraForm(initial=initial)
+
     else:
         form = HorasExtraForm(request.POST)
         if form.is_valid():
             horas = form.save(commit=False)
-            horas.pago_hora = Decimal(horas.empleado.sueldo_diario) / Decimal(8)
-            horas.calcular()
+            horas.pago_hora = Decimal('55.0')
             horas.save()
-            Gasto.objects.create(
-                tipo="NOMINA",
-                descripcion=f"Horas extra {horas.empleado} ({horas.semana_inicio} - {horas.semana_fin})",
-                monto=horas.total_pago,
-                fecha=horas.semana_fin
-            )
-            return redirect(f"{reverse('lista_nomina')}?recibo_horas_extra={horas.id}")
-    return render(request, 'nomina/horas_extra_form.html', {'form': form})
+            if horas.total_pago > 0:
+                Gasto.objects.create(
+                    tipo="NOMINA",
+                    descripcion=f"Horas extra {horas.empleado} ({horas.semana_inicio} - {horas.semana_fin})",
+                    monto=horas.total_pago,
+                    fecha=horas.semana_fin
+                )
+            return redirect(f"{reverse('lista_nomina')}?reci
 
 
 @login_required
