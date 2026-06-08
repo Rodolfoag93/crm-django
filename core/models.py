@@ -367,6 +367,14 @@ class Empleado(models.Model):
         default='REPARTIDOR'
     )
 
+    user = models.OneToOneField(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='empleado'
+    )
+
     def __str__(self):
         return self.nombre
 
@@ -836,4 +844,3 @@ class SolicitudRegistro(models.Model):
         ordering = ['-fecha_solicitud']
         verbose_name = "Solicitud de Registro"
         verbose_name_plural = "Solicitudes de Registro"
-        
