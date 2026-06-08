@@ -500,35 +500,78 @@ def calcular_total(renta):
 class HorasExtra(models.Model):
     empleado = models.ForeignKey('Empleado', on_delete=models.CASCADE)
     semana_inicio = models.DateField()
-    semana_fin = models.DateField(editable=False)  # calculado automáticamente
-
-    horas_trabajadas = models.DecimalField(max_digits=5, decimal_places=2)
+    semana_fin = models.DateField(editable=False)
+    horas_trabajadas = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    horas_descontadas = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    horas_computables = models.DecimalField(max_digits=5, decimal_places=2, default=0)
     horas_extra = models.DecimalField(max_digits=5, decimal_places=2, default=0)
-
     pago_hora = models.DecimalField(max_digits=8, decimal_places=2, default=55)
     total_pago = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-
     pagado = models.BooleanField(default=False)
+    fecha_pago = models.DateField(null=True, blank=True)
+
+    def calcular_horas_semana(self):
+        """Suma horas trabajadas de Asistencia en el rango de la semana."""
+        from django.db.models import Sum
+        resultado = Asistencia.objects.filter(
+            empleado=self.empleado,
+            fecha__range=(self.semana_inicio, self.semana_fin)
+        ).aggregate(total=Sum('horas_trabajadas'))
+        return Decimal(str(resultado['total'] or 0))
+
+    def calcular_descuentos_semana(self):
+        """Suma horas a descontar por eventos especiales en la semana."""
+        from django.db.models import Sum
+        resultado = PagoExtraNomina.objects.filter(
+            nomina__empleado=self.empleado,
+            nomina__fecha_inicio__range=(self.semana_inicio, self.semana_fin),
+            tipo__descuenta_horas=True
+        ).aggregate(total=Sum('tipo__horas_a_descontar'))
+        return Decimal(str(resultado['total'] or 0))
 
     def calcular(self):
-        JORNADA = Decimal('43.0')  # jornada mínima semanal
-        PAGO_HORA = Decimal('55.0')  # pago fijo por hora extra
+        PAGO_HORA = Decimal('55.0')
 
-        # Calcular horas extra (solo si superan las 43)
-        extra = Decimal(self.horas_trabajadas) - JORNADA
+        # Sumar horas reales de asistencia
+        self.horas_trabajadas = self.calcular_horas_semana()
+
+        # Calcular descuentos por eventos especiales
+        self.horas_descontadas = self.calcular_descuentos_semana()
+
+        # Horas computables = reales - descuentos
+        self.horas_computables = max(
+            Decimal('0.0'),
+            self.horas_trabajadas - self.horas_descontadas
+        )
+
+        # Jornada según tipo de empleado
+        if self.empleado.es_eventual:
+            dias_trabajados = Asistencia.objects.filter(
+                empleado=self.empleado,
+                fecha__range=(self.semana_inicio, self.semana_fin),
+                hora_entrada__isnull=False
+            ).count()
+            jornada = Decimal(str(dias_trabajados * 8))
+        else:
+            jornada = Decimal('43.0')
+
+        # Horas extra = lo que supera la jornada
+        extra = self.horas_computables - jornada
         self.horas_extra = extra if extra > 0 else Decimal('0.0')
 
-        # Total a pagar = horas_extra * 55
-        self.total_pago = (self.horas_extra * PAGO_HORA).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+        # Total a pagar
+        self.total_pago = (self.horas_extra * PAGO_HORA).quantize(
+            Decimal('0.01'), rounding=ROUND_HALF_UP
+        )
 
     def save(self, *args, **kwargs):
-        # Calcular semana_fin automáticamente
         if not self.semana_fin:
             self.semana_fin = self.semana_inicio + timedelta(days=6)
-
-        # Calcular horas_extra y total_pago
         self.calcular()
         super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.empleado} | {self.semana_inicio} - {self.semana_fin}"
 
 
 class TipoPagoExtra(models.Model):
