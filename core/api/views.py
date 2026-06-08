@@ -239,18 +239,18 @@ class SolicitudRegistroViewSet(viewsets.GenericViewSet):
 
         if empleado:
         # Vincular usuario al empleado existente
-             empleado.user = user
+            empleado.user = user
             empleado.save()
         else:
          # Crear empleado nuevo
             empleado = Empleado.objects.create(
-            nombre=solicitud.nombre,
-            telefono=solicitud.telefono,
-            correo=solicitud.email or '',
-            tipo_empleado=solicitud.tipo_empleado,
-            sueldo_diario=0,
-            activo=True,
-            user=user
+                nombre=solicitud.nombre,
+                telefono=solicitud.telefono,
+                correo=solicitud.email or '',
+                tipo_empleado=solicitud.tipo_empleado,
+                sueldo_diario=0,
+                activo=True,
+                user=user
         )
 
         # Actualizar solicitud
