@@ -376,7 +376,7 @@ class Empleado(models.Model):
     def __str__(self):
         return self.nombre
 
-        
+
 class Nomina(models.Model):
     empleado = models.ForeignKey(Empleado, on_delete=models.CASCADE)
     fecha_inicio = models.DateField()
@@ -530,12 +530,15 @@ class HorasExtra(models.Model):
         self.calcular()
         super().save(*args, **kwargs)
 
+
 class TipoPagoExtra(models.Model):
     nombre = models.CharField(max_length=100)
     monto_default = models.DecimalField(
         max_digits=10,
         decimal_places=2
     )
+    descuenta_horas = models.BooleanField(default=False, verbose_name='Descuenta horas del empleado')
+    horas_a_descontar = models.DecimalField(max_digits=4, decimal_places=1, default=4.0, verbose_name='Horas a descontar')
 
     def __str__(self):
         return self.nombre
