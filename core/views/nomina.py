@@ -260,7 +260,7 @@ def crear_horas_extra(request):
                     monto=horas.total_pago,
                     fecha=horas.semana_fin
                 )
-            return redirect(f"{reverse('lista_nomina')}?reci
+            return redirect(f"{reverse('lista_nomina')}?recibo_horas_extra={horas.id}")
 
 
 @login_required
