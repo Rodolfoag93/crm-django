@@ -3,6 +3,7 @@ from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
 from core.models import Empleado, SolicitudRegistro
 from core.forms import EmpleadoForm
+from django.contrib import messages
 
 
 @login_required
