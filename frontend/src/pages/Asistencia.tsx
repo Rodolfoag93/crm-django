@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../lib/api.ts'
-import { useAuthStore } from '../stores/authStore'
+
 
 interface AsistenciaData {
   id: number
@@ -15,7 +15,6 @@ interface AsistenciaData {
 
 export default function Asistencia() {
   const navigate = useNavigate()
-  const { user } = useAuthStore()
   const [asistencia, setAsistencia] = useState<AsistenciaData | null>(null)
   const [loading, setLoading] = useState(true)
   const [procesando, setProcesando] = useState(false)
@@ -29,7 +28,10 @@ export default function Asistencia() {
   const fetchAsistenciaHoy = async () => {
     try {
       const { data } = await api.get('/asistencias/hoy/')
-      if (data.results?.length > 0) {
+      // El endpoint devuelve array directo, no paginado
+      if (Array.isArray(data) && data.length > 0) {
+        setAsistencia(data[0])
+      } else if (data.results?.length > 0) {
         setAsistencia(data.results[0])
       }
     } catch {
