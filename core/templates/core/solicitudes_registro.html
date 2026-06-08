@@ -1,0 +1,72 @@
+{% extends 'core/base.html' %}
+{% block title %}Solicitudes de Registro{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <h2 class="mb-4">
+        <i class="bi bi-person-plus"></i> Solicitudes de Registro
+    </h2>
+
+    {% if solicitudes %}
+    <div class="table-responsive">
+        <table class="table table-hover">
+            <thead class="table-dark">
+                <tr>
+                    <th>Nombre</th>
+                    <th>Teléfono</th>
+                    <th>Rol</th>
+                    <th>Fecha</th>
+                    <th>Estado</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for solicitud in solicitudes %}
+                <tr>
+                    <td>{{ solicitud.nombre }}</td>
+                    <td>{{ solicitud.telefono }}</td>
+                    <td>{{ solicitud.get_tipo_empleado_display }}</td>
+                    <td>{{ solicitud.fecha_solicitud|date:"d/m/Y H:i" }}</td>
+                    <td>
+                        {% if solicitud.estado == 'PENDIENTE' %}
+                            <span class="badge bg-warning text-dark">Pendiente</span>
+                        {% elif solicitud.estado == 'APROBADA' %}
+                            <span class="badge bg-success">Aprobada</span>
+                        {% else %}
+                            <span class="badge bg-danger">Rechazada</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if solicitud.estado == 'PENDIENTE' %}
+                        <form method="post" action="{% url 'aprobar_solicitud' solicitud.id %}" class="d-inline">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-success btn-sm"
+                                onclick="return confirm('¿Aprobar solicitud de {{ solicitud.nombre }}?')">
+                                ✅ Aprobar
+                            </button>
+                        </form>
+                        <form method="post" action="{% url 'rechazar_solicitud' solicitud.id %}" class="d-inline">
+                            {% csrf_token %}
+                            <input type="hidden" name="notas" value="">
+                            <button type="submit" class="btn btn-danger btn-sm"
+                                onclick="return confirm('¿Rechazar solicitud de {{ solicitud.nombre }}?')">
+                                ❌ Rechazar
+                            </button>
+                        </form>
+                        {% endif %}
+                        {% if solicitud.estado == 'APROBADA' and solicitud.user_creado %}
+                            <small class="text-muted">Usuario: {{ solicitud.user_creado.username }}</small>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="alert alert-info">
+        No hay solicitudes de registro.
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

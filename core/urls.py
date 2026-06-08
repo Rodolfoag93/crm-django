@@ -102,6 +102,11 @@ urlpatterns = [
     path('empleados/nuevo/', views.nuevo_empleado, name='nuevo_empleado'),
     path('empleados/<int:pk>/editar/', views.editar_empleado, name='editar_empleado'),
 
+    # ─── Solicitudes de registro ──────────────────────────────────────────
+    path('empleados/solicitudes/', views.lista_solicitudes, name='lista_solicitudes'),
+    path('empleados/solicitudes/<int:solicitud_id>/aprobar/', views.aprobar_solicitud, name='aprobar_solicitud'),
+    path('empleados/solicitudes/<int:solicitud_id>/rechazar/', views.rechazar_solicitud, name='rechazar_solicitud'),
+
     # ─── Nómina ──────────────────────────────────────────────────────
     path('nomina/', views.lista_nomina, name='lista_nomina'),
     path('nomina/nueva/', views.nueva_nomina, name='nueva_nomina'),
