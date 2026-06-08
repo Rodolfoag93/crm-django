@@ -78,9 +78,18 @@ class EmpleadoViewSet(viewsets.ModelViewSet):
 
 
 class NominaViewSet(viewsets.ModelViewSet):
-    queryset = Nomina.objects.select_related('empleado').order_by('-fecha_inicio')
     serializer_class = NominaSerializer
     permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.is_staff or user.is_superuser:
+            return Nomina.objects.select_related('empleado').order_by('-fecha_inicio')
+        try:
+            empleado = user.empleado
+            return Nomina.objects.filter(empleado=empleado).order_by('-fecha_inicio')
+        except:
+            return Nomina.objects.none()
 
 
 class GastoViewSet(viewsets.ModelViewSet):
@@ -227,12 +236,13 @@ class SolicitudRegistroViewSet(viewsets.GenericViewSet):
 
         # Crear empleado
         empleado = Empleado.objects.create(
-            nombre=solicitud.nombre,
-            telefono=solicitud.telefono,
+             nombre=solicitud.nombre,
+             telefono=solicitud.telefono,
             correo=solicitud.email or '',
             tipo_empleado=solicitud.tipo_empleado,
             sueldo_diario=0,
-            activo=True
+            activo=True,
+            user=user  # ← vincular aquí
         )
 
         # Actualizar solicitud
