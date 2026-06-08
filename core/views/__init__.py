@@ -86,6 +86,9 @@ from core.views.empleados import (
     lista_empleados,
     nuevo_empleado,
     editar_empleado,
+    lista_solicitudes,
+    aprobar_solicitud,
+    rechazar_solicitud,
 )
 
 # ── Nómina ────────────────────────────────────────────────────────────
