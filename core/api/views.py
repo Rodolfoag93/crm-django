@@ -137,17 +137,19 @@ class AsistenciaViewSet(viewsets.ModelViewSet):
             return Asistencia.objects.filter(empleado=empleado)
         except:
             return Asistencia.objects.none()
-
     @action(detail=False, methods=['post'])
     def checkin(self, request):
-        empleado_id = request.data.get('empleado_id')
         ubicacion = request.data.get('ubicacion', '')
-
         try:
-            empleado = Empleado.objects.get(id=empleado_id)
-        except Empleado.DoesNotExist:
-            return Response({'error': 'Empleado no encontrado'}, status=status.HTTP_404_NOT_FOUND)
-
+            empleado = request.user.empleado
+        except Exception:
+            empleado_id = request.data.get('empleado_id')
+            if not empleado_id:
+                return Response({'error': 'Empleado no encontrado'}, status=status.HTTP_404_NOT_FOUND)
+            try:
+                empleado = Empleado.objects.get(id=empleado_id)
+            except Empleado.DoesNotExist:
+                return Response({'error': 'Empleado no encontrado'}, status=status.HTTP_404_NOT_FOUND)
         hoy = timezone.localdate()
         asistencia, created = Asistencia.objects.get_or_create(
             empleado=empleado,
@@ -157,36 +159,34 @@ class AsistenciaViewSet(viewsets.ModelViewSet):
                 'ubicacion_entrada': ubicacion,
             }
         )
-
         if not created and asistencia.hora_entrada:
             return Response({'error': 'Ya registraste tu entrada hoy'}, status=status.HTTP_400_BAD_REQUEST)
-
         serializer = self.get_serializer(asistencia)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
     @action(detail=False, methods=['post'])
     def checkout(self, request):
-        empleado_id = request.data.get('empleado_id')
         ubicacion = request.data.get('ubicacion', '')
-
         try:
-            empleado = Empleado.objects.get(id=empleado_id)
-        except Empleado.DoesNotExist:
-            return Response({'error': 'Empleado no encontrado'}, status=status.HTTP_404_NOT_FOUND)
-
+            empleado = request.user.empleado
+        except Exception:
+            empleado_id = request.data.get('empleado_id')
+            if not empleado_id:
+                return Response({'error': 'Empleado no encontrado'}, status=status.HTTP_404_NOT_FOUND)
+            try:
+                empleado = Empleado.objects.get(id=empleado_id)
+            except Empleado.DoesNotExist:
+                return Response({'error': 'Empleado no encontrado'}, status=status.HTTP_404_NOT_FOUND)
         hoy = timezone.localdate()
         try:
             asistencia = Asistencia.objects.get(empleado=empleado, fecha=hoy)
         except Asistencia.DoesNotExist:
             return Response({'error': 'No has registrado tu entrada hoy'}, status=status.HTTP_400_BAD_REQUEST)
-
         if asistencia.hora_salida:
             return Response({'error': 'Ya registraste tu salida hoy'}, status=status.HTTP_400_BAD_REQUEST)
-
         asistencia.hora_salida = timezone.now()
         asistencia.ubicacion_salida = ubicacion
         asistencia.save()
-
         serializer = self.get_serializer(asistencia)
         return Response(serializer.data)
 
