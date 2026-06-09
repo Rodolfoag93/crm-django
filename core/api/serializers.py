@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from core.models import (
     Cliente, Producto, Renta, RentaProducto,
-    Empleado, Nomina, Gasto, MovimientoContable, Asistencia, SolicitudRegistro
+    Empleado, Nomina, Gasto, MovimientoContable, Asistencia, SolicitudRegistro, HorasExtra
 )
 from django.contrib.auth.hashers import make_password
 
@@ -92,3 +92,21 @@ class SolicitudRegistroSerializer(serializers.ModelSerializer):
         password = validated_data.pop('password')
         validated_data['password_hash'] = make_password(password)
         return super().create(validated_data)
+
+class HorasExtraSerializer(serializers.ModelSerializer):
+    empleado_nombre = serializers.CharField(source='empleado.nombre', read_only=True)
+    es_eventual = serializers.BooleanField(source='empleado.es_eventual', read_only=True)
+
+    class Meta:
+        model = HorasExtra
+        fields = [
+            'id', 'empleado', 'empleado_nombre', 'es_eventual',
+            'semana_inicio', 'semana_fin',
+            'horas_trabajadas', 'horas_descontadas', 'horas_computables',
+            'horas_extra', 'pago_hora', 'total_pago',
+            'pagado', 'fecha_pago'
+        ]
+        read_only_fields = [
+            'semana_fin', 'horas_trabajadas', 'horas_descontadas',
+            'horas_computables', 'horas_extra', 'total_pago'
+        ]

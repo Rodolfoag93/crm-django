@@ -10,12 +10,12 @@ from datetime import timedelta
 
 from core.models import (
     Cliente, Producto, Renta, Empleado,
-    Nomina, Gasto, MovimientoContable, Asistencia, SolicitudRegistro
+    Nomina, Gasto, MovimientoContable, Asistencia, SolicitudRegistro, HorasExtra
 )
 from core.api.serializers import (
     ClienteSerializer, ProductoSerializer, RentaSerializer,
     EmpleadoSerializer, NominaSerializer, GastoSerializer,
-    MovimientoContableSerializer, AsistenciaSerializer, SolicitudRegistroSerializer
+    MovimientoContableSerializer, AsistenciaSerializer, SolicitudRegistroSerializer, HorasExtraSerializer
 )
 
 
@@ -196,6 +196,52 @@ class AsistenciaViewSet(viewsets.ModelViewSet):
         asistencias = self.get_queryset().filter(fecha=hoy)
         serializer = self.get_serializer(asistencias, many=True)
         return Response(serializer.data)
+
+class HorasExtraViewSet(viewsets.ReadOnlyModelViewSet):
+    serializer_class = HorasExtraSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.is_staff or user.is_superuser:
+            return HorasExtra.objects.select_related('empleado').order_by('-semana_inicio')
+        try:
+            empleado = user.empleado
+            return HorasExtra.objects.filter(empleado=empleado).order_by('-semana_inicio')
+        except:
+            return HorasExtra.objects.none()
+
+    @action(detail=False, methods=['get'])
+    def semana_actual(self, request):
+        """Devuelve el resumen de horas de la semana actual sin guardar."""
+        from datetime import date, timedelta
+        from core.models import Empleado
+        try:
+            empleado = request.user.empleado
+        except:
+            return Response({'error': 'Empleado no encontrado'}, status=status.HTTP_404_NOT_FOUND)
+
+        hoy = date.today()
+        lunes = hoy - timedelta(days=hoy.weekday())
+        domingo = lunes + timedelta(days=6)
+
+        preview = HorasExtra(
+            empleado=empleado,
+            semana_inicio=lunes,
+            semana_fin=domingo
+        )
+        preview.calcular()
+
+        return Response({
+            'semana_inicio': lunes,
+            'semana_fin': domingo,
+            'horas_trabajadas': preview.horas_trabajadas,
+            'horas_descontadas': preview.horas_descontadas,
+            'horas_computables': preview.horas_computables,
+            'horas_extra': preview.horas_extra,
+            'total_pago': preview.total_pago,
+            'es_eventual': empleado.es_eventual,
+        })
 
 class SolicitudRegistroViewSet(viewsets.GenericViewSet):
     serializer_class = SolicitudRegistroSerializer

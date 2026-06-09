@@ -2,7 +2,7 @@ from rest_framework.routers import DefaultRouter
 from core.api.views import (
     ClienteViewSet, ProductoViewSet, RentaViewSet,
     EmpleadoViewSet, NominaViewSet, GastoViewSet,
-    MovimientoContableViewSet, AsistenciaViewSet, SolicitudRegistroViewSet, me
+    MovimientoContableViewSet, AsistenciaViewSet, SolicitudRegistroViewSet, HorasExtraViewSet, me
 )
 from django.urls import path
 
@@ -16,6 +16,7 @@ router.register(r'gastos', GastoViewSet)
 router.register(r'movimientos', MovimientoContableViewSet)
 router.register(r'asistencias', AsistenciaViewSet, basename='asistencia')
 router.register(r'solicitudes', SolicitudRegistroViewSet, basename='solicitud')
+router.register(r'horas-extra', HorasExtraViewSet, basename='horas-extra')
 
 urlpatterns = router.urls + [
     path('auth/me/', me, name='auth-me'),
