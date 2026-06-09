@@ -8,6 +8,9 @@
 
     <a href="{% url 'pedidos_semana' %}" class="admin-card">Contabilidad</a>
     <a href="{% url 'lista_empleados' %}" class="admin-card">Empleados</a>
+    <a href="{% url 'lista_solicitudes' %}" class="admin-card admin-card--solicitudes">
+        📋 Solicitudes
+    </a>
     <a href="{% url 'lista_nomina' %}" class="admin-card">Nómina</a>
     <a href="{% url 'lista_gastos' %}" class="admin-card">Gastos</a>
     <a href="{% url 'lista_compras' %}" class="admin-card">Compras</a>
@@ -63,6 +66,13 @@
 }
 .admin-card--material:hover{
     background:#004d40;
+}
+
+.admin-card--solicitudes{
+    background:#1565C0;
+}
+.admin-card--solicitudes:hover{
+    background:#0D47A1;
 }
 </style>
 
