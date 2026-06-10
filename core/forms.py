@@ -139,7 +139,7 @@ class NominaForm(forms.ModelForm):
 class HorasExtraForm(forms.ModelForm):
     class Meta:
         model = HorasExtra
-        fields = ['empleado', 'semana_inicio', 'horas_trabajadas']
+        fields = ['empleado', 'semana_inicio']
 
 class GastoForm(forms.ModelForm):
     class Meta:
