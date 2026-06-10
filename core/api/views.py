@@ -111,6 +111,18 @@ def me(request):
     user = request.user
     grupos = list(user.groups.values_list('name', flat=True))
 
+    empleado_data = {}
+    try:
+        empleado = user.empleado
+        empleado_data = {
+            'empleado_id': empleado.id,
+            'tipo_empleado': empleado.tipo_empleado,
+            'es_eventual': empleado.es_eventual,
+            'sueldo_diario': str(empleado.sueldo_diario),
+        }
+    except Exception:
+        pass
+
     return Response({
         'id': user.id,
         'username': user.username,
@@ -121,6 +133,7 @@ def me(request):
         'es_coordinador': 'Coordinador' in grupos,
         'es_cargador': 'cargador' in grupos or 'Cargador' in grupos,
         'es_encargado_material': 'Encargado Material' in grupos,
+        **empleado_data,
     })
 
 class AsistenciaViewSet(viewsets.ModelViewSet):
