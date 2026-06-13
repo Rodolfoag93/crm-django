@@ -325,7 +325,3 @@ def api_confirmar_recogida(request, parada_id):
     parada.renta.save()
 
     return Response({'ok': True, 'mensaje': 'Recogida confirmada.'})
-Guarda y avísame.
-
-
-Claude Fable 5 is currently unavailable.
