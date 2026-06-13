@@ -174,7 +174,8 @@ class Renta(models.Model):
             models.Index(fields=['estado_entrega']),
             models.Index(fields=['cliente']),
         ]
-
+    evento_google_id = models.CharField(max_length=200, blank=True, null=True)
+    
     def save(self, *args, **kwargs):
         # Generar folio automático si no existe
         if not self.folio:
