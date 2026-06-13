@@ -420,7 +420,7 @@ def push_desuscribir(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([AllowAny])
 def push_vapid_key(request):
     """Devuelve la clave pública VAPID para el cliente."""
     return Response({'vapid_public_key': VAPID_PUBLIC_KEY})
