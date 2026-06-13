@@ -32,7 +32,7 @@ export default function RentasHoy() {
   const [busqueda, setBusqueda] = useState('')
 
   useEffect(() => {
-    api.get('/rentas/hoy/')
+    api.get('/rentas-hoy/')
       .then(res => setRentas(res.data))
       .catch(console.error)
       .finally(() => setLoading(false))
