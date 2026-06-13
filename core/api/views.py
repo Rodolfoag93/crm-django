@@ -509,3 +509,53 @@ def api_marcar_limpieza(request, producto_id):
         'ok': True,
         'fecha_ultimo_mantenimiento': str(mant.fecha_ultimo_mantenimiento),
     })
+
+# ── Dashboard Admin ────────────────────────────────────────────────────────────
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def api_dashboard_admin(request):
+    """Resumen del día para el admin en la PWA."""
+    if not request.user.is_staff:
+        return Response({'error': 'No autorizado.'}, status=403)
+
+    from core.models import Renta, Asistencia, SolicitudRegistro, Ruta
+    from datetime import date
+    hoy = date.today()
+
+    # Pedidos del día
+    rentas_hoy = Renta.objects.filter(fecha_renta=hoy, status='ACTIVO')
+    pedidos_por_enviar = rentas_hoy.filter(estado_entrega='PENDIENTE').count()
+    pedidos_enviados = rentas_hoy.filter(estado_entrega='ENTREGADO').count()
+    pedidos_total = rentas_hoy.count()
+
+    # Rutas del día
+    rutas_hoy = Ruta.objects.filter(fecha=hoy)
+    rutas_pendientes = rutas_hoy.filter(estado='pendiente').count()
+    rutas_en_camino = rutas_hoy.filter(estado='en_camino').count()
+
+    # Asistencia
+    asistencias_hoy = Asistencia.objects.filter(fecha=hoy)
+    con_entrada = asistencias_hoy.filter(hora_entrada__isnull=False).count()
+    con_salida = asistencias_hoy.filter(hora_salida__isnull=False).count()
+
+    # Solicitudes pendientes
+    solicitudes_pendientes = SolicitudRegistro.objects.filter(estado='PENDIENTE').count()
+
+    return Response({
+        'pedidos': {
+            'total': pedidos_total,
+            'por_enviar': pedidos_por_enviar,
+            'enviados': pedidos_enviados,
+        },
+        'rutas': {
+            'total': rutas_hoy.count(),
+            'pendientes': rutas_pendientes,
+            'en_camino': rutas_en_camino,
+        },
+        'asistencia': {
+            'con_entrada': con_entrada,
+            'con_salida': con_salida,
+        },
+        'solicitudes_pendientes': solicitudes_pendientes,
+    })
