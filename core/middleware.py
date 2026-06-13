@@ -19,7 +19,7 @@ class SessionExpiradaMiddleware:
                 for url in urls_publicas
             )
             if not es_publica:
-                if request.method == 'POST':
+                if request.method == 'POST' and hasattr(request, '_messages'):
                     messages.warning(request, 'Tu sesión expiró. Por favor inicia sesión de nuevo.')
                 return redirect('/')
 
