@@ -1,0 +1,94 @@
+{% extends 'core/base.html' %}
+{% block content %}
+<div class="container mt-4">
+
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>📦 Recogidas programadas</h2>
+    <a href="{% url 'lista_rutas' %}" class="btn btn-outline-secondary btn-sm">← Volver a rutas</a>
+  </div>
+
+  <!-- Filtro por fecha -->
+  <form method="get" class="d-flex gap-2 mb-4">
+    <input type="date" name="fecha" class="form-control" style="max-width: 200px;"
+           value="{{ fecha_filtro|default:'' }}">
+    <button type="submit" class="btn btn-outline-primary">Filtrar</button>
+    {% if fecha_filtro %}
+    <a href="{% url 'lista_recogidas' %}" class="btn btn-outline-secondary">Limpiar</a>
+    {% endif %}
+  </form>
+
+  {% if recogidas %}
+  <div class="row g-3">
+    {% for recogida in recogidas %}
+    <div class="col-12">
+      <div class="card shadow-sm">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-start">
+
+            <div>
+              <h6 class="fw-bold mb-1">
+                {{ recogida.ruta_renta_entrega.renta.cliente.nombre }}
+                <span class="text-muted fw-normal small ms-2">
+                  Folio: {{ recogida.ruta_renta_entrega.renta.folio }}
+                </span>
+              </h6>
+
+              <p class="mb-1 text-muted small">
+                📍 {{ recogida.ruta_renta_entrega.renta.calle }},
+                   {{ recogida.ruta_renta_entrega.renta.colonia }},
+                   {{ recogida.ruta_renta_entrega.renta.ciudad }}
+              </p>
+
+              <p class="mb-1">
+                📅 <strong>{{ recogida.fecha_recogida }}</strong>
+                &nbsp;
+                🕐
+                {% if recogida.tipo_horario == 'rango' %}
+                  {{ recogida.hora_inicio }} – {{ recogida.hora_fin }}
+                {% else %}
+                  {{ recogida.hora_inicio }} (hora fija)
+                {% endif %}
+              </p>
+
+              {% if recogida.notas %}
+              <p class="mb-0 text-muted small">📝 {{ recogida.notas }}</p>
+              {% endif %}
+
+              <!-- Ruta de entrega original -->
+              <p class="mb-0 mt-2 small">
+                Entregado en ruta:
+                <a href="{% url 'detalle_ruta' recogida.ruta_renta_entrega.ruta.id %}">
+                  {{ recogida.ruta_renta_entrega.ruta.nombre }}
+                </a>
+              </p>
+            </div>
+
+            <div class="text-end">
+              {% if recogida.fecha_recogida == today %}
+              <span class="badge bg-warning text-dark">Hoy</span>
+              {% elif recogida.fecha_recogida < today %}
+              <span class="badge bg-danger">Vencida</span>
+              {% else %}
+              <span class="badge bg-secondary">Próxima</span>
+              {% endif %}
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  {% else %}
+  <div class="alert alert-info">
+    {% if fecha_filtro %}
+      No hay recogidas programadas para {{ fecha_filtro }}.
+    {% else %}
+      No hay recogidas programadas.
+    {% endif %}
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

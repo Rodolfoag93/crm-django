@@ -1,0 +1,76 @@
+{% extends 'core/base.html' %}
+{% block content %}
+<div class="container mt-4">
+
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>Rutas de entrega</h2>
+    <div class="d-flex gap-2">
+      <a href="{% url 'lista_recogidas' %}" class="btn btn-outline-secondary">📦 Recogidas programadas</a>
+      <a href="{% url 'crear_ruta' %}" class="btn btn-primary">+ Nueva ruta</a>
+    </div>
+  </div>
+
+  {% if rutas %}
+  <div class="row g-3">
+    {% for ruta in rutas %}
+    <div class="col-12">
+      <div class="card shadow-sm">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-start">
+
+            <div>
+              <h5 class="mb-1">
+                {{ ruta.nombre }}
+                <span class="badge ms-2
+                  {% if ruta.tipo == 'entrega' %}bg-primary
+                  {% else %}bg-warning text-dark{% endif %}">
+                  {{ ruta.get_tipo_display }}
+                </span>
+              </h5>
+              <p class="text-muted mb-1">📅 {{ ruta.fecha }}</p>
+
+              {% with lider=ruta.empleados.filter(es_lider=True).first %}
+              {% endwith %}
+
+              <p class="mb-1">
+                👥
+                {% for re in ruta.empleados.all %}
+                  <span class="badge bg-light text-dark border">
+                    {% if re.es_lider %}⭐{% endif %}
+                    {{ re.empleado.nombre }}
+                  </span>
+                {% empty %}
+                  <span class="text-muted">Sin empleados asignados</span>
+                {% endfor %}
+              </p>
+
+              <p class="mb-0">
+                🛑 Paradas: <strong>{{ ruta.paradas.count }}</strong>
+              </p>
+            </div>
+
+            <div class="text-end">
+              <span class="badge fs-6
+                {% if ruta.estado == 'pendiente' %}bg-secondary
+                {% elif ruta.estado == 'en_camino' %}bg-info text-dark
+                {% else %}bg-success{% endif %}">
+                {{ ruta.get_estado_display }}
+              </span>
+              <div class="mt-2">
+                <a href="{% url 'detalle_ruta' ruta.id %}" class="btn btn-sm btn-outline-primary">Ver detalle</a>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  {% else %}
+  <div class="alert alert-info">No hay rutas registradas aún.</div>
+  {% endif %}
+
+</div>
+{% endblock %}
