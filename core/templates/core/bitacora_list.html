@@ -1,75 +1,138 @@
 {% extends 'core/base.html' %}
 {% block content %}
-<h3>Bitácora de Mantenimiento</h3>
+<div class="container mt-4">
 
-<form method="get" class="mb-3">
-  <input
-    type="text"
-    name="q"
-    placeholder="Buscar producto..."
-    value="{{ q }}"
-  >
-  <button type="submit" class="btn btn-primary btn-sm">Buscar</button>
-</form>
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h3>🔧 Bitácora de Mantenimiento — Brincolines</h3>
+  </div>
 
-<table class="table table-striped">
-  <thead>
-    <tr>
-      <th>Producto</th>
-      <th>Última Renta</th>
-      <th>Último Mantenimiento</th>
-      <th>Acción</th>
-    </tr>
-  </thead>
-  <tbody>
-    {% for b in bitacoras %}
-    <tr>
-      <td>{{ b.producto.nombre }}</td>
-      <td>
-        {% if b.ultima_renta %}
-          {{ b.ultima_renta }}
-        {% else %}
-          N/A
-        {% endif %}
-      </td>
-      <td>
-        {% if b.fecha_ultimo_mantenimiento %}
-          {{ b.fecha_ultimo_mantenimiento }}
-        {% else %}
-          N/A
-        {% endif %}
-      </td>
-      <td>
-        <button class="btn btn-sm btn-success marcar" data-id="{{ b.producto.id }}">
-          Marcar mantenimiento
-        </button>
-      </td>
-    </tr>
-    {% endfor %}
-  </tbody>
-</table>
+  <!-- Filtros -->
+  <form method="get" class="d-flex gap-2 mb-4 flex-wrap">
+    <input type="text" name="q" placeholder="Buscar brincolin..." value="{{ q }}"
+           class="form-control" style="max-width:220px;">
+    <select name="estado" class="form-select" style="max-width:160px;">
+      <option value="" {% if not estado %}selected{% endif %}>Todos</option>
+      <option value="sucio" {% if estado == 'sucio' %}selected{% endif %}>🔴 Necesitan limpieza</option>
+      <option value="limpio" {% if estado == 'limpio' %}selected{% endif %}>🟢 Limpios</option>
+    </select>
+    <button type="submit" class="btn btn-primary">Filtrar</button>
+    {% if q or estado %}
+    <a href="{% url 'bitacora_list' %}" class="btn btn-outline-secondary">Limpiar</a>
+    {% endif %}
+  </form>
+
+  <!-- Tabla -->
+  <div class="card shadow-sm">
+    <div class="table-responsive">
+      <table class="table table-hover mb-0">
+        <thead class="table-dark">
+          <tr>
+            <th>Brincolin</th>
+            <th>Próxima renta</th>
+            <th>Última renta</th>
+            <th>Última limpieza</th>
+            <th>Estado</th>
+            <th>Acción</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for b in bitacoras %}
+          <tr class="{% if b.necesita_limpieza %}table-warning{% endif %}">
+            <td><strong>{{ b.producto.nombre }}</strong></td>
+            <td>
+              {% if b.proxima_renta %}
+                <span class="badge bg-info text-dark">📅 {{ b.proxima_renta }}</span>
+              {% else %}
+                <span class="text-muted">Sin renta próxima</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if b.ultima_renta %}{{ b.ultima_renta }}{% else %}<span class="text-muted">N/A</span>{% endif %}
+            </td>
+            <td>
+              {% if b.fecha_ultimo_mantenimiento %}
+                {{ b.fecha_ultimo_mantenimiento }}
+              {% else %}
+                <span class="text-muted">Sin registro</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if b.necesita_limpieza %}
+                <span class="badge bg-danger">🔴 Necesita limpieza</span>
+              {% else %}
+                <span class="badge bg-success">🟢 Limpio</span>
+              {% endif %}
+            </td>
+            <td>
+              <button class="btn btn-sm btn-outline-success marcar-btn"
+                      data-id="{{ b.producto.id }}"
+                      data-nombre="{{ b.producto.nombre }}">
+                ✅ Marcar limpio
+              </button>
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="6" class="text-center text-muted py-4">No hay brincolines registrados.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Modal -->
+<div class="modal fade" id="modalLimpieza" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Marcar limpieza</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p id="modal-nombre" class="fw-bold"></p>
+        <label class="form-label">Notas (opcional)</label>
+        <textarea id="modal-notas" class="form-control" rows="3" placeholder="Observaciones..."></textarea>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-success" id="confirmar-limpieza">✅ Confirmar limpieza</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <script>
-document.querySelectorAll('.marcar').forEach(btn => {
-    btn.addEventListener('click', async () => {
-        const producto_id = btn.dataset.id;
-        const fecha = new Date().toISOString().split('T')[0]; // Hoy
-        const res = await fetch("{% url 'marcar_mantenimiento' %}", {
-            method: 'POST',
-            headers: {
-                'Content-Type':'application/json',
-                'X-CSRFToken':'{{ csrf_token }}'
-            },
-            body: JSON.stringify({producto_id, fecha})
-        });
-        const data = await res.json();
-        if(data.status == 'ok'){
-            alert(`Mantenimiento marcado: ${data.fecha_ultimo_mantenimiento}\nÚltima renta: ${data.fecha_ultima_renta || 'N/A'}`);
-            location.reload();
-        } else {
-            alert("Error al marcar mantenimiento");
-        }
-    });
+let productoIdActual = null;
+const modal = new bootstrap.Modal(document.getElementById('modalLimpieza'));
+
+document.querySelectorAll('.marcar-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    productoIdActual = btn.dataset.id;
+    document.getElementById('modal-nombre').textContent = btn.dataset.nombre;
+    document.getElementById('modal-notas').value = '';
+    modal.show();
+  });
+});
+
+document.getElementById('confirmar-limpieza').addEventListener('click', async () => {
+  const notas = document.getElementById('modal-notas').value;
+  const res = await fetch("{% url 'marcar_mantenimiento' %}", {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': '{{ csrf_token }}'
+    },
+    body: JSON.stringify({ producto_id: productoIdActual, notas })
+  });
+  const data = await res.json();
+  if (data.status === 'ok') {
+    modal.hide();
+    location.reload();
+  } else {
+    alert('Error al registrar limpieza');
+  }
 });
 </script>
 {% endblock %}

@@ -496,15 +496,59 @@ def traspaso_efectivo_banco(request):
 
 @login_required
 def bitacora_list(request):
+    from datetime import date
+    hoy = date.today()
     q = request.GET.get("q", "").strip()
-    bitacoras = BitacoraMantenimiento.objects.select_related("producto")
+    estado = request.GET.get("estado", "")  # 'limpio', 'sucio', ''
+
+    # Solo brincolines
+    bitacoras = BitacoraMantenimiento.objects.select_related("producto").filter(
+        producto__tipo='BR',
+        producto__activo=True
+    )
+
     if q:
         bitacoras = bitacoras.filter(producto__nombre__icontains=q)
+
+    # Anotar próxima renta y última renta a cada bitácora
+    bitacora_list = []
     for b in bitacoras:
+        # Próxima renta (futura)
+        proxima = RentaProducto.objects.filter(
+            producto=b.producto,
+            renta__fecha_renta__gte=hoy,
+            renta__status='ACTIVO'
+        ).order_by('renta__fecha_renta').first()
+        b.proxima_renta = proxima.renta.fecha_renta if proxima else None
+
+        # Última renta (pasada)
         b.ultima_renta = RentaProducto.obtener_fecha_ultima_renta(b.producto)
+
+        # Estado: sucio = sin mantenimiento desde última renta
+        b.necesita_limpieza = (
+            b.ultima_renta and (
+                not b.fecha_ultimo_mantenimiento or
+                b.fecha_ultimo_mantenimiento < b.ultima_renta
+            )
+        )
+        bitacora_list.append(b)
+
+    # Filtro por estado
+    if estado == 'sucio':
+        bitacora_list = [b for b in bitacora_list if b.necesita_limpieza]
+    elif estado == 'limpio':
+        bitacora_list = [b for b in bitacora_list if not b.necesita_limpieza]
+
+    # Ordenar: primero los que tienen próxima renta más cercana
+    bitacora_list.sort(key=lambda b: (
+        b.proxima_renta is None,
+        b.proxima_renta or date.max
+    ))
+
     return render(request, "core/bitacora_list.html", {
-        "bitacoras": bitacoras,
+        "bitacoras": bitacora_list,
         "q": q,
+        "estado": estado,
         "module": 'ventas',
     })
 
