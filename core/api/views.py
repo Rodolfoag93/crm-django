@@ -88,7 +88,7 @@ class NominaViewSet(viewsets.ModelViewSet):
         try:
             empleado = user.empleado
             return Nomina.objects.filter(empleado=empleado).order_by('-fecha_inicio')
-        except:
+        except Exception:
             return Nomina.objects.none()
 
 
@@ -131,7 +131,7 @@ def me(request):
         'es_admin': user.is_superuser or user.is_staff,
         'grupos': grupos,
         'es_coordinador': 'Coordinador' in grupos,
-        'es_cargador': 'cargador' in grupos or 'Cargador' in grupos,
+        'es_cargador': 'cargador' in grupos or 'Cargador' in grupos or empleado_data.get('tipo_empleado') == 'REPARTIDOR',
         'es_encargado_material': 'Encargado Material' in grupos,
         **empleado_data,
     })
@@ -148,7 +148,7 @@ class AsistenciaViewSet(viewsets.ModelViewSet):
         try:
             empleado = user.empleado
             return Asistencia.objects.filter(empleado=empleado)
-        except:
+        except Exception:
             return Asistencia.objects.none()
     @action(detail=False, methods=['post'])
     def checkin(self, request):
@@ -221,7 +221,7 @@ class HorasExtraViewSet(viewsets.ReadOnlyModelViewSet):
         try:
             empleado = user.empleado
             return HorasExtra.objects.filter(empleado=empleado).order_by('-semana_inicio')
-        except:
+        except Exception:
             return HorasExtra.objects.none()
 
     @action(detail=False, methods=['get'])
@@ -231,7 +231,7 @@ class HorasExtraViewSet(viewsets.ReadOnlyModelViewSet):
         from core.models import Empleado
         try:
             empleado = request.user.empleado
-        except:
+        except Exception:
             return Response({'error': 'Empleado no encontrado'}, status=status.HTTP_404_NOT_FOUND)
 
         hoy = date.today()
@@ -332,7 +332,7 @@ class SolicitudRegistroViewSet(viewsets.GenericViewSet):
 
         try:
             empleado = request.user.empleado
-        except:
+        except Exception:
             empleado_id = request.data.get('empleado_id')
             if not empleado_id:
                 return Response({'error': 'No tienes un empleado vinculado'}, status=status.HTTP_400_BAD_REQUEST)
@@ -361,7 +361,7 @@ class SolicitudRegistroViewSet(viewsets.GenericViewSet):
 
         try:
             empleado = request.user.empleado
-        except:
+        except Exception:
             empleado_id = request.data.get('empleado_id')
             if not empleado_id:
                 return Response({'error': 'No tienes un empleado vinculado'}, status=status.HTTP_400_BAD_REQUEST)

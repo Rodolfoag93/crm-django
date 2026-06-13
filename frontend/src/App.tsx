@@ -6,6 +6,7 @@ import Asistencia from './pages/Asistencia'
 import Nomina from './pages/Nomina'
 import Registro from './pages/Registro'
 import HorasExtra from './pages/HorasExtra'
+import Entregas from './pages/Entregas'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
@@ -29,6 +30,8 @@ export default function App() {
         } />
         <Route path="/horas-extra" element={
           <PrivateRoute><HorasExtra /></PrivateRoute>
+        } />
+        <Route path="/entregas" element={<Entregas />
         } />
         <Route path="*" element={<Navigate to="/login" />} />
       </Routes>
