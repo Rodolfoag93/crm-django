@@ -1,7 +1,6 @@
 {% extends 'core/base.html' %}
 {% block content %}
 <div class="container mt-4">
-
   <div class="d-flex justify-content-between align-items-center mb-4">
     <h3>👥 Asistencia del día</h3>
   </div>
@@ -54,6 +53,7 @@
             <th>Salida</th>
             <th>Horas</th>
             <th>Estado</th>
+            <th>Editar</th>
           </tr>
         </thead>
         <tbody>
@@ -91,12 +91,100 @@
                 <span class="badge bg-danger">Ausente</span>
               {% endif %}
             </td>
+            <td>
+              <button class="btn btn-sm btn-outline-primary editar-btn"
+                data-empleado-id="{{ r.empleado.id }}"
+                data-empleado-nombre="{{ r.empleado.nombre }}"
+                data-fecha="{{ fecha|date:'Y-m-d' }}"
+                data-entrada="{{ r.asistencia.hora_entrada|time:'H:i' }}"
+                data-salida="{{ r.asistencia.hora_salida|time:'H:i' }}">
+                ✏️ Editar
+              </button>
+            </td>
           </tr>
           {% endfor %}
         </tbody>
       </table>
     </div>
   </div>
-
 </div>
+
+<!-- Modal editar asistencia -->
+<div id="modalEditar" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:9999; align-items:center; justify-content:center;">
+  <div style="background:white; border-radius:12px; padding:24px; max-width:440px; width:90%; margin:auto;">
+    <h5 class="mb-3">✏️ Editar asistencia</h5>
+    <p id="modal-nombre" class="fw-bold mb-3"></p>
+
+    <div class="mb-3">
+      <label class="form-label">Hora de entrada</label>
+      <input type="time" id="modal-entrada" class="form-control">
+    </div>
+    <div class="mb-4">
+      <label class="form-label">Hora de salida</label>
+      <input type="time" id="modal-salida" class="form-control">
+    </div>
+
+    <div id="modal-error" class="text-danger small mb-2" style="display:none;"></div>
+
+    <div class="d-flex gap-2 justify-content-end">
+      <button type="button" class="btn btn-secondary" onclick="cerrarModal()">Cancelar</button>
+      <button type="button" class="btn btn-primary" id="guardar-btn">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let empleadoIdActual = null;
+let fechaActual = null;
+
+document.querySelectorAll('.editar-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    empleadoIdActual = btn.dataset.empleadoId;
+    fechaActual = btn.dataset.fecha;
+    document.getElementById('modal-nombre').textContent = btn.dataset.empleadoNombre;
+    document.getElementById('modal-entrada').value = btn.dataset.entrada || '';
+    document.getElementById('modal-salida').value = btn.dataset.salida || '';
+    document.getElementById('modal-error').style.display = 'none';
+    document.getElementById('modalEditar').style.display = 'flex';
+  });
+});
+
+function cerrarModal() {
+  document.getElementById('modalEditar').style.display = 'none';
+}
+
+document.getElementById('guardar-btn').addEventListener('click', async () => {
+  const entrada = document.getElementById('modal-entrada').value;
+  const salida = document.getElementById('modal-salida').value;
+
+  if (!entrada) {
+    document.getElementById('modal-error').textContent = 'La hora de entrada es requerida.';
+    document.getElementById('modal-error').style.display = 'block';
+    return;
+  }
+
+  const res = await fetch("{% url 'editar_asistencia' %}", {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRFToken': '{{ csrf_token }}'
+    },
+    body: JSON.stringify({
+      empleado_id: empleadoIdActual,
+      fecha: fechaActual,
+      hora_entrada: entrada,
+      hora_salida: salida || null,
+    })
+  });
+
+  const data = await res.json();
+  if (data.ok) {
+    cerrarModal();
+    location.reload();
+  } else {
+    document.getElementById('modal-error').textContent = data.error || 'Error al guardar.';
+    document.getElementById('modal-error').style.display = 'block';
+  }
+});
+</script>
 {% endblock %}

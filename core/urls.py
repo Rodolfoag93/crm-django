@@ -103,6 +103,7 @@ urlpatterns = [
     path('empleados/nuevo/', views.nuevo_empleado, name='nuevo_empleado'),
     path('empleados/<int:pk>/editar/', views.editar_empleado, name='editar_empleado'),
     path('empleados/asistencia/', views.asistencia_diaria, name='asistencia_diaria'),
+    path('empleados/asistencia/editar/', views.editar_asistencia, name='editar_asistencia'),
 
     # ─── Solicitudes de registro ──────────────────────────────────────────
     path('empleados/solicitudes/', views.lista_solicitudes, name='lista_solicitudes'),

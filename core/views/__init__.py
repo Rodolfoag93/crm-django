@@ -91,6 +91,7 @@ from core.views.empleados import (
     aprobar_solicitud,
     rechazar_solicitud,
     asistencia_diaria,
+    editar_asistencia,
 )
 
 # ── Nómina ────────────────────────────────────────────────────────────

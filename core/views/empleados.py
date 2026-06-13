@@ -5,6 +5,8 @@ from core.models import Empleado, SolicitudRegistro
 from core.forms import EmpleadoForm
 from django.contrib import messages
 from core.decorators import solo_admin
+from django.http import JsonResponse
+from django.views.decorators.http import require_POST
 
 
 @login_required
@@ -163,3 +165,63 @@ def asistencia_diaria(request):
         'total': len(registros),
         'module': 'admin',
     })
+
+@login_required
+@solo_admin
+@require_POST
+def editar_asistencia(request):
+    import json
+    from datetime import datetime, timezone, timedelta
+    from core.models import Asistencia, TurnoAsistencia
+
+    data = json.loads(request.body)
+    empleado_id = data.get('empleado_id')
+    fecha = data.get('fecha')
+    hora_entrada = data.get('hora_entrada')
+    hora_salida = data.get('hora_salida')
+
+    try:
+        empleado = Empleado.objects.get(id=empleado_id)
+    except Empleado.DoesNotExist:
+        return JsonResponse({'error': 'Empleado no encontrado'}, status=404)
+
+    # Mexico City es UTC-6
+    utc_offset = timezone(timedelta(hours=-6))
+
+    def hora_a_datetime(fecha_str, hora_str):
+        if not hora_str:
+            return None
+        dt = datetime.strptime(f"{fecha_str} {hora_str}", "%Y-%m-%d %H:%M")
+        return dt.replace(tzinfo=utc_offset)
+
+    entrada_dt = hora_a_datetime(fecha, hora_entrada)
+    salida_dt = hora_a_datetime(fecha, hora_salida) if hora_salida else None
+
+    # Calcular horas
+    horas = None
+    if entrada_dt and salida_dt:
+        delta = salida_dt - entrada_dt
+        horas = round(delta.total_seconds() / 3600, 2)
+
+    # Actualizar o crear asistencia
+    asistencia, _ = Asistencia.objects.get_or_create(
+        empleado=empleado,
+        fecha=fecha,
+    )
+    asistencia.hora_entrada = entrada_dt
+    asistencia.hora_salida = salida_dt
+    asistencia.horas_trabajadas = horas
+    asistencia.save()
+
+    # Actualizar turno 1
+    TurnoAsistencia.objects.update_or_create(
+        asistencia=asistencia,
+        numero_turno=1,
+        defaults={
+            'hora_entrada': entrada_dt,
+            'hora_salida': salida_dt,
+            'horas_trabajadas': horas,
+        }
+    )
+
+    return JsonResponse({'ok': True})
