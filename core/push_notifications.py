@@ -12,15 +12,7 @@ VAPID_EMAIL = os.environ.get('VAPID_EMAIL', 'mailto:admin@trotacrm.com')
 
 
 def get_vapid_private_key():
-    """
-    Si VAPID_PRIVATE_KEY es una ruta a archivo .pem, lee el contenido.
-    Si es una clave directa, la devuelve tal cual.
-    """
-    key = VAPID_PRIVATE_KEY
-    if key and os.path.isfile(key):
-        with open(key, 'r') as f:
-            return f.read()
-    return key
+    return VAPID_PRIVATE_KEY
 
 
 def enviar_notificacion(user, titulo, cuerpo, url='/'):
