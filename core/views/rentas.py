@@ -245,6 +245,16 @@ def nueva_renta(request):
                 pedido, _ = PedidoFinanzas.objects.get_or_create(renta=renta)
                 pedido.total = renta.precio_total - renta.anticipo
                 pedido.save()
+            # Sincronizar con Google Calendar
+            try:
+                from core.google_calendar import crear_evento_renta
+                evento_id = crear_evento_renta(renta)
+                if evento_id:
+                    renta.evento_google_id = evento_id
+                    renta.save(update_fields=['evento_google_id'])
+            except Exception:
+                pass
+
             messages.success(request, f"Renta creada correctamente (ID: {renta.id})")
             return redirect(f"{reverse('nueva_renta')}?renta_creada={renta.id}")
         except ValueError as e:
@@ -333,6 +343,16 @@ def editar_renta(request, renta_id):
                     pedido, _ = PedidoFinanzas.objects.get_or_create(renta=renta)
                     pedido.total = renta.precio_total - renta.anticipo
                     pedido.save()
+                # Sincronizar con Google Calendar
+                try:
+                    from core.google_calendar import crear_evento_renta
+                    evento_id = crear_evento_renta(renta)
+                    if evento_id:
+                        renta.evento_google_id = evento_id
+                        renta.save(update_fields=['evento_google_id'])
+                except Exception:
+                    pass
+
                 messages.success(request, 'Renta actualizada correctamente.')
                 return redirect('lista_rentas')
             except ValueError as e:
