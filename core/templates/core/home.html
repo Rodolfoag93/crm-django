@@ -134,6 +134,16 @@
     </div>
     {% endif %}
 
+    <!-- RUTAS DE ENTREGA (solo admin) -->
+    {% if request.user.is_staff %}
+    <div style="width:300px; background:#F57C00; color:white; border-radius:15px;
+                padding:40px; text-align:center; box-shadow:0 6px 12px rgba(0,0,0,0.2);">
+        <h3>🚚 Rutas</h3>
+        <p>Entregas y recogidas</p>
+        <a href="{% url 'lista_rutas' %}" class="main-btn">Entrar</a>
+    </div>
+    {% endif %}
+
 </div>
 
 <style>
