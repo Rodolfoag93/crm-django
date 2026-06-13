@@ -97,13 +97,15 @@
                 {% endif %}
             </td>
 
-            <!-- CARGADOR -->
+            <!-- RUTA -->
             <td>
-                {% if not renta.cargador %}
-                    <a href="{% url 'asignar_cargador' renta.id %}" style="background:#2196F3;color:white;padding:5px 8px;border-radius:4px;text-decoration:none;">Asignar cargador</a>
-                {% else %}
-                    {{ renta.cargador.username }}
-                {% endif %}
+                {% for ruta_renta in renta.rutas.all %}
+                    <span style="background:#ff9800;color:white;padding:2px 6px;border-radius:4px;font-size:12px;">
+                        {{ ruta_renta.ruta.nombre }}
+                    </span>
+                {% empty %}
+                    <span style="color:#999;">Sin ruta</span>
+                {% endfor %}
             </td>
 
             <!-- ESTADO ENTREGA -->
