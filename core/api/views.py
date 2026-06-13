@@ -721,3 +721,130 @@ def api_asistencia_hoy(request):
         'con_salida': sum(1 for d in data if d['tiene_salida']),
         'empleados': data,
     })
+
+# ── Rutas Admin PWA ────────────────────────────────────────────────────────────
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def api_rutas_admin(request):
+    if not request.user.is_staff:
+        return Response({'error': 'No autorizado.'}, status=403)
+
+    from core.models import Ruta
+    from datetime import date
+    fecha_param = request.GET.get('fecha', str(date.today()))
+
+    rutas = Ruta.objects.filter(fecha=fecha_param).prefetch_related(
+        'empleados__empleado', 'paradas__renta__cliente'
+    ).order_by('nombre')
+
+    data = []
+    for ruta in rutas:
+        empleados = [
+            {'nombre': re.empleado.nombre, 'es_lider': re.es_lider}
+            for re in ruta.empleados.all()
+        ]
+        paradas = [
+            {
+                'id': p.id,
+                'orden': p.orden,
+                'cliente': p.renta.cliente.nombre,
+                'folio': p.renta.folio,
+                'estado': p.estado,
+                'direccion': f"{p.renta.calle_y_numero}, {p.renta.colonia}, {p.renta.ciudad_o_municipio}",
+            }
+            for p in ruta.paradas.all()
+        ]
+        data.append({
+            'id': ruta.id,
+            'nombre': ruta.nombre,
+            'tipo': ruta.tipo,
+            'estado': ruta.estado,
+            'fecha': str(ruta.fecha),
+            'empleados': empleados,
+            'paradas': paradas,
+            'total_paradas': len(paradas),
+            'pendientes': sum(1 for p in paradas if p['estado'] == 'pendiente'),
+        })
+
+    return Response(data)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def api_crear_ruta(request):
+    if not request.user.is_staff:
+        return Response({'error': 'No autorizado.'}, status=403)
+
+    from core.models import Ruta, RutaEmpleado, Empleado
+    data = request.data
+
+    ruta = Ruta.objects.create(
+        nombre=data.get('nombre'),
+        tipo=data.get('tipo', 'entrega'),
+        fecha=data.get('fecha'),
+        notas=data.get('notas', ''),
+    )
+
+    for emp_id in data.get('empleados', []):
+        lider_id = data.get('lider_id')
+        RutaEmpleado.objects.create(
+            ruta=ruta,
+            empleado_id=emp_id,
+            es_lider=(str(emp_id) == str(lider_id))
+        )
+
+    return Response({'ok': True, 'ruta_id': ruta.id})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def api_agregar_parada_admin(request, ruta_id):
+    if not request.user.is_staff:
+        return Response({'error': 'No autorizado.'}, status=403)
+
+    from core.models import Ruta, RutaRenta
+    ruta = get_object_or_404(Ruta, id=ruta_id)
+    renta_id = request.data.get('renta_id')
+
+    orden = ruta.paradas.count() + 1
+    RutaRenta.objects.create(
+        ruta=ruta,
+        renta_id=renta_id,
+        orden=orden,
+    )
+
+    return Response({'ok': True})
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def api_rentas_disponibles(request):
+    """Rentas sin ruta asignada para una fecha dada."""
+    if not request.user.is_staff:
+        return Response({'error': 'No autorizado.'}, status=403)
+
+    from core.models import Renta
+    from datetime import date
+    fecha = request.GET.get('fecha', str(date.today()))
+    ruta_id = request.GET.get('ruta_id')
+
+    rentas = Renta.objects.filter(
+        fecha_renta=fecha,
+        status='ACTIVO'
+    ).exclude(
+        rutas__ruta_id=ruta_id
+    ).select_related('cliente').order_by('hora_inicio')
+
+    data = [
+        {
+            'id': r.id,
+            'folio': r.folio,
+            'cliente': r.cliente.nombre,
+            'hora_inicio': str(r.hora_inicio) if r.hora_inicio else None,
+            'direccion': f"{r.calle_y_numero}, {r.colonia}, {r.ciudad_o_municipio}",
+        }
+        for r in rentas
+    ]
+
+    return Response(data)
