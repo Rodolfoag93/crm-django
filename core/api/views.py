@@ -164,19 +164,40 @@ class AsistenciaViewSet(viewsets.ModelViewSet):
                 empleado = Empleado.objects.get(id=empleado_id)
             except Empleado.DoesNotExist:
                 return Response({'error': 'Empleado no encontrado'}, status=status.HTTP_404_NOT_FOUND)
+
         hoy = timezone.localdate()
-        asistencia, created = Asistencia.objects.get_or_create(
+        asistencia, _ = Asistencia.objects.get_or_create(
             empleado=empleado,
             fecha=hoy,
-            defaults={
-                'hora_entrada': timezone.now(),
-                'ubicacion_entrada': ubicacion,
-            }
         )
-        if not created and asistencia.hora_entrada:
-            return Response({'error': 'Ya registraste tu entrada hoy'}, status=status.HTTP_400_BAD_REQUEST)
+
+        from core.models import TurnoAsistencia
+        # Verificar si hay un turno abierto (sin checkout)
+        turno_abierto = asistencia.turnos.filter(hora_salida__isnull=True).first()
+        if turno_abierto:
+            return Response({'error': 'Ya tienes un turno activo. Registra tu salida primero.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Crear nuevo turno
+        numero = asistencia.turnos.count() + 1
+        turno = TurnoAsistencia.objects.create(
+            asistencia=asistencia,
+            numero_turno=numero,
+            hora_entrada=timezone.now(),
+            ubicacion_entrada=ubicacion,
+        )
+
+        # Actualizar hora_entrada del registro principal si es el primer turno
+        if numero == 1:
+            asistencia.hora_entrada = turno.hora_entrada
+            asistencia.ubicacion_entrada = ubicacion
+            asistencia.save()
+
         serializer = self.get_serializer(asistencia)
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response({
+            **serializer.data,
+            'turno': numero,
+            'mensaje': f'Entrada registrada (turno {numero})'
+        }, status=status.HTTP_201_CREATED)
 
     @action(detail=False, methods=['post'])
     def checkout(self, request):
@@ -191,18 +212,44 @@ class AsistenciaViewSet(viewsets.ModelViewSet):
                 empleado = Empleado.objects.get(id=empleado_id)
             except Empleado.DoesNotExist:
                 return Response({'error': 'Empleado no encontrado'}, status=status.HTTP_404_NOT_FOUND)
+
         hoy = timezone.localdate()
         try:
             asistencia = Asistencia.objects.get(empleado=empleado, fecha=hoy)
         except Asistencia.DoesNotExist:
             return Response({'error': 'No has registrado tu entrada hoy'}, status=status.HTTP_400_BAD_REQUEST)
-        if asistencia.hora_salida:
-            return Response({'error': 'Ya registraste tu salida hoy'}, status=status.HTTP_400_BAD_REQUEST)
-        asistencia.hora_salida = timezone.now()
+
+        from core.models import TurnoAsistencia
+        # Buscar turno abierto
+        turno_abierto = asistencia.turnos.filter(hora_salida__isnull=True).first()
+        if not turno_abierto:
+            return Response({'error': 'No tienes un turno activo para cerrar'}, status=status.HTTP_400_BAD_REQUEST)
+
+        turno_abierto.hora_salida = timezone.now()
+        turno_abierto.ubicacion_salida = ubicacion
+        # Calcular horas del turno
+        delta = turno_abierto.hora_salida - turno_abierto.hora_entrada
+        turno_abierto.horas_trabajadas = round(delta.total_seconds() / 3600, 2)
+        turno_abierto.save()
+
+        # Actualizar hora_salida del registro principal
+        asistencia.hora_salida = turno_abierto.hora_salida
         asistencia.ubicacion_salida = ubicacion
+        # Sumar horas de todos los turnos
+        total_horas = sum(
+            t.horas_trabajadas for t in asistencia.turnos.all() if t.horas_trabajadas
+        )
+        asistencia.horas_trabajadas = total_horas
         asistencia.save()
+
         serializer = self.get_serializer(asistencia)
-        return Response(serializer.data)
+        return Response({
+            **serializer.data,
+            'turno': turno_abierto.numero_turno,
+            'horas_turno': float(turno_abierto.horas_trabajadas),
+            'horas_total': float(total_horas),
+            'mensaje': f'Salida registrada (turno {turno_abierto.numero_turno})'
+        })
 
     @action(detail=False, methods=['get'])
     def hoy(self, request):

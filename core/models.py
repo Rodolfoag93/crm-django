@@ -949,6 +949,36 @@ class Asistencia(models.Model):
     def __str__(self):
         return f"{self.empleado.nombre} - {self.fecha}"
 
+class TurnoAsistencia(models.Model):
+    asistencia = models.ForeignKey(
+        Asistencia,
+        on_delete=models.CASCADE,
+        related_name='turnos'
+    )
+    numero_turno = models.PositiveSmallIntegerField(default=1)
+    hora_entrada = models.DateTimeField(null=True, blank=True)
+    hora_salida = models.DateTimeField(null=True, blank=True)
+    ubicacion_entrada = models.CharField(max_length=255, blank=True, null=True)
+    ubicacion_salida = models.CharField(max_length=255, blank=True, null=True)
+    horas_trabajadas = models.DecimalField(
+        max_digits=4, decimal_places=2, null=True, blank=True
+    )
+
+    class Meta:
+        verbose_name = 'Turno de asistencia'
+        verbose_name_plural = 'Turnos de asistencia'
+        ordering = ['numero_turno']
+        unique_together = ('asistencia', 'numero_turno')
+
+    def __str__(self):
+        return f"{self.asistencia.empleado.nombre} - Turno {self.numero_turno} - {self.asistencia.fecha}"
+
+    def calcular_horas(self):
+        if self.hora_entrada and self.hora_salida:
+            delta = self.hora_salida - self.hora_entrada
+            return round(delta.total_seconds() / 3600, 2)
+        return None
+
 
 # =============================================
 # REGISTRO DE EMPLEADOS
