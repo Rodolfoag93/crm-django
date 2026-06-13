@@ -8,10 +8,10 @@
 
   <!-- Navegación de fechas -->
   <div class="d-flex align-items-center gap-3 mb-4">
-    <a href="?fecha={{ fecha_anterior }}" class="btn btn-outline-secondary btn-sm">← Anterior</a>
+    <a href="?fecha={{ fecha_anterior|date:'Y-m-d' }}" class="btn btn-outline-secondary btn-sm">← Anterior</a>
     <h5 class="mb-0">{{ fecha }}</h5>
-    <a href="?fecha={{ fecha_siguiente }}" class="btn btn-outline-secondary btn-sm">Siguiente →</a>
-    <a href="?fecha={{ today }}" class="btn btn-outline-primary btn-sm ms-2">Hoy</a>
+    <a href="?fecha={{ fecha_siguiente|date:'Y-m-d' }}" class="btn btn-outline-secondary btn-sm">Siguiente →</a>
+    <a href="{% url 'asistencia_diaria' %}" class="btn btn-outline-primary btn-sm ms-2">Hoy</a>
   </div>
 
   <!-- Resumen -->
