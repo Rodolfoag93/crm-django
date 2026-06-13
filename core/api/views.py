@@ -598,3 +598,47 @@ def api_rentas_hoy(request):
         })
 
     return Response(data)
+
+# ── Asistencia del día (admin) ─────────────────────────────────────────────────
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def api_asistencia_hoy(request):
+    if not request.user.is_staff:
+        return Response({'error': 'No autorizado.'}, status=403)
+
+    from core.models import Asistencia, Empleado
+    from datetime import date
+    hoy = date.today()
+
+    # Todos los empleados activos
+    empleados = Empleado.objects.filter(activo=True).select_related('user')
+
+    # Asistencias de hoy
+    asistencias_hoy = Asistencia.objects.filter(fecha=hoy).select_related('empleado')
+    asistencias_dict = {a.empleado_id: a for a in asistencias_hoy}
+
+    data = []
+    for emp in empleados:
+        asistencia = asistencias_dict.get(emp.id)
+        data.append({
+            'empleado_id': emp.id,
+            'nombre': emp.nombre,
+            'tipo': emp.get_tipo_empleado_display(),
+            'tiene_entrada': asistencia is not None and asistencia.hora_entrada is not None,
+            'tiene_salida': asistencia is not None and asistencia.hora_salida is not None,
+            'hora_entrada': str(asistencia.hora_entrada) if asistencia and asistencia.hora_entrada else None,
+            'hora_salida': str(asistencia.hora_salida) if asistencia and asistencia.hora_salida else None,
+            'horas_trabajadas': str(asistencia.horas_trabajadas) if asistencia and asistencia.horas_trabajadas else None,
+        })
+
+    # Ordenar: primero los que ya entraron, luego los que no
+    data.sort(key=lambda x: (not x['tiene_entrada'], x['nombre']))
+
+    return Response({
+        'fecha': str(hoy),
+        'total': len(data),
+        'con_entrada': sum(1 for d in data if d['tiene_entrada']),
+        'con_salida': sum(1 for d in data if d['tiene_salida']),
+        'empleados': data,
+    })

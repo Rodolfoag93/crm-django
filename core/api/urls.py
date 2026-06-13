@@ -3,7 +3,7 @@ from core.api.views import (
     ClienteViewSet, ProductoViewSet, RentaViewSet,
     EmpleadoViewSet, NominaViewSet, GastoViewSet,
     MovimientoContableViewSet, AsistenciaViewSet, SolicitudRegistroViewSet, HorasExtraViewSet, me, push_suscribir, push_desuscribir, push_vapid_key,
-    api_mantenimiento, api_marcar_limpieza, api_dashboard_admin, api_rentas_hoy
+    api_mantenimiento, api_marcar_limpieza, api_dashboard_admin, api_rentas_hoy, api_asistencia_hoy
 )
 from core.views.rutas import api_mis_rutas, api_confirmar_entrega, api_confirmar_recogida
 from django.urls import path
@@ -32,4 +32,5 @@ urlpatterns = router.urls + [
     path('mantenimiento/<int:producto_id>/limpiar/', api_marcar_limpieza, name='api_marcar_limpieza'),
     path('dashboard/admin/', api_dashboard_admin, name='api_dashboard_admin'),
     path('rentas-hoy/', api_rentas_hoy, name='api_rentas_hoy'),
+    path('asistencia-hoy/', api_asistencia_hoy, name='api_asistencia_hoy'),
 ]
