@@ -50,6 +50,9 @@ from core.views.rutas import (
     agregar_parada,
     cambiar_estado_ruta,
     lista_recogidas,
+    api_mis_rutas,
+    api_confirmar_entrega,
+    api_confirmar_recogida,
 )
 
 # ── Contabilidad ──────────────────────────────────────────────────────
