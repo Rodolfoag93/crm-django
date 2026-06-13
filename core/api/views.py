@@ -559,3 +559,42 @@ def api_dashboard_admin(request):
         },
         'solicitudes_pendientes': solicitudes_pendientes,
     })
+
+# ── Rentas del día (admin) ─────────────────────────────────────────────────────
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def api_rentas_hoy(request):
+    if not request.user.is_staff:
+        return Response({'error': 'No autorizado.'}, status=403)
+
+    from core.models import Renta
+    from datetime import date
+    hoy = date.today()
+
+    rentas = Renta.objects.filter(
+        fecha_renta=hoy,
+        status='ACTIVO'
+    ).select_related('cliente').prefetch_related('rentaproductos__producto').order_by('hora_inicio')
+
+    data = []
+    for r in rentas:
+        productos = [
+            f"{rp.cantidad}× {rp.producto.nombre}"
+            for rp in r.rentaproductos.all()
+        ]
+        data.append({
+            'id': r.id,
+            'folio': r.folio,
+            'cliente': r.cliente.nombre,
+            'telefono': r.cliente.telefono,
+            'direccion': f"{r.calle_y_numero}, {r.colonia}, {r.ciudad_o_municipio}",
+            'hora_inicio': str(r.hora_inicio) if r.hora_inicio else None,
+            'hora_fin': str(r.hora_fin) if r.hora_fin else None,
+            'estado_entrega': r.estado_entrega,
+            'pagado': r.pagado,
+            'total': str(r.precio_total) if r.precio_total else '0',
+            'productos': productos,
+        })
+
+    return Response(data)
