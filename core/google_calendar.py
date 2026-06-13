@@ -56,12 +56,10 @@ Pagado: {'Sí' if renta.pagado else 'No'}"""
             'summary': f"🎉 {renta.cliente.nombre} - {renta.folio}",
             'description': descripcion,
             'start': {
-                'dateTime': f"{fecha}T{hora_inicio}",
-                'timeZone': 'America/Mexico_City',
+                'date': fecha,
             },
             'end': {
-                'dateTime': f"{fecha}T{hora_fin}",
-                'timeZone': 'America/Mexico_City',
+                'date': fecha,
             },
             'colorId': '2' if renta.pagado else '11',  # Verde si pagado, rojo si no
         }
