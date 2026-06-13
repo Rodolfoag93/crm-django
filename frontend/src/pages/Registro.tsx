@@ -11,7 +11,7 @@ const schema = z.object({
   email: z.string().email('Email inválido').optional().or(z.literal('')),
   password: z.string().min(6, 'La contraseña debe tener al menos 6 caracteres'),
   confirmar_password: z.string(),
-  tipo_empleado: z.enum(['REPARTIDOR', 'COORDINADOR', 'ENCARGADO']),
+  tipo_empleado: z.enum(['REPARTIDOR', 'COORDINADOR', 'ENCARGADO', 'ANIMADOR']),
 }).refine((data) => data.password === data.confirmar_password, {
   message: 'Las contraseñas no coinciden',
   path: ['confirmar_password'],
@@ -124,6 +124,7 @@ export default function Registro() {
               <option value="REPARTIDOR">Repartidor</option>
               <option value="COORDINADOR">Coordinador</option>
               <option value="ENCARGADO">Encargado de Material</option>
+              <option value="ANIMADOR">Animador</option>
             </select>
           </div>
 

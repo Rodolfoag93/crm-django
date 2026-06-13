@@ -88,6 +88,19 @@ export default function Home() {
           <div className="ml-auto text-gray-400">›</div>
         </div>
 
+        {/* Horas Extra */}
+        <div
+          onClick={() => navigate('/horas-extra')}
+          className="bg-white rounded-2xl shadow-sm p-5 flex items-center gap-4 cursor-pointer hover:shadow-md transition-shadow border border-gray-100"
+        >
+          <div className="bg-orange-100 p-3 rounded-xl text-2xl">⏱️</div>
+          <div>
+            <h2 className="font-semibold text-gray-900">Horas Extra</h2>
+            <p className="text-gray-500 text-sm">Consulta tus horas y pagos</p>
+          </div>
+          <div className="ml-auto text-gray-400">›</div>
+        </div>
+
       </div>
     </div>
   )
