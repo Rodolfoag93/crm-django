@@ -82,37 +82,38 @@
   </div>
 </div>
 
-<!-- Modal -->
-<div class="modal fade" id="modalLimpieza" tabindex="-1">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title">Marcar limpieza</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body">
-        <p id="modal-nombre" class="fw-bold"></p>
-        <label class="form-label">Notas (opcional)</label>
-        <textarea id="modal-notas" class="form-control" rows="3" placeholder="Observaciones..."></textarea>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-        <button type="button" class="btn btn-success" id="confirmar-limpieza">✅ Confirmar limpieza</button>
-      </div>
+<!-- Modal simple sin Bootstrap JS -->
+<div id="modalLimpieza" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:9999; align-items:center; justify-content:center;">
+  <div style="background:white; border-radius:12px; padding:24px; max-width:440px; width:90%; margin:auto;">
+    <h5 class="mb-3">✅ Marcar limpieza</h5>
+    <p id="modal-nombre" class="fw-bold"></p>
+    <label class="form-label">Notas (opcional)</label>
+    <textarea id="modal-notas" class="form-control mb-3" rows="3" placeholder="Observaciones..."></textarea>
+    <div class="d-flex gap-2 justify-content-end">
+      <button type="button" class="btn btn-secondary" onclick="cerrarModal()">Cancelar</button>
+      <button type="button" class="btn btn-success" id="confirmar-limpieza">✅ Confirmar</button>
     </div>
   </div>
 </div>
 
 <script>
 let productoIdActual = null;
-const modal = new bootstrap.Modal(document.getElementById('modalLimpieza'));
+
+function abrirModal(id, nombre) {
+  productoIdActual = id;
+  document.getElementById('modal-nombre').textContent = nombre;
+  document.getElementById('modal-notas').value = '';
+  const m = document.getElementById('modalLimpieza');
+  m.style.display = 'flex';
+}
+
+function cerrarModal() {
+  document.getElementById('modalLimpieza').style.display = 'none';
+}
 
 document.querySelectorAll('.marcar-btn').forEach(btn => {
   btn.addEventListener('click', () => {
-    productoIdActual = btn.dataset.id;
-    document.getElementById('modal-nombre').textContent = btn.dataset.nombre;
-    document.getElementById('modal-notas').value = '';
-    modal.show();
+    abrirModal(btn.dataset.id, btn.dataset.nombre);
   });
 });
 
@@ -128,7 +129,7 @@ document.getElementById('confirmar-limpieza').addEventListener('click', async ()
   });
   const data = await res.json();
   if (data.status === 'ok') {
-    modal.hide();
+    cerrarModal();
     location.reload();
   } else {
     alert('Error al registrar limpieza');

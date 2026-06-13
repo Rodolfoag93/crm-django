@@ -49,7 +49,7 @@ export default function Entregas() {
   const [paradaActiva, setParadaActiva] = useState<Parada | null>(null)
 
   useEffect(() => {
-    api.get('/v1/rutas/mis-rutas/')
+    api.get('/rutas/mis-rutas/')
       .then((res: any) => setRutas(res.data))
       .catch(() => setError('No se pudo cargar tu ruta del día.'))
       .finally(() => setLoading(false))
@@ -193,7 +193,7 @@ export default function Entregas() {
           onClose={() => setParadaActiva(null)}
           onConfirmado={() => {
             setParadaActiva(null)
-            api.get('/v1/rutas/mis-rutas/').then((res: any) => setRutas(res.data))
+            api.get('/rutas/mis-rutas/').then((res: any) => setRutas(res.data))
           }}
         />
       )}
@@ -251,7 +251,7 @@ function ModalConfirmar({
         extensiones_dejadas: p.es_brincolin ? (extensiones[p.id] ?? 1) : 0,
       }))
 
-      await api.post(`/v1/rutas/${parada.id}/entregar/`, {
+      await api.post(`/rutas/${parada.id}/entregar/`, {
         productos,
         fecha_recogida: fechaRecogida,
         tipo_horario: tipoHorario,

@@ -1,8 +1,10 @@
 import { useAuthStore } from '../stores/authStore'
 import { useNavigate } from 'react-router-dom'
+import { usePushNotifications } from '../lib/usePushNotifications'
 
 export default function Home() {
-  const { user, logout } = useAuthStore()
+  const { user, logout, access_token } = useAuthStore()
+  usePushNotifications(access_token)    
   const navigate = useNavigate()
 
   const handleLogout = () => {
