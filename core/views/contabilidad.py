@@ -502,6 +502,11 @@ def bitacora_list(request):
     estado = request.GET.get("estado", "")  # 'limpio', 'sucio', ''
 
     # Solo brincolines
+    brincolines = Producto.objects.filter(tipo='BR', activo=True)
+    for p in brincolines:
+        BitacoraMantenimiento.objects.get_or_create(producto=p)
+
+    # Solo brincolines
     bitacoras = BitacoraMantenimiento.objects.select_related("producto").filter(
         producto__tipo='BR',
         producto__activo=True
