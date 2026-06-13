@@ -250,41 +250,42 @@ class AsistenciaViewSet(viewsets.ModelViewSet):
             'horas_total': float(total_horas),
             'mensaje': f'Salida registrada (turno {turno_abierto.numero_turno})'
         })
-        @action(detail=False, methods=['get'])
-            def hoy(self, request):
-                from core.models import TurnoAsistencia, RutaRenta
-                hoy = timezone.localdate()
-                asistencias = self.get_queryset().filter(fecha=hoy)
-                serializer = self.get_serializer(asistencias, many=True)
-                data = serializer.data
 
-                try:
-                    empleado = request.user.empleado
-                    asistencia = asistencias.first()
+    @action(detail=False, methods=['get'])
+    def hoy(self, request):
+        from core.models import TurnoAsistencia, RutaRenta
+        hoy = timezone.localdate()
+        asistencias = self.get_queryset().filter(fecha=hoy)
+        serializer = self.get_serializer(asistencias, many=True)
+        data = serializer.data
 
-                    turno_activo = False
-                    if asistencia:
-                        turno_activo = asistencia.turnos.filter(hora_salida__isnull=True).exists()
+        try:
+            empleado = request.user.empleado
+            asistencia = asistencias.first()
 
-                    tiene_recogida_pendiente = RutaRenta.objects.filter(
-                        ruta__fecha=hoy,
-                        ruta__tipo='recogida',
-                        ruta__empleados__empleado=empleado,
-                        estado='pendiente'
-                    ).exists()
+            turno_activo = False
+            if asistencia:
+                turno_activo = asistencia.turnos.filter(hora_salida__isnull=True).exists()
 
-                    if data and len(data) > 0:
-                        data[0]['turno_activo'] = turno_activo
-                        data[0]['tiene_recogida_pendiente'] = tiene_recogida_pendiente
-                    elif not data:
-                        return Response([{
-                            'turno_activo': False,
-                            'tiene_recogida_pendiente': tiene_recogida_pendiente
-                        }])
-                except Exception:
-                    pass
+            tiene_recogida_pendiente = RutaRenta.objects.filter(
+                ruta__fecha=hoy,
+                ruta__tipo='recogida',
+                ruta__empleados__empleado=empleado,
+                estado='pendiente'
+            ).exists()
 
-                return Response(data)
+            if data and len(data) > 0:
+                data[0]['turno_activo'] = turno_activo
+                data[0]['tiene_recogida_pendiente'] = tiene_recogida_pendiente
+            elif not data:
+                return Response([{
+                    'turno_activo': False,
+                    'tiene_recogida_pendiente': tiene_recogida_pendiente
+                }])
+        except Exception:
+            pass
+
+        return Response(data)
 
 class HorasExtraViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = HorasExtraSerializer
