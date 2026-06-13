@@ -4,6 +4,7 @@ from django.core.paginator import Paginator
 from core.models import Empleado, SolicitudRegistro
 from core.forms import EmpleadoForm
 from django.contrib import messages
+from core.decorators import solo_admin
 
 
 @login_required
