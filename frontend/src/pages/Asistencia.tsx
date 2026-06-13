@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import api from '../lib/api.ts'
-
+import api from '../lib/api'
 
 interface AsistenciaData {
   id: number
@@ -9,13 +8,14 @@ interface AsistenciaData {
   hora_entrada: string | null
   hora_salida: string | null
   horas_trabajadas: string | null
-  ubicacion_entrada: string | null
-  ubicacion_salida: string | null
+  turno?: number
+  mensaje?: string
 }
 
 export default function Asistencia() {
   const navigate = useNavigate()
   const [asistencia, setAsistencia] = useState<AsistenciaData | null>(null)
+  const [turnoActivo, setTurnoActivo] = useState(false)
   const [loading, setLoading] = useState(true)
   const [procesando, setProcesando] = useState(false)
   const [mensaje, setMensaje] = useState('')
@@ -28,11 +28,15 @@ export default function Asistencia() {
   const fetchAsistenciaHoy = async () => {
     try {
       const { data } = await api.get('/asistencias/hoy/')
-      // El endpoint devuelve array directo, no paginado
       if (Array.isArray(data) && data.length > 0) {
         setAsistencia(data[0])
+        // Turno activo = tiene entrada pero no salida en el último turno
+        const a = data[0]
+        setTurnoActivo(!!a.hora_entrada && !a.hora_salida)
       } else if (data.results?.length > 0) {
         setAsistencia(data.results[0])
+        const a = data.results[0]
+        setTurnoActivo(!!a.hora_entrada && !a.hora_salida)
       }
     } catch {
       setError('Error al cargar asistencia')
@@ -43,10 +47,7 @@ export default function Asistencia() {
 
   const obtenerUbicacion = (): Promise<string> => {
     return new Promise((resolve) => {
-      if (!navigator.geolocation) {
-        resolve('')
-        return
-      }
+      if (!navigator.geolocation) { resolve(''); return }
       navigator.geolocation.getCurrentPosition(
         (pos) => resolve(`${pos.coords.latitude},${pos.coords.longitude}`),
         () => resolve('')
@@ -55,54 +56,47 @@ export default function Asistencia() {
   }
 
   const handleCheckin = async () => {
-        setProcesando(true)
-        setError('')
-        try {
-        const ubicacion = await obtenerUbicacion()
-        const { data } = await api.post('/asistencias/checkin/', {
-            ubicacion,
-        })
-        setAsistencia(data)
-        setMensaje('✅ Entrada registrada correctamente')
-        } catch (e: any) {
-        setError(e.response?.data?.error || 'Error al registrar entrada')
-        } finally {
-        setProcesando(false)
-        }
+    setProcesando(true)
+    setError('')
+    try {
+      const ubicacion = await obtenerUbicacion()
+      const { data } = await api.post('/asistencias/checkin/', { ubicacion })
+      setAsistencia(data)
+      setTurnoActivo(true)
+      setMensaje(data.mensaje || '✅ Entrada registrada correctamente')
+    } catch (e: any) {
+      setError(e.response?.data?.error || 'Error al registrar entrada')
+    } finally {
+      setProcesando(false)
     }
+  }
 
-    const handleCheckout = async () => {
-        setProcesando(true)
-        setError('')
-        try {
-        const ubicacion = await obtenerUbicacion()
-        const { data } = await api.post('/asistencias/checkout/', {
-            ubicacion,
-        })
-        setAsistencia(data)
-        setMensaje('✅ Salida registrada correctamente')
-        } catch (e: any) {
-        setError(e.response?.data?.error || 'Error al registrar salida')
-        } finally {
-        setProcesando(false)
-        }
+  const handleCheckout = async () => {
+    setProcesando(true)
+    setError('')
+    try {
+      const ubicacion = await obtenerUbicacion()
+      const { data } = await api.post('/asistencias/checkout/', { ubicacion })
+      setAsistencia(data)
+      setTurnoActivo(false)
+      setMensaje(data.mensaje || '✅ Salida registrada correctamente')
+    } catch (e: any) {
+      setError(e.response?.data?.error || 'Error al registrar salida')
+    } finally {
+      setProcesando(false)
     }
+  }
 
   const formatHora = (dt: string | null) => {
     if (!dt) return '--:--'
-    return new Date(dt).toLocaleTimeString('es-MX', {
-      hour: '2-digit',
-      minute: '2-digit'
-    })
+    return new Date(dt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })
   }
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-gray-500">Cargando...</div>
-      </div>
-    )
-  }
+  if (loading) return (
+    <div className="min-h-screen flex items-center justify-center">
+      <div className="text-gray-500">Cargando...</div>
+    </div>
+  )
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -115,24 +109,22 @@ export default function Asistencia() {
 
       <div className="p-4 max-w-lg mx-auto space-y-4">
 
-        {/* Fecha */}
         <div className="text-center text-gray-500 text-sm">
           {new Date().toLocaleDateString('es-MX', {
             weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
           })}
         </div>
 
-        {/* Card de asistencia */}
         <div className="bg-white rounded-2xl shadow-sm p-6 border border-gray-100">
           <div className="grid grid-cols-2 gap-4 mb-6">
             <div className="text-center">
-              <p className="text-gray-500 text-sm mb-1">Entrada</p>
+              <p className="text-gray-500 text-sm mb-1">Primera entrada</p>
               <p className="text-2xl font-bold text-green-700">
                 {formatHora(asistencia?.hora_entrada || null)}
               </p>
             </div>
             <div className="text-center">
-              <p className="text-gray-500 text-sm mb-1">Salida</p>
+              <p className="text-gray-500 text-sm mb-1">Última salida</p>
               <p className="text-2xl font-bold text-red-600">
                 {formatHora(asistencia?.hora_salida || null)}
               </p>
@@ -141,13 +133,20 @@ export default function Asistencia() {
 
           {asistencia?.horas_trabajadas && (
             <div className="text-center bg-green-50 rounded-xl py-3 mb-4">
-              <p className="text-gray-500 text-sm">Horas trabajadas</p>
+              <p className="text-gray-500 text-sm">Horas trabajadas totales</p>
               <p className="text-xl font-bold text-green-700">{asistencia.horas_trabajadas} hrs</p>
             </div>
           )}
 
+          {/* Estado del turno */}
+          {turnoActivo && (
+            <div className="text-center bg-yellow-50 rounded-xl py-2 mb-4 border border-yellow-200">
+              <p className="text-yellow-700 text-sm font-medium">🟡 Turno activo en curso</p>
+            </div>
+          )}
+
           {/* Botones */}
-          {!asistencia?.hora_entrada && (
+          {!turnoActivo && (
             <button
               onClick={handleCheckin}
               disabled={procesando}
@@ -157,7 +156,7 @@ export default function Asistencia() {
             </button>
           )}
 
-          {asistencia?.hora_entrada && !asistencia?.hora_salida && (
+          {turnoActivo && (
             <button
               onClick={handleCheckout}
               disabled={procesando}
@@ -166,15 +165,8 @@ export default function Asistencia() {
               {procesando ? 'Registrando...' : '🔴 Registrar Salida'}
             </button>
           )}
-
-          {asistencia?.hora_entrada && asistencia?.hora_salida && (
-            <div className="text-center bg-gray-50 rounded-xl py-4">
-              <p className="text-gray-600 font-medium">✅ Jornada completada</p>
-            </div>
-          )}
         </div>
 
-        {/* Mensajes */}
         {mensaje && (
           <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3">
             <p className="text-green-700 text-sm">{mensaje}</p>
