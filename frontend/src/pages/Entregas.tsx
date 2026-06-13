@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { useAuthStore } from '../store/authStore'
-import api from '../api/axios'
+import { useAuthStore } from '../stores/authStore'
+import api from '../lib/api'
 
 interface Producto {
   id: number
@@ -42,7 +42,7 @@ interface Ruta {
 }
 
 export default function Entregas() {
-  const { token } = useAuthStore()
+  const { } = useAuthStore()
   const [rutas, setRutas] = useState<Ruta[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -50,7 +50,7 @@ export default function Entregas() {
 
   useEffect(() => {
     api.get('/v1/rutas/mis-rutas/')
-      .then(res => setRutas(res.data))
+      .then((res: any) => setRutas(res.data))
       .catch(() => setError('No se pudo cargar tu ruta del día.'))
       .finally(() => setLoading(false))
   }, [])
@@ -193,7 +193,7 @@ export default function Entregas() {
           onClose={() => setParadaActiva(null)}
           onConfirmado={() => {
             setParadaActiva(null)
-            api.get('/v1/rutas/mis-rutas/').then(res => setRutas(res.data))
+            api.get('/v1/rutas/mis-rutas/').then((res: any) => setRutas(res.data))
           }}
         />
       )}
@@ -206,7 +206,6 @@ export default function Entregas() {
 
 function ModalConfirmar({
   parada,
-  ruta,
   onClose,
   onConfirmado,
 }: {
