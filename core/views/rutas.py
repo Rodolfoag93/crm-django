@@ -94,6 +94,16 @@ def agregar_parada(request, ruta_id):
             renta_id=renta_id,
             orden=orden,
         )
+        # Notificar a los repartidores de esta ruta
+        from core.push_notifications import enviar_notificacion
+        for re in ruta.empleados.select_related('empleado__user').all():
+            if re.empleado.user:
+                enviar_notificacion(
+                    re.empleado.user,
+                    titulo='🚚 Nueva parada en tu ruta',
+                    cuerpo=f'Se agregó una entrega a la ruta {ruta.nombre}.',
+                    url='/entregas'
+                )
     return redirect('detalle_ruta', ruta_id=ruta_id)
 
 

@@ -67,6 +67,14 @@ def nueva_nomina(request):
             nomina.total = nomina.calcular_total()
             nomina.save()
             sincronizar_gasto_nomina(nomina)
+            from core.push_notifications import enviar_notificacion
+            if hasattr(nomina.empleado, 'user') and nomina.empleado.user:
+                enviar_notificacion(
+                    nomina.empleado.user,
+                    titulo='💰 Tu nómina está lista',
+                    cuerpo='Tu recibo de nómina está listo. Espera a que te llamen para firmarlo.',
+                    url='/nomina'
+                )
             return redirect('editar_nomina', nomina.id)
     else:
         form = NominaForm()
