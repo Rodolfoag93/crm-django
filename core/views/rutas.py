@@ -288,6 +288,10 @@ def api_confirmar_entrega(request, parada_id):
     parada.notas_campo = data.get('notas_campo', '')
     parada.save()
 
+    # Actualizar estado_entrega en la Renta
+    parada.renta.estado_entrega = 'ENTREGADO'
+    parada.renta.save()
+
     return Response({'ok': True, 'mensaje': 'Entrega confirmada.'})
 
 
@@ -316,4 +320,12 @@ def api_confirmar_recogida(request, parada_id):
     parada.notas_campo = request.data.get('notas_campo', '')
     parada.save()
 
+    # Actualizar estado_entrega en la Renta
+    parada.renta.estado_entrega = 'ENTREGADO'
+    parada.renta.save()
+
     return Response({'ok': True, 'mensaje': 'Recogida confirmada.'})
+Guarda y avísame.
+
+
+Claude Fable 5 is currently unavailable.

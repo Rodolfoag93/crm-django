@@ -64,6 +64,10 @@ export default function Entregas() {
     window.location.href = `tel:${telefono}`
   }
 
+  const getRutaDeParada = (paradaId: number): Ruta | undefined => {
+    return rutas.find(r => r.paradas.some(p => p.id === paradaId))
+  }
+
   if (loading) return (
     <div className="flex items-center justify-center h-screen">
       <p className="text-gray-500">Cargando tu ruta...</p>
@@ -172,9 +176,11 @@ export default function Entregas() {
                     {parada.estado === 'pendiente' && (
                       <button
                         onClick={() => setParadaActiva(parada)}
-                        className="flex-1 text-sm bg-orange-500 text-white py-2 rounded-xl font-medium"
+                        className={`flex-1 text-sm py-2 rounded-xl font-medium text-white ${
+                          ruta.tipo === 'recogida' ? 'bg-blue-500' : 'bg-orange-500'
+                        }`}
                       >
-                        ✅ Confirmar
+                        {ruta.tipo === 'recogida' ? '📦 Recoger' : '✅ Entregar'}
                       </button>
                     )}
                   </div>
@@ -185,11 +191,11 @@ export default function Entregas() {
         </div>
       ))}
 
-      {/* Modal confirmar entrega */}
+      {/* Modal confirmar */}
       {paradaActiva && (
         <ModalConfirmar
           parada={paradaActiva}
-          ruta={rutas.find(r => r.paradas.some(p => p.id === paradaActiva.id))!}
+          ruta={getRutaDeParada(paradaActiva.id)!}
           onClose={() => setParadaActiva(null)}
           onConfirmado={() => {
             setParadaActiva(null)
@@ -206,6 +212,7 @@ export default function Entregas() {
 
 function ModalConfirmar({
   parada,
+  ruta,
   onClose,
   onConfirmado,
 }: {
@@ -214,10 +221,12 @@ function ModalConfirmar({
   onClose: () => void
   onConfirmado: () => void
 }) {
+  const esRecogida = ruta.tipo === 'recogida'
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [notas, setNotas] = useState('')
 
-  // Cantidades confirmadas por producto
+  // Solo para entrega
   const [cantidades, setCantidades] = useState<Record<number, number>>(
     Object.fromEntries(parada.productos.map(p => [p.id, p.cantidad]))
   )
@@ -227,38 +236,45 @@ function ModalConfirmar({
   const [extensiones, setExtensiones] = useState<Record<number, number>>(
     Object.fromEntries(parada.productos.filter(p => p.es_brincolin).map(p => [p.id, 1]))
   )
-
-  // Recogida
   const [fechaRecogida, setFechaRecogida] = useState('')
   const [tipoHorario, setTipoHorario] = useState<'rango' | 'fijo'>('rango')
   const [horaInicio, setHoraInicio] = useState('')
   const [horaFin, setHoraFin] = useState('')
-  const [notas, setNotas] = useState('')
 
   const confirmar = async () => {
-    if (!fechaRecogida || !horaInicio) {
-      setError('Indica la fecha y hora de recogida.')
-      return
-    }
     setLoading(true)
     setError('')
 
     try {
-      const productos = parada.productos.map(p => ({
-        producto_renta_id: p.id,
-        cantidad_confirmada: cantidades[p.id] ?? p.cantidad,
-        motores_dejados: p.es_brincolin ? (motores[p.id] ?? 1) : 0,
-        extensiones_dejadas: p.es_brincolin ? (extensiones[p.id] ?? 1) : 0,
-      }))
+      if (esRecogida) {
+        // Recogida simple
+        await api.post(`/rutas/${parada.id}/recoger/`, {
+          notas_campo: notas,
+        })
+      } else {
+        // Entrega con detalle
+        if (!fechaRecogida || !horaInicio) {
+          setError('Indica la fecha y hora de recogida.')
+          setLoading(false)
+          return
+        }
 
-      await api.post(`/rutas/${parada.id}/entregar/`, {
-        productos,
-        fecha_recogida: fechaRecogida,
-        tipo_horario: tipoHorario,
-        hora_inicio: horaInicio,
-        hora_fin: tipoHorario === 'rango' ? horaFin : null,
-        notas_campo: notas,
-      })
+        const productos = parada.productos.map(p => ({
+          producto_renta_id: p.id,
+          cantidad_confirmada: cantidades[p.id] ?? p.cantidad,
+          motores_dejados: p.es_brincolin ? (motores[p.id] ?? 1) : 0,
+          extensiones_dejadas: p.es_brincolin ? (extensiones[p.id] ?? 1) : 0,
+        }))
+
+        await api.post(`/rutas/${parada.id}/entregar/`, {
+          productos,
+          fecha_recogida: fechaRecogida,
+          tipo_horario: tipoHorario,
+          hora_inicio: horaInicio,
+          hora_fin: tipoHorario === 'rango' ? horaFin : null,
+          notas_campo: notas,
+        })
+      }
 
       onConfirmado()
     } catch {
@@ -272,117 +288,146 @@ function ModalConfirmar({
     <div className="fixed inset-0 bg-black/50 z-50 flex items-end">
       <div className="bg-white w-full rounded-t-3xl max-h-[90vh] overflow-y-auto px-6 py-6">
         <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-bold">Confirmar entrega</h3>
+          <h3 className="text-lg font-bold">
+            {esRecogida ? '📦 Confirmar recogida' : '✅ Confirmar entrega'}
+          </h3>
           <button onClick={onClose} className="text-gray-400 text-2xl">×</button>
         </div>
 
         <p className="text-sm text-gray-500 mb-4">{parada.cliente} — {parada.folio}</p>
 
-        {/* Productos */}
-        <div className="flex flex-col gap-4 mb-5">
-          {parada.productos.map(p => (
-            <div key={p.id} className="bg-gray-50 rounded-xl p-3">
-              <p className="font-medium text-sm mb-2">{p.nombre} {p.es_brincolin ? '🎈' : ''}</p>
-              <div className="flex items-center gap-3">
-                <span className="text-xs text-gray-500">Cantidad:</span>
-                <input
-                  type="number"
-                  min={0}
-                  value={cantidades[p.id] ?? p.cantidad}
-                  onChange={e => setCantidades(prev => ({ ...prev, [p.id]: Number(e.target.value) }))}
-                  className="w-16 border rounded-lg px-2 py-1 text-sm text-center"
-                />
-              </div>
-              {p.es_brincolin && (
-                <div className="flex gap-4 mt-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-gray-500">Motores:</span>
-                    <input
-                      type="number"
-                      min={0}
-                      value={motores[p.id] ?? 1}
-                      onChange={e => setMotores(prev => ({ ...prev, [p.id]: Number(e.target.value) }))}
-                      className="w-16 border rounded-lg px-2 py-1 text-sm text-center"
-                    />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-gray-500">Extensiones:</span>
-                    <input
-                      type="number"
-                      min={0}
-                      value={extensiones[p.id] ?? 1}
-                      onChange={e => setExtensiones(prev => ({ ...prev, [p.id]: Number(e.target.value) }))}
-                      className="w-16 border rounded-lg px-2 py-1 text-sm text-center"
-                    />
-                  </div>
-                </div>
-              )}
+        {esRecogida ? (
+          /* Formulario simple de recogida */
+          <div className="mb-5">
+            <div className="bg-blue-50 rounded-xl p-3 mb-4">
+              <p className="text-sm text-blue-700 font-medium mb-2">Artículos a recoger:</p>
+              {parada.productos.map(p => (
+                <p key={p.id} className="text-sm text-blue-600">
+                  • {p.cantidad}× {p.nombre} {p.es_brincolin ? '🎈' : ''}
+                </p>
+              ))}
             </div>
-          ))}
-        </div>
-
-        {/* Recogida */}
-        <div className="flex flex-col gap-3 mb-5">
-          <p className="font-semibold text-sm">📦 Programar recogida</p>
-          <input
-            type="date"
-            value={fechaRecogida}
-            onChange={e => setFechaRecogida(e.target.value)}
-            className="border rounded-xl px-3 py-2 text-sm"
-          />
-          <div className="flex gap-2">
-            <button
-              onClick={() => setTipoHorario('rango')}
-              className={`flex-1 text-sm py-2 rounded-xl border font-medium ${tipoHorario === 'rango' ? 'bg-orange-500 text-white border-orange-500' : 'text-gray-600'}`}
-            >
-              Rango
-            </button>
-            <button
-              onClick={() => setTipoHorario('fijo')}
-              className={`flex-1 text-sm py-2 rounded-xl border font-medium ${tipoHorario === 'fijo' ? 'bg-orange-500 text-white border-orange-500' : 'text-gray-600'}`}
-            >
-              Hora fija
-            </button>
+            <label className="text-sm text-gray-500 mb-1 block">Notas (opcional)</label>
+            <textarea
+              placeholder="Observaciones..."
+              value={notas}
+              onChange={e => setNotas(e.target.value)}
+              className="border rounded-xl px-3 py-2 text-sm w-full"
+              rows={3}
+            />
           </div>
-          <div className="flex gap-2">
-            <div className="flex-1">
-              <p className="text-xs text-gray-500 mb-1">{tipoHorario === 'rango' ? 'Desde' : 'A las'}</p>
+        ) : (
+          /* Formulario completo de entrega */
+          <>
+            {/* Productos */}
+            <div className="flex flex-col gap-4 mb-5">
+              {parada.productos.map(p => (
+                <div key={p.id} className="bg-gray-50 rounded-xl p-3">
+                  <p className="font-medium text-sm mb-2">{p.nombre} {p.es_brincolin ? '🎈' : ''}</p>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs text-gray-500">Cantidad:</span>
+                    <input
+                      type="number"
+                      min={0}
+                      value={cantidades[p.id] ?? p.cantidad}
+                      onChange={e => setCantidades(prev => ({ ...prev, [p.id]: Number(e.target.value) }))}
+                      className="w-16 border rounded-lg px-2 py-1 text-sm text-center"
+                    />
+                  </div>
+                  {p.es_brincolin && (
+                    <div className="flex gap-4 mt-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-500">Motores:</span>
+                        <input
+                          type="number"
+                          min={0}
+                          value={motores[p.id] ?? 1}
+                          onChange={e => setMotores(prev => ({ ...prev, [p.id]: Number(e.target.value) }))}
+                          className="w-16 border rounded-lg px-2 py-1 text-sm text-center"
+                        />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-500">Extensiones:</span>
+                        <input
+                          type="number"
+                          min={0}
+                          value={extensiones[p.id] ?? 1}
+                          onChange={e => setExtensiones(prev => ({ ...prev, [p.id]: Number(e.target.value) }))}
+                          className="w-16 border rounded-lg px-2 py-1 text-sm text-center"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Recogida */}
+            <div className="flex flex-col gap-3 mb-5">
+              <p className="font-semibold text-sm">📦 Programar recogida</p>
               <input
-                type="time"
-                value={horaInicio}
-                onChange={e => setHoraInicio(e.target.value)}
-                className="w-full border rounded-xl px-3 py-2 text-sm"
+                type="date"
+                value={fechaRecogida}
+                onChange={e => setFechaRecogida(e.target.value)}
+                className="border rounded-xl px-3 py-2 text-sm"
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setTipoHorario('rango')}
+                  className={`flex-1 text-sm py-2 rounded-xl border font-medium ${tipoHorario === 'rango' ? 'bg-orange-500 text-white border-orange-500' : 'text-gray-600'}`}
+                >
+                  Rango
+                </button>
+                <button
+                  onClick={() => setTipoHorario('fijo')}
+                  className={`flex-1 text-sm py-2 rounded-xl border font-medium ${tipoHorario === 'fijo' ? 'bg-orange-500 text-white border-orange-500' : 'text-gray-600'}`}
+                >
+                  Hora fija
+                </button>
+              </div>
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <p className="text-xs text-gray-500 mb-1">{tipoHorario === 'rango' ? 'Desde' : 'A las'}</p>
+                  <input
+                    type="time"
+                    value={horaInicio}
+                    onChange={e => setHoraInicio(e.target.value)}
+                    className="w-full border rounded-xl px-3 py-2 text-sm"
+                  />
+                </div>
+                {tipoHorario === 'rango' && (
+                  <div className="flex-1">
+                    <p className="text-xs text-gray-500 mb-1">Hasta</p>
+                    <input
+                      type="time"
+                      value={horaFin}
+                      onChange={e => setHoraFin(e.target.value)}
+                      className="w-full border rounded-xl px-3 py-2 text-sm"
+                    />
+                  </div>
+                )}
+              </div>
+              <textarea
+                placeholder="Notas (opcional)"
+                value={notas}
+                onChange={e => setNotas(e.target.value)}
+                className="border rounded-xl px-3 py-2 text-sm"
+                rows={2}
               />
             </div>
-            {tipoHorario === 'rango' && (
-              <div className="flex-1">
-                <p className="text-xs text-gray-500 mb-1">Hasta</p>
-                <input
-                  type="time"
-                  value={horaFin}
-                  onChange={e => setHoraFin(e.target.value)}
-                  className="w-full border rounded-xl px-3 py-2 text-sm"
-                />
-              </div>
-            )}
-          </div>
-          <textarea
-            placeholder="Notas (opcional)"
-            value={notas}
-            onChange={e => setNotas(e.target.value)}
-            className="border rounded-xl px-3 py-2 text-sm"
-            rows={2}
-          />
-        </div>
+          </>
+        )}
 
         {error && <p className="text-red-500 text-sm mb-3">{error}</p>}
 
         <button
           onClick={confirmar}
           disabled={loading}
-          className="w-full bg-orange-500 text-white py-3 rounded-2xl font-semibold text-sm disabled:opacity-50"
+          className={`w-full py-3 rounded-2xl font-semibold text-sm text-white disabled:opacity-50 ${
+            esRecogida ? 'bg-blue-500' : 'bg-orange-500'
+          }`}
         >
-          {loading ? 'Confirmando...' : 'Confirmar entrega'}
+          {loading ? 'Confirmando...' : esRecogida ? 'Confirmar recogida' : 'Confirmar entrega'}
         </button>
       </div>
     </div>
