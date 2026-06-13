@@ -80,7 +80,11 @@ export default function Entregas() {
     </div>
   )
 
-  if (rutas.length === 0) return (
+  const rutasActivas = rutas.filter(ruta =>
+    ruta.paradas.some(p => p.estado === 'pendiente')
+  )
+
+  if (rutas.length === 0 || rutasActivas.length === 0) return (
     <div className="flex flex-col items-center justify-center h-screen gap-4 text-center px-6">
       <span className="text-5xl">📭</span>
       <h2 className="text-xl font-semibold text-gray-700">Sin ruta asignada hoy</h2>
@@ -96,7 +100,7 @@ export default function Entregas() {
         <p className="text-orange-100 text-sm mt-1">{rutas[0].fecha}</p>
       </div>
 
-      {rutas.map(ruta => (
+      {rutasActivas.map(ruta => (
         <div key={ruta.id} className="px-4 mt-4">
           <div className="flex items-center justify-between mb-3">
             <h2 className="font-semibold text-gray-800">{ruta.nombre}</h2>
@@ -149,8 +153,8 @@ export default function Entregas() {
                     ))}
                   </div>
 
-                  {/* Recogida programada */}
-                  {parada.recogida_programada && (
+                  {/* Recogida programada - solo en rutas de entrega */}
+                  {parada.recogida_programada && ruta.tipo === 'entrega' && (
                     <div className="bg-yellow-50 rounded-lg px-3 py-2 text-xs text-yellow-800 mt-1">
                       📦 Recogida: {parada.recogida_programada.fecha}
                       {parada.recogida_programada.tipo_horario === 'rango'
