@@ -244,7 +244,7 @@ def api_confirmar_entrega(request, parada_id):
         RutaRenta,
         id=parada_id,
         ruta__empleados__empleado=empleado,
-        estado='pendiente'
+        estado__in=['entregado', 'pendiente']
     )
 
     data = request.data
