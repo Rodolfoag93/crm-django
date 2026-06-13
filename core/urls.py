@@ -56,9 +56,9 @@ urlpatterns = [
     path('rutas/<int:ruta_id>/parada/', views.agregar_parada, name='agregar_parada'),
     path('rutas/<int:ruta_id>/estado/', views.cambiar_estado_ruta, name='cambiar_estado_ruta'),
     path('rutas/recogidas/', views.lista_recogidas, name='lista_recogidas'),
-    path('v1/rutas/mis-rutas/', views.api_mis_rutas, name='api_mis_rutas'),
-    path('v1/rutas/<int:parada_id>/entregar/', views.api_confirmar_entrega, name='api_confirmar_entrega'),
-    path('v1/rutas/<int:parada_id>/recoger/', views.api_confirmar_recogida, name='api_confirmar_recogida'),
+    path('rutas/mis-rutas/', views.api_mis_rutas, name='api_mis_rutas'),
+    path('rutas/<int:parada_id>/entregar/', views.api_confirmar_entrega, name='api_confirmar_entrega'),
+    path('rutas/<int:parada_id>/recoger/', views.api_confirmar_recogida, name='api_confirmar_recogida'),
 
     # ─── Inventario / Ocupación ──────────────────────────────────────
     path('inventario/ocupacion/', views.ocupacion_productos, name='ocupacion_productos'),
