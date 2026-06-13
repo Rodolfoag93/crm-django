@@ -4,7 +4,8 @@ from core.api.views import (
     EmpleadoViewSet, NominaViewSet, GastoViewSet,
     MovimientoContableViewSet, AsistenciaViewSet, SolicitudRegistroViewSet, HorasExtraViewSet, me, push_suscribir, push_desuscribir, push_vapid_key,
     api_mantenimiento, api_marcar_limpieza, api_dashboard_admin, api_rentas_hoy, api_asistencia_hoy,
-    api_rutas_admin, api_crear_ruta, api_agregar_parada_admin, api_rentas_disponibles
+    api_rutas_admin, api_crear_ruta, api_agregar_parada_admin, api_rentas_disponibles,
+    api_nueva_renta, api_buscar_clientes, api_buscar_productos
 )
 from core.views.rutas import api_mis_rutas, api_confirmar_entrega, api_confirmar_recogida
 from django.urls import path
@@ -38,4 +39,7 @@ urlpatterns = router.urls + [
     path('rutas-admin/crear/', api_crear_ruta, name='api_crear_ruta'),
     path('rutas-admin/<int:ruta_id>/parada/', api_agregar_parada_admin, name='api_agregar_parada_admin'),
     path('rentas-disponibles/', api_rentas_disponibles, name='api_rentas_disponibles'),
+    path('nueva-renta/', api_nueva_renta, name='api_nueva_renta'),
+    path('clientes/buscar/', api_buscar_clientes, name='api_buscar_clientes'),
+    path('productos/buscar/', api_buscar_productos, name='api_buscar_productos'),
 ]

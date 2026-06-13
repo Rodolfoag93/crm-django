@@ -848,3 +848,143 @@ def api_rentas_disponibles(request):
     ]
 
     return Response(data)
+
+# ── Nueva Renta (admin PWA) ────────────────────────────────────────────────────
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def api_nueva_renta(request):
+    if not request.user.is_staff:
+        return Response({'error': 'No autorizado.'}, status=403)
+
+    from core.models import Renta, RentaProducto, Cliente, Producto, MovimientoContable, PedidoFinanzas
+    from decimal import Decimal
+    import random, string
+
+    data = request.data
+
+    try:
+        # Cliente
+        cliente_id = data.get('cliente_id')
+        if cliente_id:
+            cliente = Cliente.objects.get(id=cliente_id)
+        else:
+            # Crear cliente nuevo
+            cliente = Cliente.objects.create(
+                nombre=data.get('cliente_nombre', ''),
+                telefono=data.get('cliente_telefono', ''),
+                calle_y_numero=data.get('cliente_direccion', ''),
+                colonia=data.get('cliente_colonia', ''),
+                ciudad_o_municipio=data.get('cliente_ciudad', ''),
+            )
+
+        # Generar folio
+        folio = 'R' + str(int(timezone.now().timestamp()))
+
+        # Crear renta
+        renta = Renta.objects.create(
+            folio=folio,
+            cliente=cliente,
+            fecha_renta=data.get('fecha_renta'),
+            hora_inicio=data.get('hora_inicio'),
+            hora_fin=data.get('hora_fin'),
+            calle_y_numero=data.get('calle_y_numero', cliente.calle_y_numero),
+            colonia=data.get('colonia', cliente.colonia),
+            ciudad_o_municipio=data.get('ciudad_o_municipio', cliente.ciudad_o_municipio),
+            precio_total=Decimal(str(data.get('precio_total', 0))),
+            anticipo=Decimal(str(data.get('anticipo', 0))),
+            pagado=data.get('pagado', False),
+            notas=data.get('notas', ''),
+            status='ACTIVO',
+            estado_entrega='PENDIENTE',
+        )
+
+        # Productos
+        total = Decimal('0')
+        for p in data.get('productos', []):
+            producto = Producto.objects.get(id=p['id'])
+            cantidad = int(p['cantidad'])
+            precio_unitario = Decimal(str(p.get('precio_unitario', producto.precio)))
+            subtotal = precio_unitario * cantidad
+            RentaProducto.objects.create(
+                renta=renta,
+                producto=producto,
+                cantidad=cantidad,
+                precio_unitario=precio_unitario,
+                subtotal=subtotal,
+            )
+            total += subtotal
+
+        # Si no se especificó precio, usar total calculado
+        if not data.get('precio_total'):
+            renta.precio_total = total
+            renta.save()
+
+        # Anticipo → movimiento contable
+        anticipo = renta.anticipo
+        if anticipo > 0:
+            metodo_pago = data.get('metodo_pago', 'EFECTIVO')
+            MovimientoContable.objects.create(
+                tipo='INGRESO',
+                monto=anticipo,
+                metodo_pago=metodo_pago,
+                fecha=timezone.now(),
+                descripcion=f'Anticipo renta #{renta.folio}',
+            )
+
+        # Pedido finanzas
+        try:
+            PedidoFinanzas.objects.get_or_create(
+                renta=renta,
+                defaults={'total': renta.precio_total - renta.anticipo}
+            )
+        except Exception:
+            pass
+
+        # Google Calendar
+        try:
+            from core.google_calendar import crear_evento_renta
+            evento_id = crear_evento_renta(renta)
+            if evento_id:
+                renta.evento_google_id = evento_id
+                renta.save(update_fields=['evento_google_id'])
+        except Exception:
+            pass
+
+        return Response({
+            'ok': True,
+            'renta_id': renta.id,
+            'folio': renta.folio,
+        }, status=201)
+
+    except Exception as e:
+        return Response({'error': str(e)}, status=400)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def api_buscar_clientes(request):
+    if not request.user.is_staff:
+        return Response({'error': 'No autorizado.'}, status=403)
+
+    from core.models import Cliente
+    q = request.GET.get('q', '')
+    clientes = Cliente.objects.filter(
+        nombre__icontains=q
+    ).values('id', 'nombre', 'telefono', 'calle_y_numero', 'colonia', 'ciudad_o_municipio')[:10]
+    return Response(list(clientes))
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def api_buscar_productos(request):
+    if not request.user.is_staff:
+        return Response({'error': 'No autorizado.'}, status=403)
+
+    from core.models import Producto
+    q = request.GET.get('q', '')
+    productos = Producto.objects.filter(
+        nombre__icontains=q,
+        activo=True
+    ).values('id', 'nombre', 'precio', 'tipo')[:20]
+    return Response(list(productos))
