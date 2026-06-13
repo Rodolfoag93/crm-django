@@ -114,3 +114,51 @@ def rechazar_solicitud(request, solicitud_id):
         solicitud.save()
         messages.success(request, f'Solicitud de {solicitud.nombre} rechazada.')
     return redirect('lista_solicitudes')
+
+@login_required
+@solo_admin
+def asistencia_diaria(request):
+    from core.models import Asistencia, Empleado
+    from datetime import date, timedelta
+
+    fecha_param = request.GET.get('fecha')
+    if fecha_param:
+        fecha = date.fromisoformat(fecha_param)
+    else:
+        fecha = date.today()
+
+    fecha_anterior = fecha - timedelta(days=1)
+    fecha_siguiente = fecha + timedelta(days=1)
+
+    # Solo repartidores y encargados
+    empleados = Empleado.objects.filter(
+        activo=True,
+        tipo_empleado__in=['REPARTIDOR', 'ENCARGADO']
+    ).order_by('nombre')
+
+    asistencias = Asistencia.objects.filter(fecha=fecha).select_related('empleado')
+    asistencias_dict = {a.empleado_id: a for a in asistencias}
+
+    registros = []
+    for emp in empleados:
+        asistencia = asistencias_dict.get(emp.id)
+        registros.append({
+            'empleado': emp,
+            'asistencia': asistencia,
+            'tiene_entrada': asistencia is not None and asistencia.hora_entrada is not None,
+            'tiene_salida': asistencia is not None and asistencia.hora_salida is not None,
+        })
+
+    con_entrada = sum(1 for r in registros if r['tiene_entrada'])
+    con_salida = sum(1 for r in registros if r['tiene_salida'])
+
+    return render(request, 'core/asistencia_diaria.html', {
+        'registros': registros,
+        'fecha': fecha,
+        'fecha_anterior': fecha_anterior,
+        'fecha_siguiente': fecha_siguiente,
+        'con_entrada': con_entrada,
+        'con_salida': con_salida,
+        'total': len(registros),
+        'module': 'admin',
+    })
