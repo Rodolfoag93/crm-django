@@ -265,7 +265,7 @@ class RutaRenta(models.Model):
 
 class EntregaDetalle(models.Model):
     ruta_renta = models.ForeignKey(RutaRenta, on_delete=models.CASCADE, related_name='detalles')
-    producto_renta = models.ForeignKey('RentaProductos', on_delete=models.PROTECT, related_name='entregas')
+    producto_renta = models.ForeignKey('RentaProducto', on_delete=models.PROTECT, related_name='entregas')
     cantidad_confirmada = models.PositiveSmallIntegerField(default=0)
     motores_dejados = models.PositiveSmallIntegerField(default=0)
     extensiones_dejadas = models.PositiveSmallIntegerField(default=0)
