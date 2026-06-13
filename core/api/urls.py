@@ -4,6 +4,7 @@ from core.api.views import (
     EmpleadoViewSet, NominaViewSet, GastoViewSet,
     MovimientoContableViewSet, AsistenciaViewSet, SolicitudRegistroViewSet, HorasExtraViewSet, me
 )
+from core.views.rutas import api_mis_rutas, api_confirmar_entrega, api_confirmar_recogida
 from django.urls import path
 
 router = DefaultRouter()
@@ -20,4 +21,7 @@ router.register(r'horas-extra', HorasExtraViewSet, basename='horas-extra')
 
 urlpatterns = router.urls + [
     path('auth/me/', me, name='auth-me'),
+    path('rutas/mis-rutas/', api_mis_rutas, name='api_mis_rutas'),
+    path('rutas/<int:parada_id>/entregar/', api_confirmar_entrega, name='api_confirmar_entrega'),
+    path('rutas/<int:parada_id>/recoger/', api_confirmar_recogida, name='api_confirmar_recogida'),
 ]
