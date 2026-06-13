@@ -46,7 +46,6 @@ urlpatterns = [
     path('rentas/ticket/<int:renta_id>/', views.ticket_pdf, name='ticket_pdf'),
     path('rentas/<int:renta_id>/editar/', views.editar_renta, name='editar_renta'),
     path('rentas/<int:renta_id>/cancelar/', views.cancelar_renta, name='cancelar_renta'),
-    path('rentas/<int:renta_id>/asignar-cargador/', views.asignar_cargador, name='asignar_cargador'),
     path('rentas/<int:renta_id>/asignar-coordinador/', views.asignar_coordinador_animacion, name='asignar_coordinador_animacion'),
     path('rentas/<int:pk>/marcar-recolectado/', views.marcar_recolectado, name='marcar_recolectado'),
 
