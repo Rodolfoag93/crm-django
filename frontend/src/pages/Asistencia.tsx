@@ -20,6 +20,7 @@ export default function Asistencia() {
   const [procesando, setProcesando] = useState(false)
   const [mensaje, setMensaje] = useState('')
   const [error, setError] = useState('')
+  const [tieneRecogida, setTieneRecogida] = useState(false)
 
   useEffect(() => {
     fetchAsistenciaHoy()
@@ -28,15 +29,16 @@ export default function Asistencia() {
   const fetchAsistenciaHoy = async () => {
     try {
       const { data } = await api.get('/asistencias/hoy/')
-      if (Array.isArray(data) && data.length > 0) {
-        setAsistencia(data[0])
-        // Turno activo = tiene entrada pero no salida en el último turno
-        const a = data[0]
-        setTurnoActivo(!!a.hora_entrada && !a.hora_salida)
-      } else if (data.results?.length > 0) {
-        setAsistencia(data.results[0])
-        const a = data.results[0]
-        setTurnoActivo(!!a.hora_entrada && !a.hora_salida)
+      const registro = Array.isArray(data) && data.length > 0
+        ? data[0]
+        : data.results?.length > 0
+        ? data.results[0]
+        : null
+
+      if (registro) {
+        setAsistencia(registro)
+        setTurnoActivo(registro.turno_activo ?? (!!registro.hora_entrada && !registro.hora_salida))
+        setTieneRecogida(registro.tiene_recogida_pendiente ?? false)
       }
     } catch {
       setError('Error al cargar asistencia')
@@ -145,8 +147,8 @@ export default function Asistencia() {
             </div>
           )}
 
-          {/* Botones */}
-          {!turnoActivo && (
+{/* Botones */}
+{!turnoActivo && (!asistencia?.hora_entrada || tieneRecogida) && (
             <button
               onClick={handleCheckin}
               disabled={procesando}
@@ -164,6 +166,12 @@ export default function Asistencia() {
             >
               {procesando ? 'Registrando...' : '🔴 Registrar Salida'}
             </button>
+          )}
+
+          {!turnoActivo && asistencia?.hora_entrada && !tieneRecogida && (
+            <div className="text-center bg-gray-50 rounded-xl py-4">
+              <p className="text-gray-600 font-medium">✅ Jornada completada</p>
+            </div>
           )}
         </div>
 
