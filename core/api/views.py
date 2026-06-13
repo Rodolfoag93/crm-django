@@ -424,3 +424,87 @@ def push_desuscribir(request):
 def push_vapid_key(request):
     """Devuelve la clave pública VAPID para el cliente."""
     return Response({'vapid_public_key': VAPID_PUBLIC_KEY})
+
+# ── Mantenimiento ──────────────────────────────────────────────────────────────
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def api_mantenimiento(request):
+    """
+    Devuelve todos los brincolines con su estado de mantenimiento,
+    ordenados por próxima renta más cercana.
+    """
+    from core.models import BitacoraMantenimiento, Producto, RentaProducto
+    from datetime import date
+    hoy = date.today()
+
+    brincolines = Producto.objects.filter(tipo='BR', activo=True)
+    for p in brincolines:
+        BitacoraMantenimiento.objects.get_or_create(producto=p)
+
+    bitacoras = BitacoraMantenimiento.objects.select_related('producto').filter(
+        producto__tipo='BR',
+        producto__activo=True
+    )
+
+    resultado = []
+    for b in bitacoras:
+        proxima = RentaProducto.objects.filter(
+            producto=b.producto,
+            renta__fecha_renta__gte=hoy,
+            renta__status='ACTIVO'
+        ).order_by('renta__fecha_renta').first()
+
+        proxima_renta = str(proxima.renta.fecha_renta) if proxima else None
+        ultima_renta = str(b.fecha_ultima_renta) if b.fecha_ultima_renta else None
+        ultima_limpieza = str(b.fecha_ultimo_mantenimiento) if b.fecha_ultimo_mantenimiento else None
+
+        necesita_limpieza = (
+            ultima_renta and (
+                not b.fecha_ultimo_mantenimiento or
+                b.fecha_ultimo_mantenimiento < b.fecha_ultima_renta
+            )
+        )
+
+        resultado.append({
+            'id': b.producto.id,
+            'nombre': b.producto.nombre,
+            'proxima_renta': proxima_renta,
+            'ultima_renta': ultima_renta,
+            'ultima_limpieza': ultima_limpieza,
+            'necesita_limpieza': necesita_limpieza,
+            'notas': b.notas or '',
+        })
+
+    resultado.sort(key=lambda x: (
+        x['proxima_renta'] is None,
+        x['proxima_renta'] or '9999-99-99'
+    ))
+
+    return Response(resultado)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def api_marcar_limpieza(request, producto_id):
+    """
+    El repartidor marca un brincolin como limpio.
+    """
+    from core.models import BitacoraMantenimiento, Producto, RentaProducto
+    producto = get_object_or_404(Producto, id=producto_id, tipo='BR')
+    notas = request.data.get('notas', '')
+    fecha_ultima_renta = RentaProducto.obtener_fecha_ultima_renta(producto)
+
+    mant, _ = BitacoraMantenimiento.objects.update_or_create(
+        producto=producto,
+        defaults={
+            'fecha_ultima_renta': fecha_ultima_renta,
+            'fecha_ultimo_mantenimiento': timezone.now().date(),
+            'notas': notas,
+        }
+    )
+
+    return Response({
+        'ok': True,
+        'fecha_ultimo_mantenimiento': str(mant.fecha_ultimo_mantenimiento),
+    })

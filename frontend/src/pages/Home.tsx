@@ -77,6 +77,20 @@ export default function Home() {
           </div>
         )}
 
+        {user?.es_cargador && (
+          <div
+            onClick={() => navigate('/mantenimiento')}
+            className="bg-white rounded-2xl shadow-sm p-5 flex items-center gap-4 cursor-pointer hover:shadow-md transition-shadow border border-gray-100"
+          >
+            <div className="bg-green-100 p-3 rounded-xl text-2xl">🔧</div>
+            <div>
+              <h2 className="font-semibold text-gray-900">Mantenimiento</h2>
+              <p className="text-gray-500 text-sm">Limpieza de brincolines</p>
+            </div>
+            <div className="ml-auto text-gray-400">›</div>
+          </div>
+        )}
+
         {/* Mi Nómina */}
         <div
           onClick={() => navigate('/nomina')}

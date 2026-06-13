@@ -2,7 +2,8 @@ from rest_framework.routers import DefaultRouter
 from core.api.views import (
     ClienteViewSet, ProductoViewSet, RentaViewSet,
     EmpleadoViewSet, NominaViewSet, GastoViewSet,
-    MovimientoContableViewSet, AsistenciaViewSet, SolicitudRegistroViewSet, HorasExtraViewSet, me, push_suscribir, push_desuscribir, push_vapid_key
+    MovimientoContableViewSet, AsistenciaViewSet, SolicitudRegistroViewSet, HorasExtraViewSet, me, push_suscribir, push_desuscribir, push_vapid_key,
+    api_mantenimiento, api_marcar_limpieza
 )
 from core.views.rutas import api_mis_rutas, api_confirmar_entrega, api_confirmar_recogida
 from django.urls import path
@@ -27,4 +28,6 @@ urlpatterns = router.urls + [
     path('push/suscribir/', push_suscribir, name='push_suscribir'),
     path('push/desuscribir/', push_desuscribir, name='push_desuscribir'),
     path('push/vapid-key/', push_vapid_key, name='push_vapid_key'),
+    path('mantenimiento/', api_mantenimiento, name='api_mantenimiento'),
+    path('mantenimiento/<int:producto_id>/limpiar/', api_marcar_limpieza, name='api_marcar_limpieza'),
 ]
