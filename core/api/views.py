@@ -456,13 +456,14 @@ def api_mantenimiento(request):
         ).order_by('renta__fecha_renta').first()
 
         proxima_renta = str(proxima.renta.fecha_renta) if proxima else None
-        ultima_renta = str(b.fecha_ultima_renta) if b.fecha_ultima_renta else None
+        ultima_renta_fecha = RentaProducto.obtener_fecha_ultima_renta(b.producto)
+        ultima_renta = str(ultima_renta_fecha) if ultima_renta_fecha else None
         ultima_limpieza = str(b.fecha_ultimo_mantenimiento) if b.fecha_ultimo_mantenimiento else None
 
         necesita_limpieza = (
-            ultima_renta and (
+            ultima_renta_fecha and (
                 not b.fecha_ultimo_mantenimiento or
-                b.fecha_ultimo_mantenimiento < b.fecha_ultima_renta
+                b.fecha_ultimo_mantenimiento < ultima_renta_fecha
             )
         )
 
