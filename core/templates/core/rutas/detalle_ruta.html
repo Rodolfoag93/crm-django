@@ -93,7 +93,7 @@
                 </div>
                 <!-- Productos -->
                 <div class="mt-2">
-                  {% for rp in parada.renta.rentaproducto_set.all %}
+                  {% for rp in parada.renta.rentaproducto.all %}
                   <span class="badge bg-light text-dark border me-1">
                     {{ rp.cantidad }}× {{ rp.producto.nombre }}
                     {% if rp.producto.tipo == 'BR' %}

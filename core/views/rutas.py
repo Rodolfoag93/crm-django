@@ -62,7 +62,7 @@ def detalle_ruta(request, ruta_id):
         Ruta.objects.prefetch_related(
             'empleados__empleado',
             'paradas__renta__cliente',
-            'paradas__renta__rentaproducto_set__producto',
+            'paradas__renta__rentaproducto__producto',
             'paradas__recogida_programada',
         ),
         id=ruta_id
