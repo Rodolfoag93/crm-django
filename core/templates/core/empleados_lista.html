@@ -15,7 +15,7 @@
             <th>Tipo</th>
             <th>Teléfono</th>
             <th>Sueldo Diario</th>
-            <th>Correo</th>
+            <th>Usuario PWA</th>
             <th>Acciones</th>
         </tr>
     </thead>
@@ -27,7 +27,15 @@
             <td>{{ e.get_tipo_empleado_display }}</td>
             <td>{{ e.telefono }}</td>
             <td>${{ e.sueldo_diario }}</td>
-            <td>{{ e.correo }}</td>
+            <td>
+                {% if e.user %}
+                    <span style="background:#4caf50;color:white;padding:2px 8px;border-radius:4px;font-size:12px;">
+                        {{ e.user.username }}
+                    </span>
+                {% else %}
+                    <span style="color:#999;font-size:12px;">Sin cuenta</span>
+                {% endif %}
+            </td>
             <td>
                 <a href="{% url 'editar_empleado' e.id %}"
                    style="padding:5px 8px; background:#2196F3; color:white; border-radius:4px; text-decoration:none;">
