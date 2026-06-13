@@ -153,10 +153,10 @@ export default function Entregas() {
                     ))}
                   </div>
 
-                  {/* Recogida programada - solo en rutas de entrega */}
-                  {parada.recogida_programada && ruta.tipo === 'entrega' && (
-                    <div className="bg-yellow-50 rounded-lg px-3 py-2 text-xs text-yellow-800 mt-1">
-                      📦 Recogida: {parada.recogida_programada.fecha}
+                  {/* Info de recogida - solo en rutas de recogida */}
+                  {parada.recogida_programada && ruta.tipo === 'recogida' && (
+                    <div className="bg-blue-50 rounded-lg px-3 py-2 text-xs text-blue-800 mt-1">
+                      📅 Programado recoger: {parada.recogida_programada.fecha}
                       {parada.recogida_programada.tipo_horario === 'rango'
                         ? ` de ${parada.recogida_programada.hora_inicio} a ${parada.recogida_programada.hora_fin}`
                         : ` a las ${parada.recogida_programada.hora_inicio}`}
