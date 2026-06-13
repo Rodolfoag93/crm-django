@@ -612,7 +612,10 @@ def api_asistencia_hoy(request):
     hoy = date.today()
 
     # Todos los empleados activos
-    empleados = Empleado.objects.filter(activo=True).select_related('user')
+    empleados = Empleado.objects.filter(
+        activo=True,
+        tipo_empleado__in=['REPARTIDOR', 'ENCARGADO']
+    ).select_related('user')
 
     # Asistencias de hoy
     asistencias_hoy = Asistencia.objects.filter(fecha=hoy).select_related('empleado')

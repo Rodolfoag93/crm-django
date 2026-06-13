@@ -22,7 +22,7 @@ class Command(BaseCommand):
             # Notificar a todos los empleados con usuario activo
             usuarios = User.objects.filter(
                 is_active=True,
-                empleado__isnull=False,
+                empleado__tipo_empleado__in=['REPARTIDOR', 'ENCARGADO'],
                 push_suscripciones__isnull=False
             ).distinct()
             enviar_notificacion_todos(
@@ -36,7 +36,7 @@ class Command(BaseCommand):
         elif tipo == 'checkout':
             usuarios = User.objects.filter(
                 is_active=True,
-                empleado__isnull=False,
+                empleado__tipo_empleado__in=['REPARTIDOR', 'ENCARGADO'],
                 push_suscripciones__isnull=False
             ).distinct()
             enviar_notificacion_todos(
@@ -46,13 +46,13 @@ class Command(BaseCommand):
                 url='/asistencia'
             )
             self.stdout.write(f'Checkout enviado a {usuarios.count()} usuarios')
-
         elif tipo == 'rutas_hoy':
             # Notificar a repartidores con ruta hoy
             ruta_empleados = RutaEmpleado.objects.filter(
                 ruta__fecha=hoy,
                 ruta__tipo='entrega',
                 ruta__estado='pendiente',
+                empleado__tipo_empleado__in=['REPARTIDOR', 'ENCARGADO'],
                 empleado__user__isnull=False,
                 empleado__user__push_suscripciones__isnull=False
             ).select_related('empleado__user', 'ruta').distinct()
