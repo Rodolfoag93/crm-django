@@ -196,7 +196,7 @@ def api_mis_rutas(request):
                 'estado': parada.estado,
                 'cliente': renta.cliente.nombre,
                 'telefono': renta.cliente.telefono,
-                'direccion': f"{renta.calle}, {renta.colonia}, {renta.ciudad}",
+                'direccion': f"{renta.calle_y_numero}, {renta.colonia}, {renta.ciudad_o_municipio}",
                 'hora_inicio': str(renta.hora_inicio) if renta.hora_inicio else None,
                 'hora_fin': str(renta.hora_fin) if renta.hora_fin else None,
                 'folio': renta.folio,
