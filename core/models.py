@@ -155,13 +155,6 @@ class Renta(models.Model):
         on_delete=models.SET_NULL,
         related_name="recolecciones"
     )
-    ruta = models.ForeignKey(
-        'Ruta',
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='rentas'
-    )
     comentarios = models.TextField(blank=True, null=True)
 
     ESTADO_ENTREGA = [
@@ -196,25 +189,122 @@ class Renta(models.Model):
     def tiene_animacion(self):
         return self.rentaproductos.filter(producto__tipo='AN').exists()
 
+# ===== MÓDULO DE RUTAS =====
+
 class Ruta(models.Model):
+    TIPO = [
+        ('entrega', 'Entrega'),
+        ('recogida', 'Recogida'),
+    ]
+    ESTADO = [
+        ('pendiente', 'Pendiente'),
+        ('en_camino', 'En camino'),
+        ('completada', 'Completada'),
+    ]
+    nombre = models.CharField(max_length=150)
+    tipo = models.CharField(max_length=10, choices=TIPO, default='entrega')
     fecha = models.DateField()
-    cargador = models.ForeignKey(
-        User,
-        on_delete=models.CASCADE,
-        related_name="rutas"
-    )
-    estado = models.CharField(
-        max_length=20,
-        choices=[
-            ('Creada','Creada'),
-            ('EN_RUTA', 'En ruta'),
-            ('FINALIZADA', 'Finalizada'),
-        ],
-        default='Creada'
-    )
-    created_at =models.DateTimeField(auto_now_add=True)
+    estado = models.CharField(max_length=15, choices=ESTADO, default='pendiente')
+    notas = models.TextField(blank=True)
+    creada_en = models.DateTimeField(auto_now_add=True)
+    actualizada_en = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Ruta'
+        verbose_name_plural = 'Rutas'
+        ordering = ['-fecha', 'nombre']
+        indexes = [
+            models.Index(fields=['fecha', 'estado']),
+            models.Index(fields=['tipo', 'estado']),
+        ]
+
     def __str__(self):
-        return f"Ruta {self.fecha} - {self.cargador}"
+        return f"{self.get_tipo_display()} – {self.nombre} ({self.fecha})"
+
+
+class RutaEmpleado(models.Model):
+    ruta = models.ForeignKey(Ruta, on_delete=models.CASCADE, related_name='empleados')
+    empleado = models.ForeignKey('Empleado', on_delete=models.PROTECT, related_name='rutas')
+    es_lider = models.BooleanField(default=False)
+
+    class Meta:
+        verbose_name = 'Empleado en ruta'
+        verbose_name_plural = 'Empleados en ruta'
+        unique_together = ('ruta', 'empleado')
+
+    def __str__(self):
+        return f"{self.empleado} – {self.ruta}"
+
+
+class RutaRenta(models.Model):
+    ESTADO = [
+        ('pendiente', 'Pendiente'),
+        ('entregado', 'Entregado'),
+        ('recogido', 'Recogido'),
+    ]
+    ruta = models.ForeignKey(Ruta, on_delete=models.CASCADE, related_name='paradas')
+    renta = models.ForeignKey('Renta', on_delete=models.PROTECT, related_name='rutas')
+    orden = models.PositiveSmallIntegerField(default=1)
+    estado = models.CharField(max_length=15, choices=ESTADO, default='pendiente')
+    hora_confirmacion = models.DateTimeField(null=True, blank=True)
+    latitud = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    longitud = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    notas_campo = models.TextField(blank=True)
+
+    class Meta:
+        verbose_name = 'Parada de ruta'
+        verbose_name_plural = 'Paradas de ruta'
+        ordering = ['orden']
+        indexes = [
+            models.Index(fields=['estado']),
+        ]
+
+    def __str__(self):
+        return f"Parada {self.orden} – Renta #{self.renta_id} ({self.get_estado_display()})"
+
+
+class EntregaDetalle(models.Model):
+    ruta_renta = models.ForeignKey(RutaRenta, on_delete=models.CASCADE, related_name='detalles')
+    producto_renta = models.ForeignKey('RentaProductos', on_delete=models.PROTECT, related_name='entregas')
+    cantidad_confirmada = models.PositiveSmallIntegerField(default=0)
+    motores_dejados = models.PositiveSmallIntegerField(default=0)
+    extensiones_dejadas = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        verbose_name = 'Detalle de entrega'
+        verbose_name_plural = 'Detalles de entrega'
+        unique_together = ('ruta_renta', 'producto_renta')
+
+    def __str__(self):
+        return f"{self.producto_renta} – confirmado: {self.cantidad_confirmada}"
+
+
+class RecogidaProgramada(models.Model):
+    TIPO_HORARIO = [
+        ('fijo', 'Hora fija'),
+        ('rango', 'Rango de horas'),
+    ]
+    ruta_renta_entrega = models.OneToOneField(
+        RutaRenta,
+        on_delete=models.CASCADE,
+        related_name='recogida_programada',
+    )
+    fecha_recogida = models.DateField()
+    tipo_horario = models.CharField(max_length=5, choices=TIPO_HORARIO, default='rango')
+    hora_inicio = models.TimeField()
+    hora_fin = models.TimeField(null=True, blank=True)
+    notas = models.TextField(blank=True)
+    creada_en = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Recogida programada'
+        verbose_name_plural = 'Recogidas programadas'
+        indexes = [
+            models.Index(fields=['fecha_recogida']),
+        ]
+
+    def __str__(self):
+        return f"Recogida Renta #{self.ruta_renta_entrega.renta_id} – {self.fecha_recogida}"
 
 
 
