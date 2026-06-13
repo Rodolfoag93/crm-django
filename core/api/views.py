@@ -6,11 +6,12 @@ from django_filters.rest_framework import DjangoFilterBackend
 from django.utils import timezone
 from django.shortcuts import get_object_or_404
 from datetime import timedelta
+from core.push_notifications import VAPID_PUBLIC_KEY
 
 
 from core.models import (
     Cliente, Producto, Renta, Empleado,
-    Nomina, Gasto, MovimientoContable, Asistencia, SolicitudRegistro, HorasExtra
+    Nomina, Gasto, MovimientoContable, Asistencia, SolicitudRegistro, HorasExtra, PushSuscripcion
 )
 from core.api.serializers import (
     ClienteSerializer, ProductoSerializer, RentaSerializer,
@@ -382,3 +383,44 @@ class SolicitudRegistroViewSet(viewsets.GenericViewSet):
 
         serializer = self.get_serializer(asistencia)
         return Response(serializer.data)
+
+#---------push notificacions---------------
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def push_suscribir(request):
+    """Guarda la suscripción push del dispositivo del usuario."""
+    data = request.data
+    endpoint = data.get('endpoint')
+    p256dh = data.get('keys', {}).get('p256dh')
+    auth = data.get('keys', {}).get('auth')
+
+    if not all([endpoint, p256dh, auth]):
+        return Response({'error': 'Datos incompletos.'}, status=400)
+
+    PushSuscripcion.objects.update_or_create(
+        endpoint=endpoint,
+        defaults={
+            'user': request.user,
+            'p256dh': p256dh,
+            'auth': auth,
+        }
+    )
+    return Response({'ok': True})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def push_desuscribir(request):
+    """Elimina la suscripción push del dispositivo."""
+    endpoint = request.data.get('endpoint')
+    if endpoint:
+        PushSuscripcion.objects.filter(user=request.user, endpoint=endpoint).delete()
+    return Response({'ok': True})
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def push_vapid_key(request):
+    """Devuelve la clave pública VAPID para el cliente."""
+    return Response({'vapid_public_key': VAPID_PUBLIC_KEY})

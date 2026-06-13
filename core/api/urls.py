@@ -2,7 +2,7 @@ from rest_framework.routers import DefaultRouter
 from core.api.views import (
     ClienteViewSet, ProductoViewSet, RentaViewSet,
     EmpleadoViewSet, NominaViewSet, GastoViewSet,
-    MovimientoContableViewSet, AsistenciaViewSet, SolicitudRegistroViewSet, HorasExtraViewSet, me
+    MovimientoContableViewSet, AsistenciaViewSet, SolicitudRegistroViewSet, HorasExtraViewSet, me, push_suscribir, push_desuscribir, push_vapid_key
 )
 from core.views.rutas import api_mis_rutas, api_confirmar_entrega, api_confirmar_recogida
 from django.urls import path
@@ -24,4 +24,7 @@ urlpatterns = router.urls + [
     path('rutas/mis-rutas/', api_mis_rutas, name='api_mis_rutas'),
     path('rutas/<int:parada_id>/entregar/', api_confirmar_entrega, name='api_confirmar_entrega'),
     path('rutas/<int:parada_id>/recoger/', api_confirmar_recogida, name='api_confirmar_recogida'),
+    path('push/suscribir/', push_suscribir, name='push_suscribir'),
+    path('push/desuscribir/', push_desuscribir, name='push_desuscribir'),
+    path('push/vapid-key/', push_vapid_key, name='push_vapid_key'),
 ]

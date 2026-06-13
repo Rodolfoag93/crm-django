@@ -357,6 +357,22 @@ class RentaProducto(models.Model):
     def __str__(self):
         return f"{self.producto.nombre} x{self.cantidad} - {self.renta.folio}"
 
+# ===== NOTIFICACIONES PUSH =====
+
+class PushSuscripcion(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='push_suscripciones')
+    endpoint = models.TextField(unique=True)
+    p256dh = models.TextField()
+    auth = models.TextField()
+    creada_en = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Suscripción Push'
+        verbose_name_plural = 'Suscripciones Push'
+
+    def __str__(self):
+        return f"Push {self.user.username} — {self.endpoint[:50]}"
+
 # =============================================
 # CONTABILIDAD
 # =============================================
