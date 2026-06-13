@@ -244,7 +244,7 @@ def api_confirmar_entrega(request, parada_id):
         RutaRenta,
         id=parada_id,
         ruta__empleados__empleado=empleado,
-        estado__in=['entregado', 'pendiente']
+        estado='pendiente'
     )
 
     data = request.data
@@ -310,7 +310,7 @@ def api_confirmar_recogida(request, parada_id):
         RutaRenta,
         id=parada_id,
         ruta__empleados__empleado=empleado,
-        estado='entregado'
+        estado__in=['entregado', 'pendiente']
     )
 
     parada.latitud = request.data.get('latitud')
