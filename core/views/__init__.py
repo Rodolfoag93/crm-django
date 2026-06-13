@@ -44,14 +44,12 @@ from core.views.rentas import (
 
 # ── Rutas ─────────────────────────────────────────────────────────────
 from core.views.rutas import (
-    asignar_cargador,
-    iniciar_ruta,
-    finalizar_ruta,
-    mi_ruta,
-    asignar_rentas_a_ruta,
-    detalle_ruta,
-    crear_ruta,
     lista_rutas,
+    crear_ruta,
+    detalle_ruta,
+    agregar_parada,
+    cambiar_estado_ruta,
+    lista_recogidas,
 )
 
 # ── Contabilidad ──────────────────────────────────────────────────────

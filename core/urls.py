@@ -53,11 +53,10 @@ urlpatterns = [
     # ─── Rutas de entrega ────────────────────────────────────────────
     path('rutas/', views.lista_rutas, name='lista_rutas'),
     path('rutas/crear/', views.crear_ruta, name='crear_ruta'),
-    path('ruta/<int:ruta_id>/iniciar/', views.iniciar_ruta, name='iniciar_ruta'),
-    path('ruta/<int:ruta_id>/finalizar/', views.finalizar_ruta, name='finalizar_ruta'),
-    path('ruta/<int:ruta_id>/asignar-rentas/', views.asignar_rentas_a_ruta, name='asignar_rentas_ruta'),
-    path('ruta/<int:ruta_id>/detalle/', views.detalle_ruta, name='detalle_ruta'),
-    path('mi-ruta/', views.mi_ruta, name='mi_ruta'),
+    path('rutas/<int:ruta_id>/', views.detalle_ruta, name='detalle_ruta'),
+    path('rutas/<int:ruta_id>/parada/', views.agregar_parada, name='agregar_parada'),
+    path('rutas/<int:ruta_id>/estado/', views.cambiar_estado_ruta, name='cambiar_estado_ruta'),
+    path('rutas/recogidas/', views.lista_recogidas, name='lista_recogidas'),
 
     # ─── Inventario / Ocupación ──────────────────────────────────────
     path('inventario/ocupacion/', views.ocupacion_productos, name='ocupacion_productos'),
