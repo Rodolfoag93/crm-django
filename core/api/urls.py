@@ -40,6 +40,6 @@ urlpatterns = router.urls + [
     path('rutas-admin/<int:ruta_id>/parada/', api_agregar_parada_admin, name='api_agregar_parada_admin'),
     path('rentas-disponibles/', api_rentas_disponibles, name='api_rentas_disponibles'),
     path('nueva-renta/', api_nueva_renta, name='api_nueva_renta'),
-    path('clientes/buscar/', api_buscar_clientes, name='api_buscar_clientes'),
-    path('productos/buscar/', api_buscar_productos, name='api_buscar_productos'),
+    path('clientes-buscar/', api_buscar_clientes, name='api_buscar_clientes'),
+    path('productos-buscar/', api_buscar_productos, name='api_buscar_productos'),
 ]

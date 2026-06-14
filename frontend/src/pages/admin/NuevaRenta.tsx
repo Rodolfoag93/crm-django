@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect} from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../../lib/api'
 
@@ -65,7 +65,7 @@ export default function NuevaRenta() {
   useEffect(() => {
     if (busquedaCliente.length < 2) { setClientesSugeridos([]); return }
     const timer = setTimeout(async () => {
-      const res = await api.get(`/clientes/buscar/?q=${busquedaCliente}`)
+      const res = await api.get(`/clientes-buscar/?q=${busquedaCliente}`)
       setClientesSugeridos(res.data)
     }, 300)
     return () => clearTimeout(timer)
@@ -75,7 +75,7 @@ export default function NuevaRenta() {
   useEffect(() => {
     if (busquedaProducto.length < 2) { setProductosSugeridos([]); return }
     const timer = setTimeout(async () => {
-      const res = await api.get(`/productos/buscar/?q=${busquedaProducto}`)
+      const res = await api.get(`/productos-buscar/?q=${busquedaProducto}`)
       setProductosSugeridos(res.data)
     }, 300)
     return () => clearTimeout(timer)
