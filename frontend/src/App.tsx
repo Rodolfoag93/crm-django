@@ -12,6 +12,7 @@ import RentasHoy from './pages/admin/RentasHoy'
 import AsistenciaHoy from './pages/admin/AsistenciaHoy'
 import RutasAdmin from './pages/admin/RutasAdmin'
 import RutaDetalle from './pages/admin/RutaDetalle'
+import NuevaRenta from './pages/admin/NuevaRenta'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
@@ -52,6 +53,9 @@ export default function App() {
         } />
         <Route path="/admin/rutas/:id" element={
           <PrivateRoute><RutaDetalle /></PrivateRoute>
+        } />
+        <Route path="/admin/nueva-renta" element={
+          <PrivateRoute><NuevaRenta /></PrivateRoute>
         } />
         <Route path="*" element={<Navigate to="/login" />} />
       </Routes>
