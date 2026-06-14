@@ -894,7 +894,6 @@ def api_nueva_renta(request):
             precio_total=Decimal(str(data.get('precio_total') or 0)),
             anticipo=Decimal(str(data.get('anticipo') or 0)),
             pagado=data.get('pagado', False),
-            notas=data.get('notas', ''),
             status='ACTIVO',
             estado_entrega='PENDIENTE',
         )
