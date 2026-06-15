@@ -97,10 +97,13 @@ class NominaViewSet(viewsets.ModelViewSet):
         if empleado_id and user.is_staff:
             qs = qs.filter(empleado_id=empleado_id)
 
-        # Filtro por semana (fecha_inicio)
+        # Filtro por semana — todas las nóminas que caigan dentro del rango lunes-domingo
         fecha_inicio = self.request.query_params.get('fecha_inicio')
         if fecha_inicio:
-            qs = qs.filter(fecha_inicio=fecha_inicio)
+            from datetime import date, timedelta
+            lunes = date.fromisoformat(fecha_inicio)
+            domingo = lunes + timedelta(days=6)
+            qs = qs.filter(fecha_inicio__gte=lunes, fecha_fin__lte=domingo)
 
         return qs
 
