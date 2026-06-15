@@ -6,7 +6,7 @@ from core.api.views import (
     api_mantenimiento, api_marcar_limpieza, api_dashboard_admin, api_rentas_hoy, api_asistencia_hoy,
     api_rutas_admin, api_crear_ruta, api_agregar_parada_admin, api_rentas_disponibles,
     api_nueva_renta, api_buscar_clientes, api_buscar_productos, api_cuentas, api_crear_gasto
-
+)
 from core.views.rutas import api_mis_rutas, api_confirmar_entrega, api_confirmar_recogida
 from django.urls import path
 
