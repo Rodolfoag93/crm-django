@@ -15,8 +15,10 @@ interface RentaDisponible {
   id: number
   folio: string
   cliente: string
+  fecha_renta: string
   hora_inicio: string | null
   direccion: string
+  estado_entrega: string
 }
 
 interface Ruta {
@@ -52,7 +54,8 @@ export default function RutaDetalle() {
       const rutaEncontrada = res.data.find((r: Ruta) => r.id === Number(id))
       setRuta(rutaEncontrada || null)
 
-      const rentasRes = await api.get(`/rentas-disponibles/?fecha=${fecha}&ruta_id=${id}`)
+      const tipo = rutaEncontrada?.tipo || 'entrega'
+      const rentasRes = await api.get(`/rentas-disponibles/?fecha=${fecha}&ruta_id=${id}&tipo=${tipo}`)
       setRentasDisponibles(rentasRes.data)
     } catch {
       console.error('Error cargando ruta')
@@ -185,7 +188,7 @@ export default function RutaDetalle() {
                   <div key={r.id} className="bg-gray-50 rounded-xl p-3 flex justify-between items-center">
                     <div>
                       <p className="font-medium text-sm">{r.cliente}</p>
-                      <p className="text-xs text-gray-400">{r.folio} {r.hora_inicio ? `• ${r.hora_inicio}` : ''}</p>
+                      <p className="text-xs text-gray-400">{r.folio} • {r.fecha_renta} {r.hora_inicio ? `• ${r.hora_inicio}` : ''}</p>
                       <p className="text-xs text-gray-400">📍 {r.direccion}</p>
                     </div>
                     <button
