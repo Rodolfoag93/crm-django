@@ -1000,3 +1000,51 @@ def api_buscar_productos(request):
         activo=True
     ).values('id', 'nombre', 'precio', 'tipo')[:20]
     return Response(list(productos))
+
+# ── Gastos Admin PWA ───────────────────────────────────────────────────────────
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def api_cuentas(request):
+    if not request.user.is_staff:
+        return Response({'error': 'No autorizado.'}, status=403)
+    from core.models import Cuenta
+    cuentas = Cuenta.objects.all().order_by('nombre')
+    data = [{'id': c.id, 'nombre': c.nombre, 'tipo': c.tipo} for c in cuentas]
+    return Response(data)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def api_crear_gasto(request):
+    if not request.user.is_staff:
+        return Response({'error': 'No autorizado.'}, status=403)
+    from core.models import Gasto, Cuenta, MovimientoContable
+    from datetime import date
+    data = request.data
+
+    try:
+        cuenta = Cuenta.objects.get(id=data.get('cuenta_id'))
+    except Cuenta.DoesNotExist:
+        return Response({'error': 'Cuenta no válida.'}, status=400)
+
+    gasto = Gasto.objects.create(
+        tipo=data.get('tipo', 'GASTO'),
+        categoria=data.get('categoria', 'INSUMOS'),
+        cuenta=cuenta,
+        descripcion=data.get('descripcion', ''),
+        monto=data.get('monto'),
+        fecha=data.get('fecha', str(date.today())),
+        referencia=data.get('referencia', ''),
+    )
+
+    # Movimiento contable automático
+    MovimientoContable.objects.create(
+        tipo='EGRESO',
+        monto=gasto.monto,
+        descripcion=gasto.descripcion,
+        fecha=gasto.fecha,
+        cuenta=cuenta,
+    )
+
+    return Response({'ok': True, 'gasto_id': gasto.id})
