@@ -42,6 +42,6 @@ urlpatterns = router.urls + [
     path('nueva-renta/', api_nueva_renta, name='api_nueva_renta'),
     path('clientes-buscar/', api_buscar_clientes, name='api_buscar_clientes'),
     path('productos-buscar/', api_buscar_productos, name='api_buscar_productos'),
-    path('v1/cuentas/', views.api_cuentas, name='api_cuentas'),
-    path('v1/crear-gasto/', views.api_crear_gasto, name='api_crear_gasto'),
+    path('cuentas/', views.api_cuentas, name='api_cuentas'),
+    path('crear-gasto/', views.api_crear_gasto, name='api_crear_gasto'),
 ]
