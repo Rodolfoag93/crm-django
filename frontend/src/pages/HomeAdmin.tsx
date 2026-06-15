@@ -139,7 +139,7 @@ export default function HomeAdmin() {
             <p className="text-xs text-gray-400 text-center">Crear pedido</p>
           </div>
 
-          <div onClick={() => navigate('/admin/mantenimiento')}
+          <div onClick={() => navigate('/mantenimiento')}
             className="bg-white rounded-2xl shadow-sm p-4 flex flex-col items-center gap-2 cursor-pointer border border-gray-100 hover:shadow-md transition-shadow">
             <span className="text-3xl">🔧</span>
             <p className="font-semibold text-gray-900 text-sm">Mantenimiento</p>
