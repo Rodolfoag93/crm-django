@@ -829,7 +829,7 @@ def api_rentas_disponibles(request):
     ruta_id = request.GET.get('ruta_id')
     tipo = request.GET.get('tipo', 'entrega')  # 'entrega' o 'recoleccion'
 
-    if tipo == 'recoleccion':
+    if tipo in ('recoleccion', 'recogida'):
         # Pedidos ya entregados, pendientes de recolectar
         rentas = Renta.objects.filter(
             status='ACTIVO',
