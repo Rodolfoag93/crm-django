@@ -1,6 +1,6 @@
 # core/utils.py
 from django.db.models import Sum, Case, When, F, DecimalField
-from .models import MovimientoContable, Gasto
+from .models import MovimientoContable, Gasto, Cuenta
 from django.utils import timezone
 
 def saldo_efectivo():
