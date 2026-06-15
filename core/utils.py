@@ -43,7 +43,7 @@ def sincronizar_gasto_nomina(nomina):
     # =========================
     # 2️⃣ MOVIMIENTO CONTABLE
     # =========================
-     cuenta_efectivo = Cuenta.objects.filter(tipo='Efectivo', activa=True).first()
+    cuenta_efectivo = Cuenta.objects.filter(tipo='Efectivo', activa=True).first()
 
     MovimientoContable.objects.update_or_create(
         descripcion=descripcion,
