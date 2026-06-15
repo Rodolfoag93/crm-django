@@ -61,7 +61,8 @@ export default function CrearGasto() {
         monto: Number(form.monto),
         cuenta_id: Number(form.cuenta_id),
       })
-      navigate('/admin/gastos/exito')
+      alert('✅ Gasto registrado correctamente.')
+      navigate(-1)
     } catch {
       setError('Error al guardar el gasto. Intenta de nuevo.')
     } finally {

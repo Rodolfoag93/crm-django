@@ -1039,11 +1039,12 @@ def api_crear_gasto(request):
     )
 
     # Movimiento contable automático
+
     MovimientoContable.objects.create(
         tipo='EGRESO',
         monto=gasto.monto,
         descripcion=gasto.descripcion,
-        fecha=gasto.fecha,
+        fecha=timezone.now(),
         cuenta=cuenta,
     )
 
