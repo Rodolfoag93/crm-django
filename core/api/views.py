@@ -81,6 +81,11 @@ class EmpleadoViewSet(viewsets.ModelViewSet):
 class NominaViewSet(viewsets.ModelViewSet):
     serializer_class = NominaSerializer
     permission_classes = [IsAuthenticated]
+
+    def perform_create(self, serializer):
+        nomina = serializer.save()
+        nomina.save()
+
     def get_queryset(self):
         user = self.request.user
         if user.is_staff or user.is_superuser:
