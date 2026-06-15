@@ -823,30 +823,43 @@ def api_rentas_disponibles(request):
     """Rentas sin ruta asignada para una fecha dada."""
     if not request.user.is_staff:
         return Response({'error': 'No autorizado.'}, status=403)
-
     from core.models import Renta
     from datetime import date
     fecha = request.GET.get('fecha', str(date.today()))
     ruta_id = request.GET.get('ruta_id')
+    tipo = request.GET.get('tipo', 'entrega')  # 'entrega' o 'recoleccion'
 
-    rentas = Renta.objects.filter(
-        fecha_renta=fecha,
-        status='ACTIVO'
-    ).exclude(
-        rutas__ruta_id=ruta_id
-    ).select_related('cliente').order_by('hora_inicio')
+    if tipo == 'recoleccion':
+        # Pedidos ya entregados, pendientes de recolectar
+        rentas = Renta.objects.filter(
+            status='ACTIVO',
+            estado_entrega='ENTREGADO',
+        )
+    else:
+        # Pedidos a entregar en la fecha seleccionada
+        rentas = Renta.objects.filter(
+            fecha_renta=fecha,
+            status='ACTIVO',
+            estado_entrega='PENDIENTE',
+        )
+
+    if ruta_id:
+        rentas = rentas.exclude(rutas__ruta_id=ruta_id)
+
+    rentas = rentas.select_related('cliente').order_by('hora_inicio')
 
     data = [
         {
             'id': r.id,
             'folio': r.folio,
             'cliente': r.cliente.nombre,
+            'fecha_renta': str(r.fecha_renta),
             'hora_inicio': str(r.hora_inicio) if r.hora_inicio else None,
             'direccion': f"{r.calle_y_numero}, {r.colonia}, {r.ciudad_o_municipio}",
+            'estado_entrega': r.estado_entrega,
         }
         for r in rentas
     ]
-
     return Response(data)
 
 # ── Nueva Renta (admin PWA) ────────────────────────────────────────────────────
