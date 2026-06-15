@@ -81,16 +81,28 @@ class EmpleadoViewSet(viewsets.ModelViewSet):
 class NominaViewSet(viewsets.ModelViewSet):
     serializer_class = NominaSerializer
     permission_classes = [IsAuthenticated]
-
     def get_queryset(self):
         user = self.request.user
         if user.is_staff or user.is_superuser:
-            return Nomina.objects.select_related('empleado').order_by('-fecha_inicio')
-        try:
-            empleado = user.empleado
-            return Nomina.objects.filter(empleado=empleado).order_by('-fecha_inicio')
-        except Exception:
-            return Nomina.objects.none()
+            qs = Nomina.objects.select_related('empleado').order_by('-fecha_inicio')
+        else:
+            try:
+                empleado = user.empleado
+                qs = Nomina.objects.filter(empleado=empleado).order_by('-fecha_inicio')
+            except Exception:
+                return Nomina.objects.none()
+
+        # Filtro por empleado (solo admin)
+        empleado_id = self.request.query_params.get('empleado_id')
+        if empleado_id and user.is_staff:
+            qs = qs.filter(empleado_id=empleado_id)
+
+        # Filtro por semana (fecha_inicio)
+        fecha_inicio = self.request.query_params.get('fecha_inicio')
+        if fecha_inicio:
+            qs = qs.filter(fecha_inicio=fecha_inicio)
+
+        return qs
 
 
 class GastoViewSet(viewsets.ModelViewSet):
