@@ -65,18 +65,17 @@ export default function NuevaNomina() {
 
     setGuardando(true)
     try {
-      await api.post('/nomina/', {
-        empleado: parseInt(form.empleado_id),
-        fecha_inicio: form.fecha_inicio,
-        fecha_fin: form.fecha_fin,
-        dias_trabajados: parseInt(form.dias_trabajados),
-        total: totalEstimado,
-      })
+        await api.post('/nomina/', {
+            empleado: parseInt(form.empleado_id),
+            fecha_inicio: form.fecha_inicio,
+            fecha_fin: form.fecha_fin,
+            dias_trabajados: parseInt(form.dias_trabajados),
+          })
       alert('✅ Nómina creada correctamente.')
       navigate('/admin/nominas')
     } catch (err: any) {
-      setError('Error al crear la nómina. Intenta de nuevo.')
-    } finally {
+        setError('Error al crear la nómina. Intenta de nuevo.')
+      } finally {
       setGuardando(false)
     }
   }

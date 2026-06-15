@@ -45,12 +45,12 @@ class RentaSerializer(serializers.ModelSerializer):
 class EmpleadoSerializer(serializers.ModelSerializer):
     class Meta:
         model = Empleado
-        fields = ['id', 'nombre', 'telefono', 'correo', 'tipo_empleado', 'activo']
+        fields = ['id', 'nombre', 'telefono', 'correo', 'tipo_empleado', 'activo', 'sueldo_diario']
 
 
 class NominaSerializer(serializers.ModelSerializer):
     empleado_nombre = serializers.CharField(source='empleado.nombre', read_only=True)
-
+    total = serializers.DecimalField(max_digits=10, decimal_places=2, required=False, default=0)
     class Meta:
         model = Nomina
         fields = ['id', 'empleado', 'empleado_nombre', 'fecha_inicio', 'fecha_fin', 'dias_trabajados', 'total']
