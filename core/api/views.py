@@ -1069,3 +1069,73 @@ def api_crear_gasto(request):
     )
 
     return Response({'ok': True, 'gasto_id': gasto.id})
+
+# ── Nómina: Pagos Extra ────────────────────────────────────────────────────────
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def api_catalogo_pagos_extra(request):
+    """Lista los tipos de pago extra disponibles."""
+    from core.models import TipoPagoExtra
+    tipos = TipoPagoExtra.objects.all().order_by('nombre')
+    data = [
+        {
+            'id': t.id,
+            'nombre': t.nombre,
+            'monto': str(t.monto),
+            'descuenta_horas': t.descuenta_horas,
+            'horas_a_descontar': str(t.horas_a_descontar) if t.horas_a_descontar else '0',
+        }
+        for t in tipos
+    ]
+    return Response(data)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def api_crear_pago_extra_nomina(request, nomina_id):
+    """Agrega un pago extra a una nómina existente."""
+    from core.models import PagoExtraNomina, Nomina, TipoPagoExtra
+    if not request.user.is_staff:
+        return Response({'error': 'No autorizado.'}, status=403)
+
+    nomina = get_object_or_404(Nomina, id=nomina_id)
+    tipo_id = request.data.get('tipo_id')
+    monto_override = request.data.get('monto')  # opcional
+
+    tipo = get_object_or_404(TipoPagoExtra, id=tipo_id)
+
+    pago = PagoExtraNomina.objects.create(
+        nomina=nomina,
+        tipo=tipo,
+        monto=monto_override if monto_override else tipo.monto,
+    )
+
+    # Recalcular total de la nómina
+    nomina.save()
+
+    return Response({
+        'ok': True,
+        'pago_id': pago.id,
+        'tipo': tipo.nombre,
+        'monto': str(pago.monto),
+        'nuevo_total': str(nomina.total),
+    }, status=201)
+
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def api_eliminar_pago_extra(request, pago_id):
+    """Elimina un pago extra de una nómina."""
+    from core.models import PagoExtraNomina
+    if not request.user.is_staff:
+        return Response({'error': 'No autorizado.'}, status=403)
+
+    pago = get_object_or_404(PagoExtraNomina, id=pago_id)
+    nomina = pago.nomina
+    pago.delete()
+
+    # Recalcular total
+    nomina.save()
+
+    return Response({'ok': True, 'nuevo_total': str(nomina.total)})
