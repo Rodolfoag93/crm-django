@@ -1082,7 +1082,7 @@ def api_catalogo_pagos_extra(request):
         {
             'id': t.id,
             'nombre': t.nombre,
-            'monto': str(t.monto),
+            'monto': str(t.monto_default),
             'descuenta_horas': t.descuenta_horas,
             'horas_a_descontar': str(t.horas_a_descontar) if t.horas_a_descontar else '0',
         }
@@ -1108,7 +1108,7 @@ def api_crear_pago_extra_nomina(request, nomina_id):
     pago = PagoExtraNomina.objects.create(
         nomina=nomina,
         tipo=tipo,
-        monto=monto_override if monto_override else tipo.monto,
+        monto=monto_override if monto_override else tipo.monto_default,
     )
 
     # Recalcular total de la nómina
