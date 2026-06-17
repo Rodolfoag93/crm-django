@@ -1352,3 +1352,218 @@ def api_catalogo_materiales(request):
         for m in materiales.order_by('nombre')
     ]
     return Response(data)
+
+# ── Encargado de Material PWA ──────────────────────────────────────────────────
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def api_listas_material_encargado(request):
+    """Lista todas las listas de material para el encargado."""
+    from core.models import ListaMaterialEvento
+    
+    estado = request.GET.get('estado', '')
+    listas = ListaMaterialEvento.objects.select_related(
+        'asignacion__renta__cliente',
+        'asignacion__coordinador'
+    ).order_by('-asignacion__renta__fecha_renta')
+
+    if estado:
+        listas = listas.filter(estado=estado)
+
+    data = []
+    for l in listas:
+        data.append({
+            'id': l.id,
+            'estado': l.estado,
+            'folio': l.asignacion.renta.folio,
+            'cliente': l.asignacion.renta.cliente.nombre,
+            'fecha': str(l.asignacion.renta.fecha_renta),
+            'hora_inicio': str(l.asignacion.renta.hora_inicio) if l.asignacion.renta.hora_inicio else None,
+            'coordinador': l.asignacion.coordinador.get_full_name() or l.asignacion.coordinador.username,
+            'total_items': l.asignacion.materiales.count() if hasattr(l.asignacion, 'materiales') else 0,
+        })
+
+    return Response(data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def api_lista_material_detalle_encargado(request, lista_id):
+    """Detalle de una lista de material para el encargado."""
+    from core.models import ListaMaterialEvento, MaterialEvento
+
+    lista = get_object_or_404(ListaMaterialEvento, id=lista_id)
+    items = MaterialEvento.objects.filter(
+        asignacion=lista.asignacion
+    ).select_related('material')
+
+    items_data = [
+        {
+            'id': item.id,
+            'material_id': item.material.id,
+            'material_nombre': item.material.nombre,
+            'material_foto': request.build_absolute_uri(item.material.foto.url) if item.material.foto else None,
+            'cantidad': item.cantidad,
+            'nota': item.nota or '',
+            'despachado': item.despachado,
+            'recibido': item.recibido,
+            'observacion': item.observacion or '',
+        }
+        for item in items
+    ]
+
+    return Response({
+        'id': lista.id,
+        'estado': lista.estado,
+        'folio': lista.asignacion.renta.folio,
+        'cliente': lista.asignacion.renta.cliente.nombre,
+        'fecha': str(lista.asignacion.renta.fecha_renta),
+        'hora_inicio': str(lista.asignacion.renta.hora_inicio) if lista.asignacion.renta.hora_inicio else None,
+        'direccion': f"{lista.asignacion.renta.calle_y_numero}, {lista.asignacion.renta.colonia}, {lista.asignacion.renta.ciudad_o_municipio}",
+        'coordinador': lista.asignacion.coordinador.get_full_name() or lista.asignacion.coordinador.username,
+        'observaciones_recepcion': lista.observaciones_recepcion or '',
+        'items': items_data,
+    })
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def api_surtir_lista(request, lista_id):
+    """Encargado surte la lista y descuenta stock."""
+    from core.models import ListaMaterialEvento, MaterialEvento
+    from django.utils import timezone
+
+    lista = get_object_or_404(ListaMaterialEvento, id=lista_id)
+
+    if lista.estado not in ('BORRADOR', 'ENVIADA', 'PENDIENTE', 'REVISADA', 'PREPARADA'):
+        return Response({'error': f'La lista ya está en estado {lista.estado}'}, status=400)
+
+    items = MaterialEvento.objects.filter(
+        asignacion=lista.asignacion
+    ).select_related('material')
+
+    # Descontar stock
+    for item in items:
+        material = item.material
+        material.stock_disponible = max(0, material.stock_disponible - item.cantidad)
+        material.save(update_fields=['stock_disponible'])
+        item.despachado = True
+        item.save(update_fields=['despachado'])
+
+    lista.estado = 'SURTIDA'
+    lista.surtida_por = request.user
+    lista.fecha_surtido = timezone.now()
+    lista.save()
+
+    return Response({'ok': True, 'estado': lista.estado})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def api_confirmar_llegada_coordinador(request, lista_id):
+    """Coordinador confirma que el material llegó al evento."""
+    from core.models import ListaMaterialEvento
+    from django.utils import timezone
+
+    lista = get_object_or_404(ListaMaterialEvento, id=lista_id)
+
+    lista.estado = 'EN_EVENTO'
+    lista.confirmada_por = request.user
+    lista.fecha_confirmacion = timezone.now()
+    lista.llego_completa = request.data.get('llego_completa', True)
+    lista.observaciones_llegada = request.data.get('observaciones', '')
+    lista.save()
+
+    return Response({'ok': True, 'estado': lista.estado})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def api_recibir_lista_bodega(request, lista_id):
+    """Encargado recibe el material de vuelta en bodega."""
+    from core.models import ListaMaterialEvento, MaterialEvento
+    from django.utils import timezone
+
+    lista = get_object_or_404(ListaMaterialEvento, id=lista_id)
+
+    items_data = request.data.get('items', [])
+    observaciones = request.data.get('observaciones', '')
+
+    # Restaurar stock según lo recibido
+    for item_data in items_data:
+        try:
+            item = MaterialEvento.objects.get(id=item_data['id'])
+            cantidad_recibida = int(item_data.get('cantidad_recibida', item.cantidad))
+            item.recibido = True
+            item.observacion = item_data.get('observacion', '')
+            item.save(update_fields=['recibido', 'observacion'])
+
+            # Restaurar stock con lo que llegó
+            material = item.material
+            material.stock_disponible = material.stock_disponible + cantidad_recibida
+            material.save(update_fields=['stock_disponible'])
+            item.stock_restaurado = True
+            item.save(update_fields=['stock_restaurado'])
+        except MaterialEvento.DoesNotExist:
+            continue
+
+    lista.estado = 'REGRESADA'
+    lista.recibida_por = request.user
+    lista.fecha_recepcion = timezone.now()
+    lista.observaciones_recepcion = observaciones
+    lista.save()
+
+    return Response({'ok': True, 'estado': lista.estado})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def api_subir_evidencia(request, lista_id):
+    """Sube una foto de evidencia para una lista."""
+    from core.models import ListaMaterialEvento, EvidenciaMaterial
+
+    lista = get_object_or_404(ListaMaterialEvento, id=lista_id)
+    foto = request.FILES.get('foto')
+    tipo = request.data.get('tipo', 'SALIDA')
+    descripcion = request.data.get('descripcion', '')
+
+    if not foto:
+        return Response({'error': 'No se proporcionó foto'}, status=400)
+
+    evidencia = EvidenciaMaterial.objects.create(
+        lista=lista,
+        tipo=tipo,
+        foto=foto,
+        descripcion=descripcion,
+        subida_por=request.user,
+    )
+
+    return Response({
+        'ok': True,
+        'evidencia_id': evidencia.id,
+        'foto_url': request.build_absolute_uri(evidencia.foto.url),
+    }, status=201)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def api_evidencias_lista(request, lista_id):
+    """Obtiene las evidencias de una lista."""
+    from core.models import ListaMaterialEvento, EvidenciaMaterial
+
+    lista = get_object_or_404(ListaMaterialEvento, id=lista_id)
+    evidencias = EvidenciaMaterial.objects.filter(lista=lista).order_by('fecha')
+
+    data = [
+        {
+            'id': e.id,
+            'tipo': e.tipo,
+            'foto_url': request.build_absolute_uri(e.foto.url),
+            'descripcion': e.descripcion,
+            'fecha': str(e.fecha),
+            'subida_por': e.subida_por.get_full_name() or e.subida_por.username if e.subida_por else '',
+        }
+        for e in evidencias
+    ]
+
+    return Response(data)

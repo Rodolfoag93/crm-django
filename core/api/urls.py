@@ -7,7 +7,9 @@ from core.api.views import (
     api_rutas_admin, api_crear_ruta, api_agregar_parada_admin, api_rentas_disponibles,
     api_nueva_renta, api_buscar_clientes, api_buscar_productos, api_cuentas, api_crear_gasto,
     api_catalogo_pagos_extra, api_crear_pago_extra_nomina, api_eliminar_pago_extra, api_mis_eventos, api_evento_detalle,
-    api_lista_material_evento, api_agregar_material_evento, api_quitar_material_evento, api_catalogo_materiales
+    api_lista_material_evento, api_agregar_material_evento, api_quitar_material_evento, api_catalogo_materiales,
+    api_listas_material_encargado, api_lista_material_detalle_encargado, api_surtir_lista, api_confirmar_llegada_coordinador,
+    api_recibir_lista_bodega, api_subir_evidencia, api_evidencias_lista,
 )
 from core.views.rutas import api_mis_rutas, api_confirmar_entrega, api_confirmar_recogida
 from django.urls import path
