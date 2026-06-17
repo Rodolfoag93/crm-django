@@ -61,5 +61,12 @@ urlpatterns = [
     path('coordinador/material/<int:item_id>/quitar/', api_quitar_material_evento),
     path('coordinador/catalogo-materiales/', api_catalogo_materiales),
     path('coordinador/eventos/<int:asignacion_id>/material/enviar/', api_enviar_lista_coordinador),
+    path('encargado/listas/', api_listas_material_encargado),
+    path('encargado/listas/<int:lista_id>/', api_lista_material_detalle_encargado),
+    path('encargado/listas/<int:lista_id>/surtir/', api_surtir_lista),
+    path('encargado/listas/<int:lista_id>/recibir/', api_recibir_lista_bodega),
+    path('encargado/listas/<int:lista_id>/evidencias/', api_evidencias_lista),
+    path('encargado/listas/<int:lista_id>/evidencias/subir/', api_subir_evidencia),
+    path('coordinador/listas/<int:lista_id>/confirmar-llegada/', api_confirmar_llegada_coordinador),
 
 ]
