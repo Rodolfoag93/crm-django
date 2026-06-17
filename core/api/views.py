@@ -5,13 +5,18 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from django_filters.rest_framework import DjangoFilterBackend
 from django.utils import timezone
 from django.shortcuts import get_object_or_404
-from datetime import timedelta
 from core.push_notifications import VAPID_PUBLIC_KEY
-
+from datetime import timedelta, date
+from decimal import Decimal
 
 from core.models import (
-    Cliente, Producto, Renta, Empleado,
-    Nomina, Gasto, MovimientoContable, Asistencia, SolicitudRegistro, HorasExtra, PushSuscripcion, MaterialEvento
+    Cliente, Producto, Renta, RentaProducto, Empleado,
+    Nomina, Gasto, MovimientoContable, Asistencia, SolicitudRegistro, HorasExtra, PushSuscripcion,
+    AsignacionCoordinador, ListaMaterialEvento, MaterialEvento, MaterialAnimacion,
+    EvidenciaMaterial, TipoPagoExtra, PagoExtraNomina,
+    Ruta, RutaEmpleado, RutaRenta,
+    BitacoraMantenimiento, TurnoAsistencia,
+    Cuenta, PedidoFinanzas,
 )
 from core.api.serializers import (
     ClienteSerializer, ProductoSerializer, RentaSerializer,
@@ -191,7 +196,6 @@ class AsistenciaViewSet(viewsets.ModelViewSet):
             fecha=hoy,
         )
 
-        from core.models import TurnoAsistencia
         # Verificar si hay un turno abierto (sin checkout)
         turno_abierto = asistencia.turnos.filter(hora_salida__isnull=True).first()
         if turno_abierto:
@@ -239,7 +243,6 @@ class AsistenciaViewSet(viewsets.ModelViewSet):
         except Asistencia.DoesNotExist:
             return Response({'error': 'No has registrado tu entrada hoy'}, status=status.HTTP_400_BAD_REQUEST)
 
-        from core.models import TurnoAsistencia
         # Buscar turno abierto
         turno_abierto = asistencia.turnos.filter(hora_salida__isnull=True).first()
         if not turno_abierto:
@@ -273,7 +276,6 @@ class AsistenciaViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'])
     def hoy(self, request):
-        from core.models import TurnoAsistencia, RutaRenta
         hoy = timezone.localdate()
         asistencias = self.get_queryset().filter(fecha=hoy)
         serializer = self.get_serializer(asistencias, many=True)
@@ -324,8 +326,6 @@ class HorasExtraViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=False, methods=['get'])
     def semana_actual(self, request):
         """Devuelve el resumen de horas de la semana actual sin guardar."""
-        from datetime import date, timedelta
-        from core.models import Empleado
         try:
             empleado = request.user.empleado
         except Exception:
@@ -530,8 +530,6 @@ def api_mantenimiento(request):
     Devuelve todos los brincolines con su estado de mantenimiento,
     ordenados por próxima renta más cercana.
     """
-    from core.models import BitacoraMantenimiento, Producto, RentaProducto
-    from datetime import date
     hoy = date.today()
 
     brincolines = Producto.objects.filter(tipo='BR', activo=True)
@@ -587,7 +585,6 @@ def api_marcar_limpieza(request, producto_id):
     """
     El repartidor marca un brincolin como limpio.
     """
-    from core.models import BitacoraMantenimiento, Producto, RentaProducto
     producto = get_object_or_404(Producto, id=producto_id, tipo='BR')
     notas = request.data.get('notas', '')
     fecha_ultima_renta = RentaProducto.obtener_fecha_ultima_renta(producto)
@@ -615,8 +612,6 @@ def api_dashboard_admin(request):
     if not request.user.is_staff:
         return Response({'error': 'No autorizado.'}, status=403)
 
-    from core.models import Renta, Asistencia, SolicitudRegistro, Ruta
-    from datetime import date
     hoy = date.today()
 
     # Pedidos del día
@@ -664,8 +659,6 @@ def api_rentas_hoy(request):
     if not request.user.is_staff:
         return Response({'error': 'No autorizado.'}, status=403)
 
-    from core.models import Renta
-    from datetime import date
     hoy = date.today()
 
     rentas = Renta.objects.filter(
@@ -703,8 +696,6 @@ def api_asistencia_hoy(request):
     if not request.user.is_staff:
         return Response({'error': 'No autorizado.'}, status=403)
 
-    from core.models import Asistencia, Empleado
-    from datetime import date
     hoy = date.today()
 
     # Todos los empleados activos
@@ -750,8 +741,6 @@ def api_rutas_admin(request):
     if not request.user.is_staff:
         return Response({'error': 'No autorizado.'}, status=403)
 
-    from core.models import Ruta
-    from datetime import date
     fecha_param = request.GET.get('fecha', str(date.today()))
 
     rutas = Ruta.objects.filter(fecha=fecha_param).prefetch_related(
@@ -796,7 +785,6 @@ def api_crear_ruta(request):
     if not request.user.is_staff:
         return Response({'error': 'No autorizado.'}, status=403)
 
-    from core.models import Ruta, RutaEmpleado, Empleado
     data = request.data
 
     ruta = Ruta.objects.create(
@@ -823,7 +811,6 @@ def api_agregar_parada_admin(request, ruta_id):
     if not request.user.is_staff:
         return Response({'error': 'No autorizado.'}, status=403)
 
-    from core.models import Ruta, RutaRenta
     ruta = get_object_or_404(Ruta, id=ruta_id)
     renta_id = request.data.get('renta_id')
 
@@ -843,8 +830,6 @@ def api_rentas_disponibles(request):
     """Rentas sin ruta asignada para una fecha dada."""
     if not request.user.is_staff:
         return Response({'error': 'No autorizado.'}, status=403)
-    from core.models import Renta
-    from datetime import date
     fecha = request.GET.get('fecha', str(date.today()))
     ruta_id = request.GET.get('ruta_id')
     tipo = request.GET.get('tipo', 'entrega')  # 'entrega' o 'recoleccion'
@@ -890,9 +875,6 @@ def api_nueva_renta(request):
     if not request.user.is_staff:
         return Response({'error': 'No autorizado.'}, status=403)
 
-    from core.models import Renta, RentaProducto, Cliente, Producto, MovimientoContable, PedidoFinanzas
-    from decimal import Decimal
-    import random, string
 
     data = request.data
 
@@ -999,7 +981,6 @@ def api_buscar_clientes(request):
     if not request.user.is_staff:
         return Response({'error': 'No autorizado.'}, status=403)
 
-    from core.models import Cliente
     q = request.GET.get('q', '')
     clientes = Cliente.objects.filter(
         nombre__icontains=q
@@ -1013,7 +994,6 @@ def api_buscar_productos(request):
     if not request.user.is_staff:
         return Response({'error': 'No autorizado.'}, status=403)
 
-    from core.models import Producto
     q = request.GET.get('q', '')
     productos = Producto.objects.filter(
         nombre__icontains=q,
@@ -1028,7 +1008,6 @@ def api_buscar_productos(request):
 def api_cuentas(request):
     if not request.user.is_staff:
         return Response({'error': 'No autorizado.'}, status=403)
-    from core.models import Cuenta
     cuentas = Cuenta.objects.all().order_by('nombre')
     data = [{'id': c.id, 'nombre': c.nombre, 'tipo': c.tipo} for c in cuentas]
     return Response(data)
@@ -1039,8 +1018,6 @@ def api_cuentas(request):
 def api_crear_gasto(request):
     if not request.user.is_staff:
         return Response({'error': 'No autorizado.'}, status=403)
-    from core.models import Gasto, Cuenta, MovimientoContable
-    from datetime import date
     data = request.data
 
     try:
@@ -1076,7 +1053,6 @@ def api_crear_gasto(request):
 @permission_classes([IsAuthenticated])
 def api_catalogo_pagos_extra(request):
     """Lista los tipos de pago extra disponibles."""
-    from core.models import TipoPagoExtra
     tipos = TipoPagoExtra.objects.all().order_by('nombre')
     data = [
         {
@@ -1095,7 +1071,6 @@ def api_catalogo_pagos_extra(request):
 @permission_classes([IsAuthenticated])
 def api_crear_pago_extra_nomina(request, nomina_id):
     """Agrega un pago extra a una nómina existente."""
-    from core.models import PagoExtraNomina, Nomina, TipoPagoExtra
     if not request.user.is_staff:
         return Response({'error': 'No autorizado.'}, status=403)
 
@@ -1127,7 +1102,6 @@ def api_crear_pago_extra_nomina(request, nomina_id):
 @permission_classes([IsAuthenticated])
 def api_eliminar_pago_extra(request, pago_id):
     """Elimina un pago extra de una nómina."""
-    from core.models import PagoExtraNomina
     if not request.user.is_staff:
         return Response({'error': 'No autorizado.'}, status=403)
 
@@ -1146,7 +1120,6 @@ def api_eliminar_pago_extra(request, pago_id):
 @permission_classes([IsAuthenticated])
 def api_mis_eventos(request):
     """Eventos asignados al coordinador logueado."""
-    from core.models import AsignacionCoordinador
     
     asignaciones = AsignacionCoordinador.objects.filter(
         coordinador=request.user
@@ -1175,7 +1148,7 @@ def api_mis_eventos(request):
             'direccion': f"{a.renta.calle_y_numero}, {a.renta.colonia}, {a.renta.ciudad_o_municipio}",
             'servicios': productos_animacion,
             'notas': a.notas or '',
-            'tiene_lista': hasattr(a, 'listamaterialevento'),
+            'tiene_lista': ListaMaterialEvento.objects.filter(asignacion=a).exists(),
         })
 
     return Response(data)
@@ -1185,7 +1158,6 @@ def api_mis_eventos(request):
 @permission_classes([IsAuthenticated])
 def api_evento_detalle(request, asignacion_id):
     """Detalle completo de un evento asignado al coordinador."""
-    from core.models import AsignacionCoordinador
 
     asignacion = get_object_or_404(
         AsignacionCoordinador,
@@ -1226,7 +1198,6 @@ def api_evento_detalle(request, asignacion_id):
 @permission_classes([IsAuthenticated])
 def api_lista_material_evento(request, asignacion_id):
     """Obtiene la lista de material de un evento."""
-    from core.models import AsignacionCoordinador, ListaMaterialEvento, MaterialEvento
 
     asignacion = get_object_or_404(
         AsignacionCoordinador,
@@ -1272,7 +1243,6 @@ def api_lista_material_evento(request, asignacion_id):
 @permission_classes([IsAuthenticated])
 def api_agregar_material_evento(request, asignacion_id):
     """Agrega un material a la lista de un evento."""
-    from core.models import AsignacionCoordinador, ListaMaterialEvento, MaterialEvento, MaterialAnimacion
 
     asignacion = get_object_or_404(
         AsignacionCoordinador,
@@ -1314,7 +1284,6 @@ def api_agregar_material_evento(request, asignacion_id):
 @permission_classes([IsAuthenticated])
 def api_quitar_material_evento(request, item_id):
     """Elimina un material de la lista del evento."""
-    from core.models import MaterialEvento, AsignacionCoordinador
 
     item = get_object_or_404(MaterialEvento, id=item_id)
 
@@ -1333,7 +1302,6 @@ def api_quitar_material_evento(request, item_id):
 @permission_classes([IsAuthenticated])
 def api_catalogo_materiales(request):
     """Catálogo de materiales de animación."""
-    from core.models import MaterialAnimacion
 
     q = request.GET.get('q', '')
     materiales = MaterialAnimacion.objects.filter(activo=True)
@@ -1359,7 +1327,6 @@ def api_catalogo_materiales(request):
 @permission_classes([IsAuthenticated])
 def api_listas_material_encargado(request):
     """Lista todas las listas de material para el encargado."""
-    from core.models import ListaMaterialEvento
     
     estado = request.GET.get('estado', '')
     listas = ListaMaterialEvento.objects.select_related(
@@ -1390,7 +1357,6 @@ def api_listas_material_encargado(request):
 @permission_classes([IsAuthenticated])
 def api_lista_material_detalle_encargado(request, lista_id):
     """Detalle de una lista de material para el encargado."""
-    from core.models import ListaMaterialEvento, MaterialEvento
 
     lista = get_object_or_404(ListaMaterialEvento, id=lista_id)
     items = MaterialEvento.objects.filter(
@@ -1430,8 +1396,6 @@ def api_lista_material_detalle_encargado(request, lista_id):
 @permission_classes([IsAuthenticated])
 def api_surtir_lista(request, lista_id):
     """Encargado surte la lista y descuenta stock."""
-    from core.models import ListaMaterialEvento, MaterialEvento
-    from django.utils import timezone
 
     lista = get_object_or_404(ListaMaterialEvento, id=lista_id)
 
@@ -1462,8 +1426,6 @@ def api_surtir_lista(request, lista_id):
 @permission_classes([IsAuthenticated])
 def api_confirmar_llegada_coordinador(request, lista_id):
     """Coordinador confirma que el material llegó al evento."""
-    from core.models import ListaMaterialEvento
-    from django.utils import timezone
 
     lista = get_object_or_404(ListaMaterialEvento, id=lista_id)
 
@@ -1481,8 +1443,6 @@ def api_confirmar_llegada_coordinador(request, lista_id):
 @permission_classes([IsAuthenticated])
 def api_recibir_lista_bodega(request, lista_id):
     """Encargado recibe el material de vuelta en bodega."""
-    from core.models import ListaMaterialEvento, MaterialEvento
-    from django.utils import timezone
 
     lista = get_object_or_404(ListaMaterialEvento, id=lista_id)
 
@@ -1520,7 +1480,6 @@ def api_recibir_lista_bodega(request, lista_id):
 @permission_classes([IsAuthenticated])
 def api_subir_evidencia(request, lista_id):
     """Sube una foto de evidencia para una lista."""
-    from core.models import ListaMaterialEvento, EvidenciaMaterial
 
     lista = get_object_or_404(ListaMaterialEvento, id=lista_id)
     foto = request.FILES.get('foto')
@@ -1549,7 +1508,6 @@ def api_subir_evidencia(request, lista_id):
 @permission_classes([IsAuthenticated])
 def api_evidencias_lista(request, lista_id):
     """Obtiene las evidencias de una lista."""
-    from core.models import ListaMaterialEvento, EvidenciaMaterial
 
     lista = get_object_or_404(ListaMaterialEvento, id=lista_id)
     evidencias = EvidenciaMaterial.objects.filter(lista=lista).order_by('fecha')
@@ -1572,7 +1530,6 @@ def api_evidencias_lista(request, lista_id):
 @permission_classes([IsAuthenticated])
 def api_enviar_lista_coordinador(request, asignacion_id):
     """Coordinador envía la lista al encargado de material."""
-    from core.models import AsignacionCoordinador, ListaMaterialEvento
 
     asignacion = get_object_or_404(
         AsignacionCoordinador,
