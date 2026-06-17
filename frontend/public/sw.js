@@ -1,4 +1,4 @@
-const CACHE_NAME = 'trotamundos-v1'
+const CACHE_NAME = 'trotamundos-v2'
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -32,14 +32,27 @@ self.addEventListener('fetch', (event) => {
     return
   }
 
+  // Solo manejar GET
+  if (event.request.method !== 'GET') {
+    return
+  }
+
   event.respondWith(
     fetch(event.request)
       .then((response) => {
-        const clone = response.clone()
-        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone))
+        // Solo cachear respuestas válidas
+        if (response && response.status === 200) {
+          const clone = response.clone()
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone))
+        }
         return response
       })
-      .catch(() => caches.match(event.request))
+      .catch(() => {
+        return caches.match(event.request).then((cached) => {
+          // Si no hay cache, devolver index.html para que React Router maneje la ruta
+          return cached || caches.match('/index.html')
+        })
+      })
   )
 })
 

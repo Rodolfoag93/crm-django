@@ -1139,3 +1139,216 @@ def api_eliminar_pago_extra(request, pago_id):
     nomina.save()
 
     return Response({'ok': True, 'nuevo_total': str(nomina.total)})
+
+# ── Coordinador PWA ────────────────────────────────────────────────────────────
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def api_mis_eventos(request):
+    """Eventos asignados al coordinador logueado."""
+    from core.models import AsignacionCoordinador
+    
+    asignaciones = AsignacionCoordinador.objects.filter(
+        coordinador=request.user
+    ).select_related(
+        'renta', 'renta__cliente'
+    ).prefetch_related(
+        'renta__rentaproductos__producto'
+    ).order_by('-renta__fecha_renta')
+
+    data = []
+    for a in asignaciones:
+        productos_animacion = [
+            rp.producto.nombre
+            for rp in a.renta.rentaproductos.all()
+            if rp.producto.tipo == 'AN'
+        ]
+        data.append({
+            'asignacion_id': a.id,
+            'renta_id': a.renta.id,
+            'folio': a.renta.folio,
+            'cliente': a.renta.cliente.nombre,
+            'telefono': a.renta.cliente.telefono,
+            'fecha': str(a.renta.fecha_renta),
+            'hora_inicio': str(a.renta.hora_inicio) if a.renta.hora_inicio else None,
+            'hora_fin': str(a.renta.hora_fin) if a.renta.hora_fin else None,
+            'direccion': f"{a.renta.calle_y_numero}, {a.renta.colonia}, {a.renta.ciudad_o_municipio}",
+            'servicios': productos_animacion,
+            'notas': a.notas or '',
+            'tiene_lista': hasattr(a, 'listamaterialevento'),
+        })
+
+    return Response(data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def api_evento_detalle(request, asignacion_id):
+    """Detalle completo de un evento asignado al coordinador."""
+    from core.models import AsignacionCoordinador
+
+    asignacion = get_object_or_404(
+        AsignacionCoordinador,
+        id=asignacion_id,
+        coordinador=request.user
+    )
+    r = asignacion.renta
+    productos = [
+        {
+            'nombre': rp.producto.nombre,
+            'tipo': rp.producto.tipo,
+            'cantidad': rp.cantidad,
+            'precio_unitario': str(rp.precio_unitario),
+        }
+        for rp in r.rentaproductos.select_related('producto').all()
+    ]
+
+    return Response({
+        'asignacion_id': asignacion.id,
+        'renta_id': r.id,
+        'folio': r.folio,
+        'cliente': r.cliente.nombre,
+        'telefono': r.cliente.telefono,
+        'direccion': f"{r.calle_y_numero}, {r.colonia}, {r.ciudad_o_municipio}",
+        'fecha': str(r.fecha_renta),
+        'hora_inicio': str(r.hora_inicio) if r.hora_inicio else None,
+        'hora_fin': str(r.hora_fin) if r.hora_fin else None,
+        'precio_total': str(r.precio_total),
+        'anticipo': str(r.anticipo),
+        'pagado': r.pagado,
+        'comentarios': r.comentarios or '',
+        'productos': productos,
+        'notas_coordinador': asignacion.notas or '',
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def api_lista_material_evento(request, asignacion_id):
+    """Obtiene la lista de material de un evento."""
+    from core.models import AsignacionCoordinador, ListaMaterialEvento, MaterialEvento
+
+    asignacion = get_object_or_404(
+        AsignacionCoordinador,
+        id=asignacion_id,
+        coordinador=request.user
+    )
+
+    try:
+        lista = ListaMaterialEvento.objects.get(asignacion=asignacion)
+    except ListaMaterialEvento.DoesNotExist:
+        return Response({
+            'existe': False,
+            'items': []
+        })
+
+    items = MaterialEvento.objects.filter(
+        asignacion=asignacion
+    ).select_related('material')
+
+    data = [
+        {
+            'id': item.id,
+            'material_id': item.material.id,
+            'material_nombre': item.material.nombre,
+            'material_foto': request.build_absolute_uri(item.material.foto.url) if item.material.foto else None,
+            'cantidad': item.cantidad,
+            'nota': item.nota or '',
+            'despachado': item.despachado,
+            'recibido': item.recibido,
+        }
+        for item in items
+    ]
+
+    return Response({
+        'existe': True,
+        'lista_id': lista.id,
+        'estado': lista.estado,
+        'items': data,
+    })
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def api_agregar_material_evento(request, asignacion_id):
+    """Agrega un material a la lista de un evento."""
+    from core.models import AsignacionCoordinador, ListaMaterialEvento, MaterialEvento, MaterialAnimacion
+
+    asignacion = get_object_or_404(
+        AsignacionCoordinador,
+        id=asignacion_id,
+        coordinador=request.user
+    )
+
+    # Crear lista si no existe
+    lista, _ = ListaMaterialEvento.objects.get_or_create(
+        asignacion=asignacion,
+        defaults={'estado': 'BORRADOR'}
+    )
+
+    material_id = request.data.get('material_id')
+    cantidad = request.data.get('cantidad', 1)
+    nota = request.data.get('nota', '')
+
+    material = get_object_or_404(MaterialAnimacion, id=material_id)
+
+    # Si ya existe ese material en la lista, actualizar cantidad
+    item, created = MaterialEvento.objects.get_or_create(
+        asignacion=asignacion,
+        material=material,
+        defaults={'cantidad': cantidad, 'nota': nota}
+    )
+    if not created:
+        item.cantidad = cantidad
+        item.nota = nota
+        item.save()
+
+    return Response({
+        'ok': True,
+        'item_id': item.id,
+        'created': created,
+    }, status=201 if created else 200)
+
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def api_quitar_material_evento(request, item_id):
+    """Elimina un material de la lista del evento."""
+    from core.models import MaterialEvento, AsignacionCoordinador
+
+    item = get_object_or_404(MaterialEvento, id=item_id)
+
+    # Verificar que la asignación pertenece al coordinador
+    asignacion = get_object_or_404(
+        AsignacionCoordinador,
+        id=item.asignacion_id,
+        coordinador=request.user
+    )
+
+    item.delete()
+    return Response({'ok': True})
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def api_catalogo_materiales(request):
+    """Catálogo de materiales de animación."""
+    from core.models import MaterialAnimacion
+
+    q = request.GET.get('q', '')
+    materiales = MaterialAnimacion.objects.filter(activo=True)
+    if q:
+        materiales = materiales.filter(nombre__icontains=q)
+
+    data = [
+        {
+            'id': m.id,
+            'nombre': m.nombre,
+            'descripcion': m.descripcion or '',
+            'tipo': m.tipo,
+            'stock_disponible': m.stock_disponible,
+            'foto': request.build_absolute_uri(m.foto.url) if m.foto else None,
+        }
+        for m in materiales.order_by('nombre')
+    ]
+    return Response(data)

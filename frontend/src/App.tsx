@@ -4,6 +4,7 @@ import Login from './pages/Login'
 import Home from './pages/Home'
 import Asistencia from './pages/Asistencia'
 import Nomina from './pages/Nomina'
+import NominaDetalle from './pages/NominaDetalle'
 import Registro from './pages/Registro'
 import HorasExtra from './pages/HorasExtra'
 import Entregas from './pages/Entregas'
@@ -16,6 +17,7 @@ import NuevaRenta from './pages/admin/NuevaRenta'
 import CrearGasto from './pages/admin/CrearGasto'
 import AdminNominas from './pages/admin/AdminNominas'
 import NuevaNomina from './pages/admin/NuevaNomina'
+import Cotizador from './pages/admin/Cotizador'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
@@ -37,10 +39,14 @@ export default function App() {
         <Route path="/nomina" element={
           <PrivateRoute><Nomina /></PrivateRoute>
         } />
+        <Route path="/nomina/:id" element={
+          <PrivateRoute><NominaDetalle /></PrivateRoute>
+        } />
         <Route path="/horas-extra" element={
           <PrivateRoute><HorasExtra /></PrivateRoute>
         } />
-        <Route path="/entregas" element={<Entregas />
+        <Route path="/entregas" element={
+          <PrivateRoute><Entregas /></PrivateRoute>
         } />
         <Route path="/mantenimiento" element={
           <PrivateRoute><Mantenimiento /></PrivateRoute>
@@ -63,11 +69,17 @@ export default function App() {
         <Route path="/admin/gastos/crear" element={
           <PrivateRoute><CrearGasto /></PrivateRoute>
         } />
-          <Route path="/admin/nominas" element={
-            <PrivateRoute><AdminNominas /></PrivateRoute>
+        <Route path="/admin/nominas" element={
+          <PrivateRoute><AdminNominas /></PrivateRoute>
         } />
         <Route path="/admin/nominas/nueva" element={
           <PrivateRoute><NuevaNomina /></PrivateRoute>
+        } />
+        <Route path="/admin/nominas/:id" element={
+          <PrivateRoute><NominaDetalle /></PrivateRoute>
+        } />
+        <Route path="/admin/cotizador" element={
+          <PrivateRoute><Cotizador /></PrivateRoute>
         } />
         <Route path="*" element={<Navigate to="/login" />} />
       </Routes>

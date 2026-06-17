@@ -34,7 +34,7 @@ export default function Nomina() {
   }
 
   const formatFecha = (fecha: string) => {
-    return new Date(fecha).toLocaleDateString('es-MX', {
+    return new Date(fecha + 'T00:00:00').toLocaleDateString('es-MX', {
       day: '2-digit', month: 'short', year: 'numeric'
     })
   }
@@ -71,7 +71,11 @@ export default function Nomina() {
         )}
 
         {nominas.map((nomina) => (
-          <div key={nomina.id} className="bg-white rounded-2xl shadow-sm p-5 border border-gray-100">
+          <div
+            key={nomina.id}
+            onClick={() => navigate(`/nomina/${nomina.id}`)}
+            className="bg-white rounded-2xl shadow-sm p-5 border border-gray-100 cursor-pointer active:scale-95 transition-transform"
+          >
             <div className="flex justify-between items-start mb-3">
               <div>
                 <p className="text-sm text-gray-500">Periodo</p>
@@ -86,10 +90,11 @@ export default function Nomina() {
                 </p>
               </div>
             </div>
-            <div className="bg-gray-50 rounded-xl px-4 py-2">
+            <div className="flex justify-between items-center bg-gray-50 rounded-xl px-4 py-2">
               <p className="text-sm text-gray-500">
                 Días trabajados: <span className="font-semibold text-gray-900">{nomina.dias_trabajados}</span>
               </p>
+              <p className="text-xs text-green-600 font-medium">Ver detalle →</p>
             </div>
           </div>
         ))}

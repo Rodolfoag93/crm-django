@@ -6,7 +6,8 @@ from core.api.views import (
     api_mantenimiento, api_marcar_limpieza, api_dashboard_admin, api_rentas_hoy, api_asistencia_hoy,
     api_rutas_admin, api_crear_ruta, api_agregar_parada_admin, api_rentas_disponibles,
     api_nueva_renta, api_buscar_clientes, api_buscar_productos, api_cuentas, api_crear_gasto,
-    api_catalogo_pagos_extra, api_crear_pago_extra_nomina, api_eliminar_pago_extra
+    api_catalogo_pagos_extra, api_crear_pago_extra_nomina, api_eliminar_pago_extra, api_mis_eventos, api_evento_detalle
+    api_lista_material_evento, api_agregar_material_evento, api_quitar_material_evento, api_catalogo_materiales
 )
 from core.views.rutas import api_mis_rutas, api_confirmar_entrega, api_confirmar_recogida
 from django.urls import path
@@ -51,4 +52,10 @@ urlpatterns = [
     path('productos-buscar/', api_buscar_productos, name='api_buscar_productos'),
     path('cuentas/', api_cuentas, name='api_cuentas'),
     path('crear-gasto/', api_crear_gasto, name='api_crear_gasto'),
+    path('coordinador/eventos/', api_mis_eventos),
+    path('coordinador/eventos/<int:asignacion_id>/', api_evento_detalle),
+    path('coordinador/eventos/<int:asignacion_id>/material/', api_lista_material_evento),
+    path('coordinador/eventos/<int:asignacion_id>/material/agregar/', api_agregar_material_evento),
+    path('coordinador/material/<int:item_id>/quitar/', api_quitar_material_evento),
+    path('coordinador/catalogo-materiales/', api_catalogo_materiales),
 ]

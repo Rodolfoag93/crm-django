@@ -144,7 +144,11 @@ export default function AdminNominas() {
         ) : (
           <div className="flex flex-col gap-3">
             {nominas.map(n => (
-              <div key={n.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
+              <div
+                key={n.id}
+                onClick={() => navigate(`/admin/nominas/${n.id}`)}
+                className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 cursor-pointer active:scale-95 transition-transform"
+              >
                 <div className="flex justify-between items-start">
                   <div>
                     <p className="font-semibold text-gray-900">{n.empleado_nombre}</p>
@@ -157,6 +161,7 @@ export default function AdminNominas() {
                     <p className="font-bold text-green-700 text-lg">
                       ${parseFloat(n.total).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
                     </p>
+                    <p className="text-xs text-green-600 mt-1">Ver detalle →</p>
                   </div>
                 </div>
               </div>
