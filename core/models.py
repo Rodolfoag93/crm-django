@@ -862,10 +862,15 @@ class MaterialEvento(models.Model):
 
 class ListaMaterialEvento(models.Model):
     ESTADO = [
-        ('PENDIENTE', 'Pendiente revisión'),
+        ('BORRADOR', 'Borrador'),
+        ('ENVIADA', 'Enviada a encargado'),
+        ('SURTIDA', 'Surtida por encargado'),
+        ('EN_EVENTO', 'En evento'),
+        ('REGRESADA', 'Regresada a bodega'),
         ('REVISADA', 'Revisada'),
-        ('PREPARADA', 'Preparada'),
-        ('RECIBIDA', 'Recibida'),  # ← nuevo
+        ('PENDIENTE', 'Pendiente revisión'),  # legacy
+        ('PREPARADA', 'Preparada'),            # legacy
+        ('RECIBIDA', 'Recibida'),              # legacy
     ]
 
     asignacion = models.OneToOneField(
@@ -873,20 +878,34 @@ class ListaMaterialEvento(models.Model):
         on_delete=models.CASCADE,
         related_name='lista_material'
     )
-    estado = models.CharField(max_length=20, choices=ESTADO, default='PENDIENTE')
+    estado = models.CharField(max_length=20, choices=ESTADO, default='BORRADOR')
+
+    # Revisión encargado
     revisada_por = models.ForeignKey(
-        User,
-        on_delete=models.SET_NULL,
-        null=True, blank=True,
+        User, on_delete=models.SET_NULL, null=True, blank=True,
         related_name='listas_revisadas'
     )
     fecha_revision = models.DateTimeField(null=True, blank=True)
 
-    # Recepción
+    # Surtido encargado
+    surtida_por = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='listas_surtidas'
+    )
+    fecha_surtido = models.DateTimeField(null=True, blank=True)
+
+    # Confirmación coordinador en evento
+    confirmada_por = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='listas_confirmadas'
+    )
+    fecha_confirmacion = models.DateTimeField(null=True, blank=True)
+    llego_completa = models.BooleanField(null=True, blank=True)
+    observaciones_llegada = models.TextField(blank=True, null=True)
+
+    # Recepción bodega
     recibida_por = models.ForeignKey(
-        User,
-        on_delete=models.SET_NULL,
-        null=True, blank=True,
+        User, on_delete=models.SET_NULL, null=True, blank=True,
         related_name='listas_recibidas'
     )
     fecha_recepcion = models.DateTimeField(null=True, blank=True)
@@ -894,6 +913,30 @@ class ListaMaterialEvento(models.Model):
 
     def __str__(self):
         return f"Lista {self.asignacion.renta.folio} - {self.estado}"
+
+class EvidenciaMaterial(models.Model):
+    TIPO = [
+        ('SALIDA', 'Salida a evento'),
+        ('LLEGADA', 'Llegada a evento'),
+        ('REGRESO', 'Regreso a bodega'),
+        ('DANO', 'Daño o faltante'),
+    ]
+
+    lista = models.ForeignKey(
+        ListaMaterialEvento,
+        on_delete=models.CASCADE,
+        related_name='evidencias'
+    )
+    tipo = models.CharField(max_length=20, choices=TIPO)
+    foto = models.ImageField(upload_to='evidencias_material/')
+    descripcion = models.TextField(blank=True)
+    subida_por = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True
+    )
+    fecha = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Evidencia {self.tipo} - {self.lista}"
 
 # ==================================
 # ASISTENCIA
