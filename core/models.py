@@ -1069,3 +1069,63 @@ class SolicitudRegistro(models.Model):
         ordering = ['-fecha_solicitud']
         verbose_name = "Solicitud de Registro"
         verbose_name_plural = "Solicitudes de Registro"
+
+# ── Animadores ─────────────────────────────────────────────────────────────────
+
+class AnimadorEvento(models.Model):
+    ESTADO = [
+        ('PENDIENTE', 'Pendiente confirmación'),
+        ('ACEPTADO', 'Aceptado'),
+        ('RECHAZADO', 'Rechazado'),
+    ]
+    LLEGADA = [
+        ('BODEGA', 'Llego a bodega'),
+        ('LOCAL', 'Llego al local'),
+    ]
+
+    asignacion = models.ForeignKey(
+        AsignacionCoordinador,
+        on_delete=models.CASCADE,
+        related_name='animadores'
+    )
+    animador = models.ForeignKey(
+        Empleado,
+        on_delete=models.CASCADE,
+        related_name='eventos_animador'
+    )
+    estado = models.CharField(max_length=20, choices=ESTADO, default='PENDIENTE')
+    hora_cita = models.TimeField(null=True, blank=True)
+    tipo_llegada = models.CharField(max_length=10, choices=LLEGADA, null=True, blank=True)
+    notificado = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ['asignacion', 'animador']
+
+    def __str__(self):
+        return f"{self.animador.nombre} — {self.asignacion.renta.folio}"
+
+
+class CalificacionCoordinador(models.Model):
+    animador_evento = models.OneToOneField(
+        AnimadorEvento,
+        on_delete=models.CASCADE,
+        related_name='calificacion'
+    )
+    comunicacion = models.DecimalField(max_digits=3, decimal_places=1)
+    organizacion = models.DecimalField(max_digits=3, decimal_places=1)
+    trato = models.DecimalField(max_digits=3, decimal_places=1)
+    respeto = models.DecimalField(max_digits=3, decimal_places=1)
+    puntualidad = models.DecimalField(max_digits=3, decimal_places=1)
+    innovacion = models.DecimalField(max_digits=3, decimal_places=1)
+    comentario = models.TextField(blank=True)
+    fecha = models.DateTimeField(auto_now_add=True)
+
+    @property
+    def promedio(self):
+        campos = [self.comunicacion, self.organizacion, self.trato,
+                  self.respeto, self.puntualidad, self.innovacion]
+        return round(sum(campos) / len(campos), 2)
+
+    def __str__(self):
+        return f"Calificación de {self.animador_evento.animador.nombre} a {self.animador_evento.asignacion.coordinador.username}"
