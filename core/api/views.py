@@ -1814,3 +1814,98 @@ def api_quitar_animador(request, animador_evento_id):
     get_object_or_404(AsignacionCoordinador, id=ae.asignacion_id, coordinador=request.user)
     ae.delete()
     return Response({'ok': True})
+
+# ── Calificación Animadores ────────────────────────────────────────────────────
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def api_calificar_animador(request, animador_evento_id):
+    """Coordinador califica a un animador después del evento."""
+    from core.models import AnimadorEvento, CalificacionAnimador, AsignacionCoordinador
+
+    ae = get_object_or_404(AnimadorEvento, id=animador_evento_id)
+
+    # Verificar que el coordinador es el dueño del evento
+    get_object_or_404(AsignacionCoordinador, id=ae.asignacion_id, coordinador=request.user)
+
+    if hasattr(ae, 'calificacion_coordinador'):
+        return Response({'error': 'Ya calificaste a este animador'}, status=400)
+
+    data = request.data
+    campos = ['proactividad', 'disposicion', 'puntualidad', 'compromiso', 'respeto', 'atencion_clientes']
+    for campo in campos:
+        val = float(data.get(campo, 0))
+        if not 0 <= val <= 5:
+            return Response({'error': f'{campo} debe ser entre 0 y 5'}, status=400)
+
+    cal = CalificacionAnimador.objects.create(
+        animador_evento=ae,
+        proactividad=data.get('proactividad', 0),
+        disposicion=data.get('disposicion', 0),
+        puntualidad=data.get('puntualidad', 0),
+        compromiso=data.get('compromiso', 0),
+        respeto=data.get('respeto', 0),
+        atencion_clientes=data.get('atencion_clientes', 0),
+        comentario=data.get('comentario', ''),
+    )
+
+    return Response({'ok': True, 'promedio': str(cal.promedio)}, status=201)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def api_ranking_animadores(request):
+    """Ranking top 10 de animadores por calificación."""
+    from core.models import CalificacionAnimador
+    from django.db.models import Avg, Count
+
+    ranking = CalificacionAnimador.objects.values(
+        'animador_evento__animador'
+    ).annotate(
+        promedio=(
+            Avg('proactividad') + Avg('disposicion') + Avg('puntualidad') +
+            Avg('compromiso') + Avg('respeto') + Avg('atencion_clientes')
+        ),
+        total_eventos=Count('id')
+    ).order_by('-promedio')[:10]
+
+    data = []
+    for r in ranking:
+        empleado_id = r['animador_evento__animador']
+        try:
+            emp = Empleado.objects.get(id=empleado_id)
+            data.append({
+                'animador': emp.nombre,
+                'promedio': round(r['promedio'] / 6, 2),
+                'total_eventos': r['total_eventos'],
+            })
+        except Empleado.DoesNotExist:
+            continue
+
+    return Response(data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def api_animadores_por_calificar(request, asignacion_id):
+    """Lista animadores de un evento que el coordinador aún no ha calificado."""
+    from core.models import AnimadorEvento, AsignacionCoordinador
+
+    get_object_or_404(AsignacionCoordinador, id=asignacion_id, coordinador=request.user)
+
+    animadores = AnimadorEvento.objects.filter(
+        asignacion_id=asignacion_id,
+        estado='ACEPTADO'
+    ).select_related('animador')
+
+    data = [
+        {
+            'animador_evento_id': ae.id,
+            'animador_id': ae.animador.id,
+            'nombre': ae.animador.nombre,
+            'ya_calificado': hasattr(ae, 'calificacion_coordinador'),
+        }
+        for ae in animadores
+    ]
+
+    return Response(data)
