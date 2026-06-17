@@ -1346,7 +1346,7 @@ def api_listas_material_encargado(request):
             'cliente': l.asignacion.renta.cliente.nombre,
             'fecha': str(l.asignacion.renta.fecha_renta),
             'hora_inicio': str(l.asignacion.renta.hora_inicio) if l.asignacion.renta.hora_inicio else None,
-            'coordinador': l.asignacion.coordinador.get_full_name() or l.asignacion.coordinador.username,
+            'coordinador': (l.asignacion.coordinador.get_full_name() or l.asignacion.coordinador.username) if l.asignacion.coordinador else 'Sin asignar',
             'total_items': l.asignacion.materiales.count() if hasattr(l.asignacion, 'materiales') else 0,
         })
 
