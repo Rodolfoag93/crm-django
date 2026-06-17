@@ -24,6 +24,11 @@ import ListaMaterial from './pages/coordinador/ListaMaterial'
 import CatalogoMateriales from './pages/coordinador/CatalogoMateriales'
 import HomeEncargado from './pages/encargado/HomeEncargado'
 import DetalleListaMaterial from './pages/encargado/DetalleListaMaterial'
+import HomeAnimador from './pages/animador/HomeAnimador'
+import EventoAnimador from './pages/animador/EventoAnimador'
+import CalificarCoordinador from './pages/animador/CalificarCoordinador'
+import RankingCoordinadores from './pages/RankingCoordinadores'
+import ListaEventosAnimador from './pages/animador/ListaEventosAnimador'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
@@ -104,6 +109,24 @@ export default function App() {
         } />
         <Route path="/encargado/listas/:id" element={
           <PrivateRoute><DetalleListaMaterial /></PrivateRoute>
+        } />
+        <Route path="/animador" element={
+          <PrivateRoute><HomeAnimador /></PrivateRoute>
+        } />
+        <Route path='/animador/eventos/:id' element={
+          <PrivateRoute><EventoAnimador /></PrivateRoute>
+        } />
+        <Route path='/animador/eventos/:id/calificar' element={
+          <PrivateRoute><CalificarCoordinador /></PrivateRoute>
+        } />
+        <Route path='/animador/ranking' element={
+          <PrivateRoute><RankingCoordinadores /></PrivateRoute>
+        } />
+        <Route path='/coordinador/ranking' element={
+          <PrivateRoute><RankingCoordinadores /></PrivateRoute>
+        } />
+        <Route path='/animador/eventos' element={
+          <PrivateRoute><ListaEventosAnimador /></PrivateRoute>
         } />
         <Route path="*" element={<Navigate to="/login" />} />
       </Routes>

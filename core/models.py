@@ -1129,3 +1129,29 @@ class CalificacionCoordinador(models.Model):
 
     def __str__(self):
         return f"Calificación de {self.animador_evento.animador.nombre} a {self.animador_evento.asignacion.coordinador.username}"
+
+class CalificacionAnimador(models.Model):
+    animador_evento = models.OneToOneField(
+        AnimadorEvento,
+        on_delete=models.CASCADE,
+        related_name='calificacion_coordinador'
+    )
+    proactividad = models.DecimalField(max_digits=3, decimal_places=1)
+    disposicion = models.DecimalField(max_digits=3, decimal_places=1)
+    puntualidad = models.DecimalField(max_digits=3, decimal_places=1)
+    compromiso = models.DecimalField(max_digits=3, decimal_places=1)
+    respeto = models.DecimalField(max_digits=3, decimal_places=1)
+    atencion_clientes = models.DecimalField(max_digits=3, decimal_places=1)
+    comentario = models.TextField(blank=True)
+    fecha = models.DateTimeField(auto_now_add=True)
+
+    @property
+    def promedio(self):
+        campos = [
+            self.proactividad, self.disposicion, self.puntualidad,
+            self.compromiso, self.respeto, self.atencion_clientes
+        ]
+        return round(sum(campos) / len(campos), 2)
+
+    def __str__(self):
+        return f"Calificación de {self.animador_evento.asignacion.coordinador.username} a {self.animador_evento.animador.nombre}"

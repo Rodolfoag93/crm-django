@@ -90,6 +90,13 @@ export default function HomeCoordinador() {
             <p className="font-semibold text-gray-900 text-sm">Catálogo</p>
           </div>
         </div>
+        <div
+          onClick={() => navigate('/coordinador/ranking')}
+          className="bg-white rounded-2xl shadow-sm p-4 flex flex-col items-center gap-2 cursor-pointer border border-gray-100"
+        >
+          <span className="text-3xl">🏆</span>
+          <p className="font-semibold text-gray-900 text-sm">Mi Ranking</p>
+        </div>
 
         {/* Filtro */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-1 flex">

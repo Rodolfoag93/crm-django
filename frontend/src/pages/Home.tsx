@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { usePushNotifications } from '../lib/usePushNotifications'
 import HomeAdmin from './HomeAdmin'
 import HomeCoordinador from './coordinador/HomeCoordinador'
+import HomeAnimador from './animador/HomeAnimador'
 
 export default function Home() {
   const { user, logout, access_token } = useAuthStore()
@@ -13,8 +14,12 @@ export default function Home() {
     return <HomeAdmin />
   }
 
-  if (user?.es_coordinador) {
+  if (user?.es_coordinador && !user?.es_encargado_material) {
     return <HomeCoordinador />
+  }
+
+  if (user?.tipo_empleado == 'ANIMADOR') {
+    return <HomeAnimador/>
   }
 
   const handleLogout = () => {
@@ -57,21 +62,6 @@ export default function Home() {
           <div className="ml-auto text-gray-400">›</div>
         </div>
 
-        {/* Mis Eventos (coordinadores) */}
-        {user?.es_coordinador && (
-          <div
-            onClick={() => navigate('/eventos')}
-            className="bg-white rounded-2xl shadow-sm p-5 flex items-center gap-4 cursor-pointer hover:shadow-md transition-shadow border border-gray-100"
-          >
-            <div className="bg-purple-100 p-3 rounded-xl text-2xl">🎉</div>
-            <div>
-              <h2 className="font-semibold text-gray-900">Mis Eventos</h2>
-              <p className="text-gray-500 text-sm">Eventos asignados</p>
-            </div>
-            <div className="ml-auto text-gray-400">›</div>
-          </div>
-        )}
-
         {/* Entregas (cargadores) */}
         {user?.es_cargador && (
           <div
@@ -82,6 +72,21 @@ export default function Home() {
             <div>
               <h2 className="font-semibold text-gray-900">Mis Entregas</h2>
               <p className="text-gray-500 text-sm">Rentas asignadas hoy</p>
+            </div>
+            <div className="ml-auto text-gray-400">›</div>
+          </div>
+        )}
+
+        {/* Eventos coordinador (encargado con doble rol) */}
+        {user?.es_encargado_material && user?.es_coordinador && (
+          <div
+            onClick={() => navigate('/coordinador')}
+            className="bg-white rounded-2xl shadow-sm p-5 flex items-center gap-4 cursor-pointer hover:shadow-md transition-shadow border border-gray-100"
+          >
+            <div className="bg-purple-100 p-3 rounded-xl text-2xl">🎉</div>
+            <div>
+              <h2 className="font-semibold text-gray-900">Mis Eventos</h2>
+              <p className="text-gray-500 text-sm">Eventos asignados</p>
             </div>
             <div className="ml-auto text-gray-400">›</div>
           </div>
