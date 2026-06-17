@@ -12,6 +12,7 @@ interface User {
   es_coordinador: boolean
   es_cargador: boolean
   es_encargado_material: boolean
+  tipo_empleado: string | null
 }
 
 interface AuthState {

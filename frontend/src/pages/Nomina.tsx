@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../lib/api.ts'
+import { useAuthStore } from '../stores/authStore.ts'
 
 interface NominaData {
   id: number
@@ -14,6 +15,8 @@ interface NominaData {
 
 export default function Nomina() {
   const navigate = useNavigate()
+  const { user } = useAuthStore()
+  const esCoordinador = user?.tipo_empleado === 'COORDINADOR'
   const [nominas, setNominas] = useState<NominaData[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -53,7 +56,9 @@ export default function Nomina() {
       {/* Header */}
       <div className="bg-green-900 text-white px-4 py-5 flex items-center gap-3">
         <button onClick={() => navigate('/home')} className="text-green-300 text-xl">←</button>
-        <h1 className="text-xl font-bold">Mi Nómina</h1>
+        <h1 className="text-xl font-bold">
+          {esCoordinador ? 'Mis Recibos' : 'Mi Nómina'}
+        </h1>
       </div>
 
       <div className="p-4 max-w-lg mx-auto space-y-3">
@@ -66,7 +71,7 @@ export default function Nomina() {
 
         {nominas.length === 0 && !error && (
           <div className="text-center text-gray-500 py-10">
-            No hay registros de nómina
+            No hay registros de {esCoordinador ? 'recibos' : 'nómina'}
           </div>
         )}
 

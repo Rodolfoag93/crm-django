@@ -2,6 +2,7 @@ import { useAuthStore } from '../stores/authStore'
 import { useNavigate } from 'react-router-dom'
 import { usePushNotifications } from '../lib/usePushNotifications'
 import HomeAdmin from './HomeAdmin'
+import HomeCoordinador from './coordinador/HomeCoordinador'
 
 export default function Home() {
   const { user, logout, access_token } = useAuthStore()
@@ -10,6 +11,10 @@ export default function Home() {
 
   if (user?.es_admin) {
     return <HomeAdmin />
+  }
+
+  if (user?.es_coordinador) {
+    return <HomeCoordinador />
   }
 
   const handleLogout = () => {

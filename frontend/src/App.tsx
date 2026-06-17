@@ -18,6 +18,7 @@ import CrearGasto from './pages/admin/CrearGasto'
 import AdminNominas from './pages/admin/AdminNominas'
 import NuevaNomina from './pages/admin/NuevaNomina'
 import Cotizador from './pages/admin/Cotizador'
+import HomeCoordinador from './pages/coordinador/HomeCoordinador'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
@@ -80,6 +81,9 @@ export default function App() {
         } />
         <Route path="/admin/cotizador" element={
           <PrivateRoute><Cotizador /></PrivateRoute>
+        } />
+        <Route path="/coordinador" element={
+          <PrivateRoute><HomeCoordinador /></PrivateRoute>
         } />
         <Route path="*" element={<Navigate to="/login" />} />
       </Routes>

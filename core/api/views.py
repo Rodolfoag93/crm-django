@@ -151,7 +151,7 @@ def me(request):
         'email': user.email,
         'es_admin': user.is_superuser or user.is_staff,
         'grupos': grupos,
-        'es_coordinador': 'Coordinador' in grupos,
+        'es_coordinador': 'Coordinador' in grupos or empleado_data.get('tipo_empleado') == 'COORDINADOR',
         'es_cargador': 'cargador' in grupos or 'Cargador' in grupos or empleado_data.get('tipo_empleado') == 'REPARTIDOR',
         'es_encargado_material': 'Encargado Material' in grupos,
         **empleado_data,
