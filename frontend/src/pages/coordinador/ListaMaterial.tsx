@@ -202,6 +202,25 @@ export default function ListaMaterial() {
           </div>
         )}
 
+        {/* Botón enviar al encargado */}
+        {items.length > 0 && (
+          <button
+            onClick={async () => {
+              if (!confirm('¿Enviar lista al encargado de material?')) return
+              try {
+                await api.post(`/coordinador/eventos/${id}/material/enviar/`)
+                alert('✅ Lista enviada al encargado')
+                navigate(-1)
+              } catch (err: any) {
+                alert(err.response?.data?.error || 'Error al enviar lista')
+              }
+            }}
+            className="w-full bg-blue-600 text-white py-3.5 rounded-2xl font-semibold text-sm"
+          >
+            📤 Enviar lista al encargado
+          </button>
+        )}
+
       </div>
     </div>
   )

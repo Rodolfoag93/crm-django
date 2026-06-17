@@ -9,7 +9,7 @@ from core.api.views import (
     api_catalogo_pagos_extra, api_crear_pago_extra_nomina, api_eliminar_pago_extra, api_mis_eventos, api_evento_detalle,
     api_lista_material_evento, api_agregar_material_evento, api_quitar_material_evento, api_catalogo_materiales,
     api_listas_material_encargado, api_lista_material_detalle_encargado, api_surtir_lista, api_confirmar_llegada_coordinador,
-    api_recibir_lista_bodega, api_subir_evidencia, api_evidencias_lista,
+    api_recibir_lista_bodega, api_subir_evidencia, api_evidencias_lista, api_enviar_lista_coordinador
 )
 from core.views.rutas import api_mis_rutas, api_confirmar_entrega, api_confirmar_recogida
 from django.urls import path
@@ -60,4 +60,6 @@ urlpatterns = [
     path('coordinador/eventos/<int:asignacion_id>/material/agregar/', api_agregar_material_evento),
     path('coordinador/material/<int:item_id>/quitar/', api_quitar_material_evento),
     path('coordinador/catalogo-materiales/', api_catalogo_materiales),
+    path('coordinador/eventos/<int:asignacion_id>/material/enviar/', api_enviar_lista_coordinador),
+
 ]

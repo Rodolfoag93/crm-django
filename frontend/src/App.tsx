@@ -22,6 +22,7 @@ import HomeCoordinador from './pages/coordinador/HomeCoordinador'
 import EventoDetalle from './pages/coordinador/EventoDetalle'
 import ListaMaterial from './pages/coordinador/ListaMaterial'
 import CatalogoMateriales from './pages/coordinador/CatalogoMateriales'
+import HomeEncargado from './pages/encargado/HomeEncargado'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
@@ -96,6 +97,9 @@ export default function App() {
         } />
         <Route path="/coordinador/catalogo" element={
           <PrivateRoute><CatalogoMateriales /></PrivateRoute>
+        } />
+        <Route path="/encargado" element={
+          <PrivateRoute><HomeEncargado /></PrivateRoute>
         } />
         <Route path="*" element={<Navigate to="/login" />} />
       </Routes>

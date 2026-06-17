@@ -1567,3 +1567,31 @@ def api_evidencias_lista(request, lista_id):
     ]
 
     return Response(data)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def api_enviar_lista_coordinador(request, asignacion_id):
+    """Coordinador envía la lista al encargado de material."""
+    from core.models import AsignacionCoordinador, ListaMaterialEvento
+
+    asignacion = get_object_or_404(
+        AsignacionCoordinador,
+        id=asignacion_id,
+        coordinador=request.user
+    )
+
+    try:
+        lista = ListaMaterialEvento.objects.get(asignacion=asignacion)
+    except ListaMaterialEvento.DoesNotExist:
+        return Response({'error': 'No hay lista de material para este evento'}, status=400)
+
+    if lista.items_count == 0:
+        return Response({'error': 'La lista está vacía'}, status=400)
+
+    if lista.estado != 'BORRADOR':
+        return Response({'error': f'La lista ya está en estado {lista.estado}'}, status=400)
+
+    lista.estado = 'ENVIADA'
+    lista.save()
+
+    return Response({'ok': True, 'estado': lista.estado})

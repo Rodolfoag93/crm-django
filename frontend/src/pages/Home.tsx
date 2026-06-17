@@ -114,6 +114,21 @@ export default function Home() {
           <div className="ml-auto text-gray-400">›</div>
         </div>
 
+        {/* Material (encargado) */}
+        {user?.es_encargado_material && (
+          <div
+            onClick={() => navigate('/encargado')}
+            className="bg-white rounded-2xl shadow-sm p-5 flex items-center gap-4 cursor-pointer hover:shadow-md transition-shadow border border-gray-100"
+          >
+            <div className="bg-green-100 p-3 rounded-xl text-2xl">📦</div>
+            <div>
+              <h2 className="font-semibold text-gray-900">Material</h2>
+              <p className="text-gray-500 text-sm">Listas de eventos</p>
+            </div>
+            <div className="ml-auto text-gray-400">›</div>
+          </div>
+        )}
+
         {/* Horas Extra */}
         <div
           onClick={() => navigate('/horas-extra')}
