@@ -43,12 +43,19 @@ export default function HomeAnimador() {
   const [ranking, setRanking] = useState<RankingItem[]>([])
   const [loadingEventos, setLoadingEventos] = useState(true)
   const [loadingRanking, setLoadingRanking] = useState(true)
+  const [rankingAnimadores, setRankingAnimadores] = useState<any[]>([])
+  const [loadingRankingAnimadores, setLoadingRankingAnimadores] = useState(true)
 
   useEffect(() => {
     api.get('/animador/eventos/')
       .then(res => setEventos(res.data))
       .catch(console.error)
       .finally(() => setLoadingEventos(false))
+      
+      api.get('/animador/ranking-animadores/')
+      .then(res => setRankingAnimadores(res.data))
+      .catch(console.error)
+      .finally(() => setLoadingRankingAnimadores(false))
 
     api.get('/animador/ranking/')
       .then(res => setRanking(res.data))
@@ -139,6 +146,43 @@ export default function HomeAnimador() {
             </span>
           )}
           <div className="text-gray-400">›</div>
+        </div>
+        
+        {/* Ranking Animadores */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-xl">🎭</span>
+            <p className="font-bold text-gray-800">Ranking Animadores</p>
+          </div>
+
+          {loadingRankingAnimadores ? (
+            <p className="text-center text-gray-400 text-sm py-4">Cargando...</p>
+          ) : rankingAnimadores.length === 0 ? (
+            <p className="text-center text-gray-400 text-sm py-4">Aún no hay calificaciones</p>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {rankingAnimadores.map((item, index) => (
+                <div
+                  key={index}
+                  className={`flex items-center gap-3 p-3 rounded-xl ${
+                    index === 0 ? 'bg-yellow-50' :
+                    index === 1 ? 'bg-gray-50' :
+                    index === 2 ? 'bg-amber-50' :
+                    'bg-gray-50'
+                  }`}
+                >
+                  <span className="text-lg w-6 text-center">{getMedalla(index)}</span>
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-gray-900">{item.animador}</p>
+                    <p className="text-xs text-gray-400">{item.total_eventos} evaluaciones</p>
+                  </div>
+                  <p className={`text-lg font-bold ${getColor(item.promedio)}`}>
+                    {item.promedio.toFixed(1)}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Ranking desplegado */}
