@@ -11,7 +11,7 @@ from core.push_notifications import VAPID_PUBLIC_KEY
 
 from core.models import (
     Cliente, Producto, Renta, Empleado,
-    Nomina, Gasto, MovimientoContable, Asistencia, SolicitudRegistro, HorasExtra, PushSuscripcion
+    Nomina, Gasto, MovimientoContable, Asistencia, SolicitudRegistro, HorasExtra, PushSuscripcion, MaterialEvento
 )
 from core.api.serializers import (
     ClienteSerializer, ProductoSerializer, RentaSerializer,
