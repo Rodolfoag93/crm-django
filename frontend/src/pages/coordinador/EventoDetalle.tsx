@@ -51,7 +51,11 @@ export default function EventoDetalle() {
   const [evento, setEvento] = useState<EventoDetalle | null>(null)
   const [lista, setLista] = useState<ListaMaterial | null>(null)
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState<'info' | 'material'>('info')
+  const [tab, setTab] = useState<'info' | 'material' | 'animadores'>('info')
+  const [animadores, setAnimadores] = useState<any[]>([])
+  const [loadingAnimadores, setLoadingAnimadores] = useState(false)
+  const [busquedaAnimador, setBusquedaAnimador] = useState('')
+  const [catalogoAnimadores, setCatalogoAnimadores] = useState<any[]>([])
 
   useEffect(() => {
     Promise.all([
@@ -63,6 +67,28 @@ export default function EventoDetalle() {
     }).catch(console.error)
     .finally(() => setLoading(false))
   }, [id])
+
+  useEffect(() => {
+    if (tab === 'animadores' && evento) {
+      setLoadingAnimadores(true)
+      api.get(`/coordinador/eventos/${evento.asignacion_id}/animadores/calificar/`)
+        .then(res => setAnimadores(res.data))
+        .finally(() => setLoadingAnimadores(false))
+    }
+  }, [tab, evento])
+
+  useEffect(() => {
+    if (busquedaAnimador.length < 2) {
+      setCatalogoAnimadores([])
+      return
+    }
+    api.get('/coordinador/animadores/')
+      .then(res => setCatalogoAnimadores(
+        res.data.filter((a: any) =>
+          a.nombre.toLowerCase().includes(busquedaAnimador.toLowerCase())
+        )
+      ))
+  }, [busquedaAnimador])
 
   const formatFecha = (fecha: string) => {
     return new Date(fecha + 'T00:00:00').toLocaleDateString('es-MX', {
@@ -101,23 +127,21 @@ export default function EventoDetalle() {
       <div className="bg-white border-b border-gray-100 px-4 flex">
         <button
           onClick={() => setTab('info')}
-          className={`py-3 px-4 text-sm font-medium border-b-2 transition-colors ${
-            tab === 'info'
-              ? 'border-green-700 text-green-700'
-              : 'border-transparent text-gray-400'
-          }`}
+          className={`py-3 px-4 text-sm font-medium border-b-2 transition-colors ${tab === 'info' ? 'border-green-700 text-green-700' : 'border-transparent text-gray-400'}`}
         >
           Info evento
         </button>
         <button
           onClick={() => setTab('material')}
-          className={`py-3 px-4 text-sm font-medium border-b-2 transition-colors ${
-            tab === 'material'
-              ? 'border-green-700 text-green-700'
-              : 'border-transparent text-gray-400'
-          }`}
+          className={`py-3 px-4 text-sm font-medium border-b-2 transition-colors ${tab === 'material' ? 'border-green-700 text-green-700' : 'border-transparent text-gray-400'}`}
         >
           Material {lista?.items.length ? `(${lista.items.length})` : ''}
+        </button>
+        <button
+          onClick={() => setTab('animadores')}
+          className={`py-3 px-4 text-sm font-medium border-b-2 transition-colors ${tab === 'animadores' ? 'border-green-700 text-green-700' : 'border-transparent text-gray-400'}`}
+        >
+          Equipo {animadores.length > 0 ? `(${animadores.length})` : ''}
         </button>
       </div>
 
@@ -126,18 +150,14 @@ export default function EventoDetalle() {
         {/* TAB INFO */}
         {tab === 'info' && (
           <>
-            {/* Fecha y hora */}
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
               <p className="text-xs text-gray-500 font-medium mb-1">Fecha</p>
               <p className="font-semibold text-gray-900">{formatFecha(evento.fecha)}</p>
               {evento.hora_inicio && (
-                <p className="text-sm text-gray-600 mt-1">
-                  🕐 {evento.hora_inicio} — {evento.hora_fin}
-                </p>
+                <p className="text-sm text-gray-600 mt-1">🕐 {evento.hora_inicio} — {evento.hora_fin}</p>
               )}
             </div>
 
-            {/* Cliente */}
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
               <p className="text-xs text-gray-500 font-medium mb-2">Cliente</p>
               <p className="font-semibold text-gray-900">{evento.cliente}</p>
@@ -145,7 +165,6 @@ export default function EventoDetalle() {
               <a href={'https://maps.google.com/?q=' + encodeURIComponent(evento.direccion)} target="_blank" rel="noopener noreferrer" className="text-blue-500 text-xs mt-1 block">{'📍 ' + evento.direccion}</a>
             </div>
 
-            {/* Servicios */}
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
               <p className="text-xs text-gray-500 font-medium mb-2">Servicios contratados</p>
               {evento.productos.map((p, i) => (
@@ -154,45 +173,31 @@ export default function EventoDetalle() {
                     <p className="text-sm text-gray-800">{p.nombre}</p>
                     <p className="text-xs text-gray-400">Cantidad: {p.cantidad}</p>
                   </div>
-                  <span className={`text-xs px-2 py-0.5 rounded-full ${
-                    p.tipo === 'AN'
-                      ? 'bg-purple-50 text-purple-600'
-                      : 'bg-gray-100 text-gray-500'
-                  }`}>
+                  <span className={`text-xs px-2 py-0.5 rounded-full ${p.tipo === 'AN' ? 'bg-purple-50 text-purple-600' : 'bg-gray-100 text-gray-500'}`}>
                     {p.tipo}
                   </span>
                 </div>
               ))}
             </div>
 
-            {/* Pago */}
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
               <p className="text-xs text-gray-500 font-medium mb-2">Pago</p>
               <div className="flex justify-between items-center">
                 <p className="text-sm text-gray-600">Total</p>
-                <p className="font-bold text-gray-900">
-                  ${parseFloat(evento.precio_total).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
-                </p>
+                <p className="font-bold text-gray-900">${parseFloat(evento.precio_total).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</p>
               </div>
               <div className="flex justify-between items-center mt-1">
                 <p className="text-sm text-gray-600">Anticipo</p>
-                <p className="text-sm text-gray-700">
-                  ${parseFloat(evento.anticipo).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
-                </p>
+                <p className="text-sm text-gray-700">${parseFloat(evento.anticipo).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</p>
               </div>
               <div className="flex justify-between items-center mt-2 pt-2 border-t border-gray-100">
                 <p className="text-sm font-medium text-gray-700">Estado</p>
-                <span className={`text-xs font-semibold px-2 py-1 rounded-full ${
-                  evento.pagado
-                    ? 'bg-green-100 text-green-700'
-                    : 'bg-red-50 text-red-500'
-                }`}>
+                <span className={`text-xs font-semibold px-2 py-1 rounded-full ${evento.pagado ? 'bg-green-100 text-green-700' : 'bg-red-50 text-red-500'}`}>
                   {evento.pagado ? '✓ Pagado' : 'Pendiente'}
                 </span>
               </div>
             </div>
 
-            {/* Notas */}
             {evento.comentarios && (
               <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4">
                 <p className="text-xs text-amber-600 font-medium mb-1">Notas del evento</p>
@@ -205,15 +210,12 @@ export default function EventoDetalle() {
         {/* TAB MATERIAL */}
         {tab === 'material' && (
           <>
-            {/* Botón confirmar llegada si está surtida */}
             {lista?.existe && lista.estado === 'SURTIDA' && (
               <button
                 onClick={async () => {
                   if (!confirm('¿Confirmas que recibiste el material en el evento?')) return
                   try {
-                    await api.post(`/coordinador/listas/${lista.lista_id}/confirmar-llegada/`, {
-                      llego_completa: true,
-                    })
+                    await api.post(`/coordinador/listas/${lista.lista_id}/confirmar-llegada/`, { llego_completa: true })
                     alert('✅ Material confirmado en evento')
                     navigate(-1)
                   } catch {
@@ -226,7 +228,6 @@ export default function EventoDetalle() {
               </button>
             )}
 
-            {/* Solo mostrar editar si está en borrador */}
             {(!lista?.existe || lista.estado === 'BORRADOR') && (
               <button
                 onClick={() => navigate(`/coordinador/eventos/${id}/material`)}
@@ -238,21 +239,13 @@ export default function EventoDetalle() {
 
             {lista?.existe && lista.items.length > 0 ? (
               <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 flex flex-col gap-3">
-                <p className="text-xs text-gray-500 font-medium">
-                  Lista de material — {lista.estado}
-                </p>
+                <p className="text-xs text-gray-500 font-medium">Lista de material — {lista.estado}</p>
                 {lista.items.map(item => (
                   <div key={item.id} className="flex items-center gap-3 py-2 border-b border-gray-50 last:border-0">
                     {item.material_foto ? (
-                      <img
-                        src={item.material_foto}
-                        alt={item.material_nombre}
-                        className="w-10 h-10 rounded-xl object-cover"
-                      />
+                      <img src={item.material_foto} alt={item.material_nombre} className="w-10 h-10 rounded-xl object-cover" />
                     ) : (
-                      <div className="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center text-gray-400 text-lg">
-                        📦
-                      </div>
+                      <div className="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center text-gray-400 text-lg">📦</div>
                     )}
                     <div className="flex-1">
                       <p className="text-sm font-medium text-gray-800">{item.material_nombre}</p>
@@ -271,6 +264,92 @@ export default function EventoDetalle() {
               <div className="text-center py-10 text-gray-400">
                 <p className="text-4xl mb-3">📦</p>
                 <p className="text-sm">No hay material en la lista aún</p>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* TAB ANIMADORES */}
+        {tab === 'animadores' && (
+          <>
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
+              <label className="text-xs text-gray-500 font-medium">Agregar animador</label>
+              <input
+                type="text"
+                value={busquedaAnimador}
+                onChange={e => setBusquedaAnimador(e.target.value)}
+                placeholder="Escribe al menos 2 letras..."
+                className="mt-1 w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-600"
+              />
+              {busquedaAnimador.length >= 2 && (
+                <div className="mt-2 border border-gray-100 rounded-xl overflow-hidden">
+                  {catalogoAnimadores.length === 0 ? (
+                    <p className="text-xs text-gray-400 px-3 py-2">Sin resultados</p>
+                  ) : (
+                    catalogoAnimadores.slice(0, 5).map((a: any) => (
+                      <button
+                        key={a.id}
+                        onClick={async () => {
+                          try {
+                            await api.post(`/coordinador/eventos/${evento!.asignacion_id}/animadores/asignar/`, { animador_id: a.id })
+                            setBusquedaAnimador('')
+                            const res = await api.get(`/coordinador/eventos/${evento!.asignacion_id}/animadores/calificar/`)
+                            setAnimadores(res.data)
+                          } catch (err: any) {
+                            alert(err.response?.data?.error || 'Error al asignar')
+                          }
+                        }}
+                        className="w-full flex justify-between items-center px-3 py-2.5 text-sm hover:bg-green-50 border-b border-gray-50 last:border-0 text-left"
+                      >
+                        <span className="text-gray-800">{a.nombre}</span>
+                        <span className="text-green-600 text-lg">+</span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+
+            {loadingAnimadores ? (
+              <div className="text-center py-6 text-gray-400 text-sm">Cargando...</div>
+            ) : animadores.length === 0 ? (
+              <div className="text-center py-10 text-gray-400">
+                <p className="text-4xl mb-3">🎭</p>
+                <p className="text-sm">Sin animadores asignados</p>
+              </div>
+            ) : (
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 flex flex-col gap-3">
+                <p className="text-xs text-gray-500 font-medium">Equipo de animadores</p>
+                {animadores.map((ae: any) => (
+                  <div key={ae.animador_evento_id} className="flex items-center gap-3 py-2 border-b border-gray-50 last:border-0">
+                    <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center text-lg">🎭</div>
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-gray-800">{ae.nombre}</p>
+                      <p className={`text-xs ${
+                        ae.estado === 'ACEPTADO' ? 'text-green-600' :
+                        ae.estado === 'RECHAZADO' ? 'text-red-500' :
+                        'text-yellow-600'
+                      }`}>
+                        {ae.estado === 'ACEPTADO' ? '✓ Confirmado' :
+                         ae.estado === 'RECHAZADO' ? '✗ Rechazado' :
+                         '⏳ Por confirmar'}
+                      </p>
+                      {ae.ya_calificado && (
+                        <p className="text-xs text-green-600">⭐ Calificado</p>
+                      )}
+                    </div>
+                    {ae.estado === 'ACEPTADO' && !ae.ya_calificado ? (
+                      <button
+                        onClick={() => navigate(`/coordinador/animadores/${ae.animador_evento_id}/calificar`)}
+                        className="bg-amber-500 text-white text-xs px-3 py-1.5 rounded-xl font-medium"
+                      >
+                        ⭐ Calificar
+                      </button>
+                    ) : ae.ya_calificado ? (
+                      <span className="text-green-600 text-lg">✓</span>
+                    ) : null}
+                  </div>
+                ))}
               </div>
             )}
           </>

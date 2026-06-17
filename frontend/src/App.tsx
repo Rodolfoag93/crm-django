@@ -29,6 +29,7 @@ import EventoAnimador from './pages/animador/EventoAnimador'
 import CalificarCoordinador from './pages/animador/CalificarCoordinador'
 import RankingCoordinadores from './pages/RankingCoordinadores'
 import ListaEventosAnimador from './pages/animador/ListaEventosAnimador'
+import CalificarAnimador from './pages/coordinador/CalificarAnimador'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
@@ -82,6 +83,9 @@ export default function App() {
         } />
         <Route path="/admin/nominas" element={
           <PrivateRoute><AdminNominas /></PrivateRoute>
+        } />
+        <Route path="/coordinador/animadores/:animadorEventoId/calificar" element={
+          <PrivateRoute><CalificarAnimador /></PrivateRoute>
         } />
         <Route path="/admin/nominas/nueva" element={
           <PrivateRoute><NuevaNomina /></PrivateRoute>
