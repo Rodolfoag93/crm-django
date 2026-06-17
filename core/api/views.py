@@ -153,7 +153,7 @@ def me(request):
         'grupos': grupos,
         'es_coordinador': 'Coordinador' in grupos or empleado_data.get('tipo_empleado') == 'COORDINADOR',
         'es_cargador': 'cargador' in grupos or 'Cargador' in grupos or empleado_data.get('tipo_empleado') == 'REPARTIDOR',
-        'es_encargado_material': 'Encargado Material' in grupos,
+        'es_encargado_material': 'Encargado Material' in grupos or empleado_data.get('tipo_empleado') == 'ENCARGADO',
         **empleado_data,
     })
 
