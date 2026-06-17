@@ -205,12 +205,36 @@ export default function EventoDetalle() {
         {/* TAB MATERIAL */}
         {tab === 'material' && (
           <>
-            <button
-              onClick={() => navigate(`/coordinador/eventos/${id}/material`)}
-              className="w-full bg-green-700 text-white py-3 rounded-2xl font-semibold text-sm"
-            >
-              {lista?.existe ? '✏️ Editar lista de material' : '➕ Crear lista de material'}
-            </button>
+            {/* Botón confirmar llegada si está surtida */}
+            {lista?.existe && lista.estado === 'SURTIDA' && (
+              <button
+                onClick={async () => {
+                  if (!confirm('¿Confirmas que recibiste el material en el evento?')) return
+                  try {
+                    await api.post(`/coordinador/listas/${lista.lista_id}/confirmar-llegada/`, {
+                      llego_completa: true,
+                    })
+                    alert('✅ Material confirmado en evento')
+                    navigate(-1)
+                  } catch {
+                    alert('Error al confirmar llegada')
+                  }
+                }}
+                className="w-full bg-purple-600 text-white py-3.5 rounded-2xl font-semibold text-sm"
+              >
+                ✅ Confirmar llegada del material
+              </button>
+            )}
+
+            {/* Solo mostrar editar si está en borrador */}
+            {(!lista?.existe || lista.estado === 'BORRADOR') && (
+              <button
+                onClick={() => navigate(`/coordinador/eventos/${id}/material`)}
+                className="w-full bg-green-700 text-white py-3 rounded-2xl font-semibold text-sm"
+              >
+                {lista?.existe ? '✏️ Editar lista de material' : '➕ Crear lista de material'}
+              </button>
+            )}
 
             {lista?.existe && lista.items.length > 0 ? (
               <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 flex flex-col gap-3">
