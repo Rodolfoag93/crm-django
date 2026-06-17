@@ -1888,14 +1888,13 @@ def api_ranking_animadores(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def api_animadores_por_calificar(request, asignacion_id):
-    """Lista animadores de un evento que el coordinador aún no ha calificado."""
+    """Lista animadores de un evento."""
     from core.models import AnimadorEvento, AsignacionCoordinador
 
     get_object_or_404(AsignacionCoordinador, id=asignacion_id, coordinador=request.user)
 
     animadores = AnimadorEvento.objects.filter(
         asignacion_id=asignacion_id,
-        estado='ACEPTADO'
     ).select_related('animador')
 
     data = [
@@ -1903,6 +1902,7 @@ def api_animadores_por_calificar(request, asignacion_id):
             'animador_evento_id': ae.id,
             'animador_id': ae.animador.id,
             'nombre': ae.animador.nombre,
+            'estado': ae.estado,
             'ya_calificado': hasattr(ae, 'calificacion_coordinador'),
         }
         for ae in animadores
