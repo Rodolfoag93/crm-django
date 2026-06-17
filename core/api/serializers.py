@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from core.models import (
     Cliente, Producto, Renta, RentaProducto,
-    Empleado, Nomina, Gasto, MovimientoContable, Asistencia, SolicitudRegistro, HorasExtra
+    Empleado, Nomina, Gasto, MovimientoContable, Asistencia, SolicitudRegistro, HorasExtra, PagoExtraNomina, TipoPagoExtra
 )
 from django.contrib.auth.hashers import make_password
 
@@ -48,12 +48,26 @@ class EmpleadoSerializer(serializers.ModelSerializer):
         fields = ['id', 'nombre', 'telefono', 'correo', 'tipo_empleado', 'activo', 'sueldo_diario']
 
 
+class PagoExtraNominaSerializer(serializers.ModelSerializer):
+    tipo_nombre = serializers.CharField(source='tipo.nombre', read_only=True)
+
+    class Meta:
+        model = PagoExtraNomina
+        fields = ['id', 'tipo', 'tipo_nombre', 'monto']
+
+
 class NominaSerializer(serializers.ModelSerializer):
     empleado_nombre = serializers.CharField(source='empleado.nombre', read_only=True)
     total = serializers.DecimalField(max_digits=10, decimal_places=2, required=False, default=0)
+    pagos_extra = PagoExtraNominaSerializer(many=True, read_only=True)
+
     class Meta:
         model = Nomina
-        fields = ['id', 'empleado', 'empleado_nombre', 'fecha_inicio', 'fecha_fin', 'dias_trabajados', 'total']
+        fields = [
+            'id', 'empleado', 'empleado_nombre',
+            'fecha_inicio', 'fecha_fin', 'dias_trabajados',
+            'total', 'pagos_extra'
+        ]
 
 
 class GastoSerializer(serializers.ModelSerializer):
