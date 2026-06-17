@@ -1550,5 +1550,21 @@ def api_enviar_lista_coordinador(request, asignacion_id):
 
     lista.estado = 'ENVIADA'
     lista.save()
+    
+    try:
+        from core.push_notifications import enviar_notificacion
+        from django.contrib.auth.models import User
+        encargados = User.objects.filter(empleado__tipo_empleado='ENCARGADO', empleado__activo=True)
+        for encargado in encargados:
+            enviar_notificacion(
+                encargado,
+                '📦 Nueva lista de material',
+                f'El coordinador {request.user.get_full_name() or request.user.username} envió una lista para {asignacion.renta.cliente.nombre}',
+                '/encargado'
+            )
+    except Exception:
+        pass
+
+    return Response({'ok': True, 'estado': lista.estado})
 
     return Response({'ok': True, 'estado': lista.estado})

@@ -25,6 +25,17 @@ def asignar_coordinador_animacion(request, renta_id):
         asignacion.coordinador = coordinador
         asignacion.notas = notas
         asignacion.save()
+        try:
+            from core.push_notifications import enviar_notificacion
+            enviar_notificacion(
+                coordinador,
+                '🎉 Nuevo evento asignado',
+                f'Tienes un nuevo evento: {renta.cliente.nombre} el {renta.fecha_renta}',
+                '/coordinador'
+            )
+        except Exception:
+            pass
+        
         messages.success(request, 'Coordinador asignado correctamente')
         return redirect('lista_rentas')
     coordinadores = User.objects.filter(groups__name='Coordinador')
