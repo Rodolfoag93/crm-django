@@ -1585,7 +1585,7 @@ def api_enviar_lista_coordinador(request, asignacion_id):
     except ListaMaterialEvento.DoesNotExist:
         return Response({'error': 'No hay lista de material para este evento'}, status=400)
 
-    if lista.items_count == 0:
+    if MaterialEvento.objects.filter(asignacion=lista.asignacion).count() == 0:
         return Response({'error': 'La lista está vacía'}, status=400)
 
     if lista.estado != 'BORRADOR':
