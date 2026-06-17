@@ -1550,7 +1550,7 @@ def api_enviar_lista_coordinador(request, asignacion_id):
 
     lista.estado = 'ENVIADA'
     lista.save()
-    
+
     try:
         from core.push_notifications import enviar_notificacion
         from django.contrib.auth.models import User
@@ -1568,3 +1568,249 @@ def api_enviar_lista_coordinador(request, asignacion_id):
     return Response({'ok': True, 'estado': lista.estado})
 
     return Response({'ok': True, 'estado': lista.estado})
+
+# ── Animadores PWA ─────────────────────────────────────────────────────────────
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def api_mis_eventos_animador(request):
+    """Eventos asignados al animador logueado."""
+    from core.models import AnimadorEvento
+    try:
+        empleado = request.user.empleado
+    except Exception:
+        return Response({'error': 'Empleado no encontrado'}, status=400)
+
+    asignaciones = AnimadorEvento.objects.filter(
+        animador=empleado
+    ).select_related(
+        'asignacion__renta__cliente',
+        'asignacion__coordinador'
+    ).order_by('-asignacion__renta__fecha_renta')
+
+    data = []
+    for ae in asignaciones:
+        r = ae.asignacion.renta
+        data.append({
+            'animador_evento_id': ae.id,
+            'asignacion_id': ae.asignacion.id,
+            'estado': ae.estado,
+            'fecha': str(r.fecha_renta),
+            'hora_cita': str(ae.hora_cita) if ae.hora_cita else None,
+            'tipo_llegada': ae.tipo_llegada,
+            'coordinador': ae.asignacion.coordinador.get_full_name() or ae.asignacion.coordinador.username,
+            'direccion': f"{r.calle_y_numero}, {r.colonia}, {r.ciudad_o_municipio}",
+            'hora_inicio': str(r.hora_inicio) if r.hora_inicio else None,
+            'hora_fin': str(r.hora_fin) if r.hora_fin else None,
+            'tiene_calificacion': hasattr(ae, 'calificacion'),
+        })
+
+    return Response(data)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def api_responder_evento_animador(request, animador_evento_id):
+    """Animador acepta o rechaza un evento."""
+    from core.models import AnimadorEvento
+    try:
+        empleado = request.user.empleado
+    except Exception:
+        return Response({'error': 'Empleado no encontrado'}, status=400)
+
+    ae = get_object_or_404(AnimadorEvento, id=animador_evento_id, animador=empleado)
+    estado = request.data.get('estado')
+    tipo_llegada = request.data.get('tipo_llegada')
+
+    if estado not in ('ACEPTADO', 'RECHAZADO'):
+        return Response({'error': 'Estado inválido'}, status=400)
+
+    ae.estado = estado
+    if tipo_llegada:
+        ae.tipo_llegada = tipo_llegada
+    ae.save()
+
+    return Response({'ok': True, 'estado': ae.estado})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def api_calificar_coordinador(request, animador_evento_id):
+    """Animador califica al coordinador después del evento."""
+    from core.models import AnimadorEvento, CalificacionCoordinador
+    try:
+        empleado = request.user.empleado
+    except Exception:
+        return Response({'error': 'Empleado no encontrado'}, status=400)
+
+    ae = get_object_or_404(AnimadorEvento, id=animador_evento_id, animador=empleado)
+
+    if hasattr(ae, 'calificacion'):
+        return Response({'error': 'Ya calificaste este evento'}, status=400)
+
+    data = request.data
+    campos = ['comunicacion', 'organizacion', 'trato', 'respeto', 'puntualidad', 'innovacion']
+    for campo in campos:
+        val = float(data.get(campo, 0))
+        if not 0 <= val <= 5:
+            return Response({'error': f'{campo} debe ser entre 0 y 5'}, status=400)
+
+    cal = CalificacionCoordinador.objects.create(
+        animador_evento=ae,
+        comunicacion=data.get('comunicacion', 0),
+        organizacion=data.get('organizacion', 0),
+        trato=data.get('trato', 0),
+        respeto=data.get('respeto', 0),
+        puntualidad=data.get('puntualidad', 0),
+        innovacion=data.get('innovacion', 0),
+        comentario=data.get('comentario', ''),
+    )
+
+    return Response({
+        'ok': True,
+        'promedio': str(cal.promedio),
+    }, status=201)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def api_ranking_coordinadores(request):
+    """Ranking top 10 de coordinadores por calificación."""
+    from core.models import CalificacionCoordinador, AnimadorEvento
+    from django.db.models import Avg, Count
+    from django.contrib.auth.models import User
+
+    ranking = CalificacionCoordinador.objects.values(
+        'animador_evento__asignacion__coordinador'
+    ).annotate(
+        promedio=Avg('comunicacion') + Avg('organizacion') + Avg('trato') +
+                 Avg('respeto') + Avg('puntualidad') + Avg('innovacion'),
+        total_eventos=Count('id')
+    ).order_by('-promedio')[:10]
+
+    data = []
+    for r in ranking:
+        user_id = r['animador_evento__asignacion__coordinador']
+        try:
+            user = User.objects.get(id=user_id)
+            nombre = user.get_full_name() or user.username
+            try:
+                nombre = user.empleado.nombre
+            except Exception:
+                pass
+        except User.DoesNotExist:
+            continue
+
+        data.append({
+            'coordinador': nombre,
+            'promedio': round(r['promedio'] / 6, 2),
+            'total_eventos': r['total_eventos'],
+        })
+
+    return Response(data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def api_mi_calificacion_coordinador(request):
+    """El coordinador ve su propia calificación promedio."""
+    from core.models import CalificacionCoordinador
+    from django.db.models import Avg
+
+    promedios = CalificacionCoordinador.objects.filter(
+        animador_evento__asignacion__coordinador=request.user
+    ).aggregate(
+        comunicacion=Avg('comunicacion'),
+        organizacion=Avg('organizacion'),
+        trato=Avg('trato'),
+        respeto=Avg('respeto'),
+        puntualidad=Avg('puntualidad'),
+        innovacion=Avg('innovacion'),
+        total=Count('id'),
+    )
+
+    if not promedios['total']:
+        return Response({'sin_calificaciones': True})
+
+    from django.db.models import Count
+    campos = ['comunicacion', 'organizacion', 'trato', 'respeto', 'puntualidad', 'innovacion']
+    promedio_general = sum(promedios[c] or 0 for c in campos) / 6
+
+    return Response({
+        'sin_calificaciones': False,
+        'promedio_general': round(promedio_general, 2),
+        'detalle': {c: round(promedios[c] or 0, 2) for c in campos},
+        'total_evaluaciones': promedios['total'],
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def api_animadores_disponibles(request):
+    """Lista animadores disponibles para asignar a un evento."""
+    from core.models import Empleado
+    animadores = Empleado.objects.filter(
+        tipo_empleado='ANIMADOR',
+        activo=True
+    ).order_by('nombre')
+
+    data = [
+        {
+            'id': a.id,
+            'nombre': a.nombre,
+            'telefono': a.telefono,
+        }
+        for a in animadores
+    ]
+    return Response(data)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def api_asignar_animador(request, asignacion_id):
+    """Coordinador asigna un animador a su evento."""
+    from core.models import AnimadorEvento, AsignacionCoordinador, Empleado
+    asignacion = get_object_or_404(
+        AsignacionCoordinador,
+        id=asignacion_id,
+        coordinador=request.user
+    )
+    animador_id = request.data.get('animador_id')
+    hora_cita = request.data.get('hora_cita')
+
+    animador = get_object_or_404(Empleado, id=animador_id, tipo_empleado='ANIMADOR')
+
+    ae, created = AnimadorEvento.objects.get_or_create(
+        asignacion=asignacion,
+        animador=animador,
+        defaults={'hora_cita': hora_cita}
+    )
+
+    if not created:
+        return Response({'error': 'Este animador ya está asignado'}, status=400)
+
+    # Notificar al animador
+    try:
+        if animador.user:
+            r = asignacion.renta
+            enviar_notificacion(
+                animador.user,
+                '🎉 Fuiste asignado a un evento',
+                f'El {r.fecha_renta} a las {hora_cita or r.hora_inicio} en {r.ciudad_o_municipio}. ¡Confirma tu asistencia!',
+                '/animador'
+            )
+    except Exception:
+        pass
+
+    return Response({'ok': True, 'animador_evento_id': ae.id}, status=201)
+
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def api_quitar_animador(request, animador_evento_id):
+    """Coordinador quita un animador de su evento."""
+    from core.models import AnimadorEvento, AsignacionCoordinador
+    ae = get_object_or_404(AnimadorEvento, id=animador_evento_id)
+    get_object_or_404(AsignacionCoordinador, id=ae.asignacion_id, coordinador=request.user)
+    ae.delete()
+    return Response({'ok': True})
