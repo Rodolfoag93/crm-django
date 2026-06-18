@@ -1,4 +1,4 @@
-const CACHE_NAME = 'trotamundos-v2'
+const CACHE_NAME = 'trotamundos-v3'
 const STATIC_ASSETS = [
   '/',
   '/index.html',
