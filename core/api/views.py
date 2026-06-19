@@ -355,6 +355,7 @@ class HorasExtraViewSet(viewsets.ReadOnlyModelViewSet):
 
 class SolicitudRegistroViewSet(viewsets.GenericViewSet):
     serializer_class = SolicitudRegistroSerializer
+    permission_classes = [AllowAny]
 
     @action(detail=False, methods=['post'], permission_classes=[AllowAny])
     def registro(self, request):
@@ -1909,3 +1910,17 @@ def api_animadores_por_calificar(request, asignacion_id):
     ]
 
     return Response(data)
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def api_registro_solicitud(request):
+    """Registro de nueva solicitud sin autenticación."""
+    from core.api.serializers import SolicitudRegistroSerializer
+    serializer = SolicitudRegistroSerializer(data=request.data)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(
+            {'mensaje': 'Solicitud enviada correctamente. El administrador revisará tu solicitud.'},
+            status=status.HTTP_201_CREATED
+        )
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

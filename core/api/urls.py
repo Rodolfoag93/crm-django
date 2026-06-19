@@ -12,7 +12,7 @@ from core.api.views import (
     api_recibir_lista_bodega, api_subir_evidencia, api_evidencias_lista, api_enviar_lista_coordinador, api_mis_eventos_animador,
     api_responder_evento_animador, api_calificar_coordinador,
     api_ranking_coordinadores, api_mi_calificacion_coordinador, api_animadores_disponibles, api_asignar_animador, api_quitar_animador,
-    api_calificar_animador, api_ranking_animadores, api_animadores_por_calificar
+    api_calificar_animador, api_ranking_animadores, api_animadores_por_calificar, api_registro_solicitud
 )
 from core.views.rutas import api_mis_rutas, api_confirmar_entrega, api_confirmar_recogida
 from django.urls import path
@@ -82,5 +82,6 @@ urlpatterns = [
     path('coordinador/eventos/<int:asignacion_id>/animadores/calificar/', api_animadores_por_calificar),
     path('coordinador/animadores/<int:animador_evento_id>/calificar/', api_calificar_animador),
     path('animador/ranking-animadores/', api_ranking_animadores),
+    path('registro/', api_registro_solicitud),
 
 ]
