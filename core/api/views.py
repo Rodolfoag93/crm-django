@@ -437,63 +437,6 @@ class SolicitudRegistroViewSet(viewsets.GenericViewSet):
             'empleado_id': empleado.id
         })
 
-    @action(detail=False, methods=['post'])
-    def checkin(self, request):
-        ubicacion = request.data.get('ubicacion', '')
-
-        try:
-            empleado = request.user.empleado
-        except Exception:
-            empleado_id = request.data.get('empleado_id')
-            if not empleado_id:
-                return Response({'error': 'No tienes un empleado vinculado'}, status=status.HTTP_400_BAD_REQUEST)
-            empleado = get_object_or_404(Empleado, id=empleado_id)
-
-        hoy = timezone.localdate()
-        asistencia, created = Asistencia.objects.get_or_create(
-            empleado=empleado,
-            fecha=hoy,
-            defaults={
-                'hora_entrada': timezone.now(),
-                'ubicacion_entrada': ubicacion,
-            }
-        )
-
-        if not created and asistencia.hora_entrada:
-            return Response({'error': 'Ya registraste tu entrada hoy'}, status=status.HTTP_400_BAD_REQUEST)
-
-        serializer = self.get_serializer(asistencia)
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
-
-
-    @action(detail=False, methods=['post'])
-    def checkout(self, request):
-        ubicacion = request.data.get('ubicacion', '')
-
-        try:
-            empleado = request.user.empleado
-        except Exception:
-            empleado_id = request.data.get('empleado_id')
-            if not empleado_id:
-                return Response({'error': 'No tienes un empleado vinculado'}, status=status.HTTP_400_BAD_REQUEST)
-            empleado = get_object_or_404(Empleado, id=empleado_id)
-
-        hoy = timezone.localdate()
-        try:
-            asistencia = Asistencia.objects.get(empleado=empleado, fecha=hoy)
-        except Asistencia.DoesNotExist:
-            return Response({'error': 'No has registrado tu entrada hoy'}, status=status.HTTP_400_BAD_REQUEST)
-
-        if asistencia.hora_salida:
-            return Response({'error': 'Ya registraste tu salida hoy'}, status=status.HTTP_400_BAD_REQUEST)
-
-        asistencia.hora_salida = timezone.now()
-        asistencia.ubicacion_salida = ubicacion
-        asistencia.save()
-
-        serializer = self.get_serializer(asistencia)
-        return Response(serializer.data)
-
 #---------push notificacions---------------
 
 @api_view(['POST'])
