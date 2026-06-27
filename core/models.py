@@ -2,7 +2,7 @@ import uuid
 from django.db import models
 from django.utils import timezone
 from django.contrib.auth.models import User
-from django.db.models import Sum, Max
+from django.db.models import Sum, Max, F
 from datetime import timedelta
 from django.core.exceptions import ValidationError
 from decimal import Decimal, ROUND_HALF_UP
@@ -55,10 +55,14 @@ class Producto(models.Model):
         return self.stock_disponible_en_horario(fecha, hora_inicio, hora_fin) >= cantidad
 
     def reservar_stock(self, cantidad):
-        return
+        Producto.objects.filter(pk=self.pk).update(
+            stock_disponible=F('stock_disponible') - cantidad
+        )
 
     def liberar_stock(self, cantidad):
-        return
+        Producto.objects.filter(pk=self.pk).update(
+            stock_disponible=F('stock_disponible') + cantidad
+        )
 
     @property
     def disponible(self):
