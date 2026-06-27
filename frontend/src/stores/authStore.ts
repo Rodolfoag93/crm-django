@@ -17,8 +17,6 @@ interface User {
 
 interface AuthState {
   user: User | null
-  access_token: string | null
-  refresh_token: string | null
   isAuthenticated: boolean
   login: (username: string, password: string) => Promise<void>
   logout: () => void
@@ -29,19 +27,13 @@ export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
       user: null,
-      access_token: null,
-      refresh_token: null,
       isAuthenticated: false,
 
       login: async (username, password) => {
         const { data } = await api.post('/auth/token/', { username, password })
         localStorage.setItem('access_token', data.access)
         localStorage.setItem('refresh_token', data.refresh)
-        set({
-          access_token: data.access,
-          refresh_token: data.refresh,
-          isAuthenticated: true,
-        })
+        set({ isAuthenticated: true })
         const me = await api.get('/auth/me/')
         set({ user: me.data })
       },
@@ -51,8 +43,6 @@ export const useAuthStore = create<AuthState>()(
         localStorage.removeItem('refresh_token')
         set({
           user: null,
-          access_token: null,
-          refresh_token: null,
           isAuthenticated: false,
         })
       },

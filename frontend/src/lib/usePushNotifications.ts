@@ -14,12 +14,11 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array<ArrayBuffer> {
 }
 
 async function getVapidPublicKey(): Promise<string> {
-  const res = await fetch('https://trotacrm.com/v1/push/vapid-key/')
-  const data = await res.json()
+  const { data } = await api.get('/push/vapid-key/')
   return data.vapid_public_key
 }
 
-async function suscribir(token: string) {
+async function suscribir() {
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) return
   if (Notification.permission === 'denied') return
 
@@ -50,17 +49,15 @@ async function suscribir(token: string) {
         p256dh: subJson.keys?.p256dh,
         auth: subJson.keys?.auth,
       },
-    }, {
-      headers: { Authorization: `Bearer ${token}` }
     })
   } catch (err: any) {
     console.error('Error push:', err?.response?.data || err?.message)
   }
 }
 
-export function usePushNotifications(token: string | null) {
+export function usePushNotifications(isAuthenticated: boolean) {
   useEffect(() => {
-    if (!token) return
-    suscribir(token).catch(console.error)
-  }, [token])
+    if (!isAuthenticated) return
+    suscribir().catch(console.error)
+  }, [isAuthenticated])
 }

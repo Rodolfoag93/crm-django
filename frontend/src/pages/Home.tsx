@@ -6,8 +6,8 @@ import HomeCoordinador from './coordinador/HomeCoordinador'
 import HomeAnimador from './animador/HomeAnimador'
 
 export default function Home() {
-  const { user, logout, access_token } = useAuthStore()
-  usePushNotifications(access_token)    
+  const { user, logout, isAuthenticated } = useAuthStore()
+  usePushNotifications(isAuthenticated)
   const navigate = useNavigate()
 
   if (user?.es_admin) {
