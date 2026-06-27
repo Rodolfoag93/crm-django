@@ -167,6 +167,7 @@ class Renta(models.Model):
         ('ASIGNADO', 'Asignado'),
         ('EN_RUTA', 'En ruta'),
         ('ENTREGADO', 'Entregado'),
+        ('RECOGIDO', 'Recogido'),
         ('CANCELADO', 'Cancelado'),
     ]
 

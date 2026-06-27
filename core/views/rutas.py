@@ -325,7 +325,7 @@ def api_confirmar_recogida(request, parada_id):
         rp.producto.liberar_stock(rp.cantidad)
 
     # Actualizar estado_entrega en la Renta
-    parada.renta.estado_entrega = 'ENTREGADO'
+    parada.renta.estado_entrega = 'RECOGIDO'
     parada.renta.save()
 
     return Response({'ok': True, 'mensaje': 'Recogida confirmada.'})
