@@ -34,7 +34,7 @@ export default function Registro() {
     setLoading(true)
     setError('')
     try {
-      await api.post('/solicitudes/registro/', {
+      await api.post('/registro/', {
         nombre: data.nombre,
         telefono: data.telefono,
         email: data.email || '',
