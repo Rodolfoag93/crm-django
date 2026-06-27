@@ -575,7 +575,7 @@ document.addEventListener('DOMContentLoaded', function () {
     limpiarAlGuardar();
     
     // Guardar cada 10 segundos
-    setInterval(guardarFormulario, 2000);
+    setInterval(guardarFormulario, 10000);
     
     // Guardar también cuando el usuario escribe o cambia algo
     document.getElementById('renta-form')?.addEventListener('input', guardarFormulario);
