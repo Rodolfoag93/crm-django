@@ -67,11 +67,12 @@ def detalle_ruta(request, ruta_id):
         ),
         id=ruta_id
     )
-    # Rentas disponibles para agregar (mismo día, sin parada en esta ruta)
+    # Rentas del mismo día que aún no están en ninguna ruta del mismo tipo
     rentas_disponibles = Renta.objects.filter(
         fecha_renta=ruta.fecha,
+        status='ACTIVO',
     ).exclude(
-        rutas__ruta=ruta
+        rutas__ruta__tipo=ruta.tipo  # excluye rentas ya en otra ruta del mismo tipo
     ).select_related('cliente').order_by('cliente__nombre')
 
     return render(request, 'core/rutas/detalle_ruta.html', {
@@ -104,6 +105,57 @@ def agregar_parada(request, ruta_id):
                     cuerpo=f'Se agregó una entrega a la ruta {ruta.nombre}.',
                     url='/entregas'
                 )
+    return redirect('detalle_ruta', ruta_id=ruta_id)
+
+
+# ── Editar ruta ────────────────────────────────────────────────────────────────
+
+@login_required
+@solo_admin
+def editar_ruta(request, ruta_id):
+    ruta = get_object_or_404(Ruta, id=ruta_id)
+    empleados = Empleado.objects.filter(activo=True).order_by('nombre')
+
+    if request.method == 'POST':
+        ruta.nombre = request.POST.get('nombre', ruta.nombre)
+        ruta.tipo = request.POST.get('tipo', ruta.tipo)
+        ruta.fecha = request.POST.get('fecha', ruta.fecha)
+        ruta.notas = request.POST.get('notas', '')
+        ruta.save()
+
+        empleados_ids = request.POST.getlist('empleados')
+        lider_id = request.POST.get('lider')
+
+        ruta.empleados.all().delete()
+        for emp_id in empleados_ids:
+            RutaEmpleado.objects.create(
+                ruta=ruta,
+                empleado_id=emp_id,
+                es_lider=(str(emp_id) == str(lider_id))
+            )
+
+        return redirect('detalle_ruta', ruta_id=ruta.id)
+
+    empleados_actuales = set(ruta.empleados.values_list('empleado_id', flat=True))
+    lider_actual = ruta.empleados.filter(es_lider=True).values_list('empleado_id', flat=True).first()
+
+    return render(request, 'core/rutas/editar_ruta.html', {
+        'ruta': ruta,
+        'empleados': empleados,
+        'empleados_actuales': empleados_actuales,
+        'lider_actual': lider_actual,
+    })
+
+
+# ── Eliminar parada de ruta ────────────────────────────────────────────────────
+
+@login_required
+@solo_admin
+def eliminar_parada(request, parada_id):
+    parada = get_object_or_404(RutaRenta, id=parada_id)
+    ruta_id = parada.ruta_id
+    if parada.estado == 'pendiente':
+        parada.delete()
     return redirect('detalle_ruta', ruta_id=ruta_id)
 
 

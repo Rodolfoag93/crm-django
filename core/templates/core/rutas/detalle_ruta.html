@@ -5,6 +5,7 @@
   <div class="d-flex align-items-center gap-2 mb-3">
     <a href="{% url 'lista_rutas' %}" class="btn btn-outline-secondary btn-sm">← Volver</a>
     <h2 class="mb-0">{{ ruta.nombre }}</h2>
+    <a href="{% url 'editar_ruta' ruta.id %}" class="btn btn-outline-primary btn-sm ms-1">Editar</a>
     <span class="badge
       {% if ruta.tipo == 'entrega' %}bg-primary
       {% else %}bg-warning text-dark{% endif %}">
@@ -114,8 +115,15 @@
                 </div>
                 {% endif %}
               </div>
-              <div class="text-muted small">
-                Folio: {{ parada.renta.folio }}
+              <div class="text-end">
+                <div class="text-muted small mb-2">Folio: {{ parada.renta.folio }}</div>
+                {% if parada.estado == 'pendiente' %}
+                <form method="post" action="{% url 'eliminar_parada' parada.id %}"
+                      onsubmit="return confirm('¿Eliminar esta parada?')">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-outline-danger btn-sm">Eliminar</button>
+                </form>
+                {% endif %}
               </div>
             </div>
           </div>
