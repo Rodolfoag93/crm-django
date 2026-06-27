@@ -1,7 +1,7 @@
 from rest_framework import viewsets, filters, status
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.permissions import IsAuthenticated, AllowAny, BasePermission, SAFE_METHODS
 from django_filters.rest_framework import DjangoFilterBackend
 from django.utils import timezone
 from django.shortcuts import get_object_or_404
@@ -25,10 +25,27 @@ from core.api.serializers import (
 )
 
 
+class EsAdmin(BasePermission):
+    """Solo staff o superusuario tiene acceso."""
+    def has_permission(self, request, view):
+        return bool(request.user and request.user.is_authenticated
+                    and (request.user.is_staff or request.user.is_superuser))
+
+
+class EsAdminOSoloLectura(BasePermission):
+    """Cualquier empleado autenticado puede leer; solo admin puede escribir."""
+    def has_permission(self, request, view):
+        if not (request.user and request.user.is_authenticated):
+            return False
+        if request.method in SAFE_METHODS:
+            return True
+        return request.user.is_staff or request.user.is_superuser
+
+
 class ClienteViewSet(viewsets.ModelViewSet):
     queryset = Cliente.objects.all().order_by('nombre')
     serializer_class = ClienteSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [EsAdminOSoloLectura]
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['nombre', 'telefono']
     ordering_fields = ['nombre']
@@ -37,7 +54,7 @@ class ClienteViewSet(viewsets.ModelViewSet):
 class ProductoViewSet(viewsets.ModelViewSet):
     queryset = Producto.objects.filter(activo=True).order_by('nombre')
     serializer_class = ProductoSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [EsAdminOSoloLectura]
     filter_backends = [filters.SearchFilter]
     search_fields = ['nombre', 'tipo']
 
@@ -47,7 +64,7 @@ class RentaViewSet(viewsets.ModelViewSet):
         'rentaproductos__producto'
     ).order_by('-fecha_renta')
     serializer_class = RentaSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [EsAdminOSoloLectura]
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['folio', 'cliente__nombre', 'cliente__telefono']
     ordering_fields = ['fecha_renta', 'precio_total']
@@ -78,14 +95,14 @@ class RentaViewSet(viewsets.ModelViewSet):
 class EmpleadoViewSet(viewsets.ModelViewSet):
     queryset = Empleado.objects.filter(activo=True).order_by('nombre')
     serializer_class = EmpleadoSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [EsAdminOSoloLectura]
     filter_backends = [filters.SearchFilter]
     search_fields = ['nombre', 'tipo_empleado']
 
 
 class NominaViewSet(viewsets.ModelViewSet):
     serializer_class = NominaSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [EsAdminOSoloLectura]
 
     def _sync(self, nomina):
         from core.utils import sincronizar_gasto_nomina
@@ -131,7 +148,7 @@ class NominaViewSet(viewsets.ModelViewSet):
 class GastoViewSet(viewsets.ModelViewSet):
     queryset = Gasto.objects.all().order_by('-fecha')
     serializer_class = GastoSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [EsAdmin]
     filter_backends = [filters.SearchFilter]
     search_fields = ['descripcion', 'tipo', 'categoria']
 
@@ -139,7 +156,7 @@ class GastoViewSet(viewsets.ModelViewSet):
 class MovimientoContableViewSet(viewsets.ModelViewSet):
     queryset = MovimientoContable.objects.all().order_by('-fecha')
     serializer_class = MovimientoContableSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [EsAdmin]
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
