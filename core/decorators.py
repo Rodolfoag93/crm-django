@@ -11,6 +11,9 @@ _GRUPOS_LISTAS_MATERIAL = frozenset({
     'Administrador',
 })
 
+# Grupos con acceso a vistas administrativas del CRM
+_GRUPOS_ADMIN = frozenset({'Administrador'})
+
 
 def acceso_listas_material(view_func):
     """Solo Coordinador, Encargado Material, Administrador o superusuario."""
@@ -34,6 +37,7 @@ def solo_admin(view_func):
     def _wrapped_view(request, *args, **kwargs):
         user = request.user
 
+        # Repartidores (cargadores) van a su vista de ruta
         if (
             user.is_authenticated
             and user.groups.filter(name='cargador').exists()
@@ -41,11 +45,16 @@ def solo_admin(view_func):
         ):
             return redirect('mi_ruta')
 
+        # Solo superusuarios, staff o grupo Administrador tienen acceso a vistas admin
+        if not (user.is_superuser or user.is_staff or user.groups.filter(name__in=_GRUPOS_ADMIN).exists()):
+            return redirect('home')
+
         return view_func(request, *args, **kwargs)
 
     return _wrapped_view
 
 def solo_coordinador(view_func):
+    @wraps(view_func)
     def wrapper(request, *args, **kwargs):
         if not request.user.is_authenticated:
             return redirect('login')
@@ -55,6 +64,7 @@ def solo_coordinador(view_func):
     return wrapper
 
 def no_coordinador(view_func):
+    @wraps(view_func)
     def wrapper(request, *args, **kwargs):
         es_coordinador = request.user.groups.filter(name='Coordinador').exists()
         es_encargado = request.user.groups.filter(name='Encargado Material').exists()

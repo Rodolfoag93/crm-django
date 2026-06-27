@@ -1,3 +1,4 @@
+import uuid
 from django.db import models
 from django.utils import timezone
 from django.contrib.auth.models import User
@@ -177,10 +178,10 @@ class Renta(models.Model):
     evento_google_id = models.CharField(max_length=200, blank=True, null=True)
     
     def save(self, *args, **kwargs):
-        # Generar folio automático si no existe
         if not self.folio:
-            timestamp = int(timezone.now().timestamp())
-            self.folio = f"R{timestamp}"
+            ts = int(timezone.now().timestamp())
+            suffix = uuid.uuid4().hex[:4].upper()
+            self.folio = f"R{ts}{suffix}"
         super().save(*args, **kwargs)
 
     def __str__(self):
