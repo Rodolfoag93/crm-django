@@ -380,6 +380,9 @@ class SolicitudRegistroViewSet(viewsets.GenericViewSet):
 
     @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
     def aprobar(self, request, pk=None):
+        if not (request.user.is_staff or request.user.is_superuser):
+            return Response({'error': 'No tienes permiso'}, status=status.HTTP_403_FORBIDDEN)
+
         solicitud = get_object_or_404(SolicitudRegistro, pk=pk)
 
         if solicitud.estado != 'PENDIENTE':
