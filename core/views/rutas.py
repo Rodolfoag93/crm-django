@@ -320,6 +320,10 @@ def api_confirmar_recogida(request, parada_id):
     parada.notas_campo = request.data.get('notas_campo', '')
     parada.save()
 
+    # Devolver stock al inventario
+    for rp in parada.renta.rentaproductos.select_related('producto').all():
+        rp.producto.liberar_stock(rp.cantidad)
+
     # Actualizar estado_entrega en la Renta
     parada.renta.estado_entrega = 'ENTREGADO'
     parada.renta.save()
