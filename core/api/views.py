@@ -841,6 +841,48 @@ def api_rentas_disponibles(request):
     ]
     return Response(data)
 
+
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated])
+def api_editar_ruta(request, ruta_id):
+    if not request.user.is_staff:
+        return Response({'error': 'No autorizado.'}, status=403)
+
+    ruta = get_object_or_404(Ruta, id=ruta_id)
+    data = request.data
+
+    ruta.nombre = data.get('nombre', ruta.nombre)
+    ruta.tipo = data.get('tipo', ruta.tipo)
+    ruta.fecha = data.get('fecha', ruta.fecha)
+    ruta.notas = data.get('notas', ruta.notas)
+    ruta.save()
+
+    ruta.empleados.all().delete()
+    lider_id = data.get('lider_id')
+    for emp_id in data.get('empleados', []):
+        RutaEmpleado.objects.create(
+            ruta=ruta,
+            empleado_id=emp_id,
+            es_lider=(str(emp_id) == str(lider_id))
+        )
+
+    return Response({'ok': True})
+
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def api_eliminar_parada_admin(request, parada_id):
+    if not request.user.is_staff:
+        return Response({'error': 'No autorizado.'}, status=403)
+
+    parada = get_object_or_404(RutaRenta, id=parada_id)
+    if parada.estado != 'pendiente':
+        return Response({'error': 'Solo se pueden eliminar paradas pendientes.'}, status=400)
+
+    parada.delete()
+    return Response({'ok': True})
+
+
 # ── Nueva Renta (admin PWA) ────────────────────────────────────────────────────
 
 @api_view(['POST'])

@@ -21,14 +21,31 @@ interface RentaDisponible {
   estado_entrega: string
 }
 
+interface Empleado {
+  id: number
+  nombre: string
+  tipo_empleado: string
+}
+
+interface RutaEmpleado {
+  nombre: string
+  es_lider: boolean
+}
+
 interface Ruta {
   id: number
   nombre: string
   tipo: string
   estado: string
   fecha: string
-  empleados: { nombre: string; es_lider: boolean }[]
+  empleados: RutaEmpleado[]
   paradas: Parada[]
+}
+
+const ESTADO_COLOR: Record<string, string> = {
+  pendiente: 'bg-gray-100 text-gray-600',
+  entregado: 'bg-green-100 text-green-700',
+  recogido: 'bg-blue-100 text-blue-700',
 }
 
 export default function RutaDetalle() {
@@ -42,6 +59,7 @@ export default function RutaDetalle() {
   const [loading, setLoading] = useState(true)
   const [agregando, setAgregando] = useState(false)
   const [mostrarPedidos, setMostrarPedidos] = useState(false)
+  const [mostrarEditar, setMostrarEditar] = useState(false)
 
   useEffect(() => {
     cargar()
@@ -77,10 +95,14 @@ export default function RutaDetalle() {
     }
   }
 
-  const ESTADO_COLOR: Record<string, string> = {
-    pendiente: 'bg-gray-100 text-gray-600',
-    entregado: 'bg-green-100 text-green-700',
-    recogido: 'bg-blue-100 text-blue-700',
+  const eliminarParada = async (paradaId: number) => {
+    if (!confirm('¿Eliminar esta parada?')) return
+    try {
+      await api.delete(`/rutas-admin/parada/${paradaId}/eliminar/`)
+      await cargar()
+    } catch {
+      alert('No se pudo eliminar la parada')
+    }
   }
 
   if (loading) return (
@@ -104,6 +126,12 @@ export default function RutaDetalle() {
           <h1 className="text-lg font-bold">{ruta.nombre}</h1>
           <p className="text-green-300 text-xs">{ruta.tipo === 'entrega' ? '📦 Entrega' : '🔄 Recogida'} • {ruta.fecha}</p>
         </div>
+        <button
+          onClick={() => setMostrarEditar(true)}
+          className="text-xs bg-green-700 px-3 py-1.5 rounded-xl font-medium mr-1"
+        >
+          Editar
+        </button>
         <span className={`text-xs px-2 py-1 rounded-full font-medium ${
           ruta.estado === 'pendiente' ? 'bg-gray-200 text-gray-700' :
           ruta.estado === 'en_camino' ? 'bg-blue-200 text-blue-800' :
@@ -161,9 +189,19 @@ export default function RutaDetalle() {
                       <p className="text-xs text-gray-400">📍 {p.direccion}</p>
                     </div>
                   </div>
-                  <span className={`text-xs px-2 py-0.5 rounded-full ${ESTADO_COLOR[p.estado] || 'bg-gray-100 text-gray-600'}`}>
-                    {p.estado}
-                  </span>
+                  <div className="flex flex-col items-end gap-1">
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${ESTADO_COLOR[p.estado] || 'bg-gray-100 text-gray-600'}`}>
+                      {p.estado}
+                    </span>
+                    {p.estado === 'pendiente' && (
+                      <button
+                        onClick={() => eliminarParada(p.id)}
+                        className="text-xs text-red-400 hover:text-red-600"
+                      >
+                        Eliminar
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             ))
@@ -205,6 +243,181 @@ export default function RutaDetalle() {
           </div>
         </div>
       )}
+
+      {/* Modal editar ruta */}
+      {mostrarEditar && ruta && (
+        <EditarRutaModal
+          ruta={ruta}
+          onClose={() => setMostrarEditar(false)}
+          onGuardada={() => { setMostrarEditar(false); cargar() }}
+        />
+      )}
+    </div>
+  )
+}
+
+
+// ── Modal editar ruta ──────────────────────────────────────────────────────────
+
+function EditarRutaModal({ ruta, onClose, onGuardada }: {
+  ruta: Ruta
+  onClose: () => void
+  onGuardada: () => void
+}) {
+  const [nombre, setNombre] = useState(ruta.nombre)
+  const [tipo, setTipo] = useState(ruta.tipo)
+  const [fecha, setFecha] = useState(ruta.fecha)
+  const [notas, setNotas] = useState('')
+  const [empleados, setEmpleados] = useState<Empleado[]>([])
+  const [seleccionados, setSeleccionados] = useState<number[]>([])
+  const [lider, setLider] = useState<number | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    api.get('/empleados/?tipo_empleado=REPARTIDOR').then(res => {
+      const lista: Empleado[] = res.data.results || res.data
+      setEmpleados(lista)
+
+      // Pre-seleccionar empleados actuales buscando por nombre
+      const nombresActuales = ruta.empleados.map(e => e.nombre)
+      const liderActual = ruta.empleados.find(e => e.es_lider)
+      const idsActuales = lista.filter(e => nombresActuales.includes(e.nombre)).map(e => e.id)
+      setSeleccionados(idsActuales)
+
+      if (liderActual) {
+        const empLider = lista.find(e => e.nombre === liderActual.nombre)
+        if (empLider) setLider(empLider.id)
+      }
+    })
+  }, [])
+
+  const toggleEmpleado = (id: number) => {
+    setSeleccionados(prev =>
+      prev.includes(id) ? prev.filter(e => e !== id) : [...prev, id]
+    )
+  }
+
+  const guardar = async () => {
+    if (!nombre || !fecha) { setError('Nombre y fecha son requeridos.'); return }
+    setLoading(true)
+    setError('')
+    try {
+      await api.patch(`/rutas-admin/${ruta.id}/editar/`, {
+        nombre,
+        tipo,
+        fecha,
+        notas,
+        empleados: seleccionados,
+        lider_id: lider,
+      })
+      onGuardada()
+    } catch {
+      setError('Error al guardar los cambios.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-end">
+      <div className="bg-white w-full rounded-t-3xl max-h-[90vh] overflow-y-auto px-6 py-6">
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-lg font-bold">✏️ Editar ruta</h3>
+          <button onClick={onClose} className="text-gray-400 text-2xl">×</button>
+        </div>
+
+        <div className="flex flex-col gap-3 mb-4">
+          <div>
+            <label className="text-sm text-gray-500 mb-1 block">Nombre</label>
+            <input
+              type="text"
+              value={nombre}
+              onChange={e => setNombre(e.target.value)}
+              className="w-full border rounded-xl px-3 py-2 text-sm"
+            />
+          </div>
+
+          <div className="flex gap-2">
+            <button
+              onClick={() => setTipo('entrega')}
+              className={`flex-1 text-sm py-2 rounded-xl border font-medium ${tipo === 'entrega' ? 'bg-green-700 text-white' : 'text-gray-600'}`}
+            >
+              📦 Entrega
+            </button>
+            <button
+              onClick={() => setTipo('recogida')}
+              className={`flex-1 text-sm py-2 rounded-xl border font-medium ${tipo === 'recogida' ? 'bg-blue-500 text-white' : 'text-gray-600'}`}
+            >
+              🔄 Recogida
+            </button>
+          </div>
+
+          <div>
+            <label className="text-sm text-gray-500 mb-1 block">Fecha</label>
+            <input
+              type="date"
+              value={fecha}
+              onChange={e => setFecha(e.target.value)}
+              className="w-full border rounded-xl px-3 py-2 text-sm"
+            />
+          </div>
+
+          <div>
+            <label className="text-sm text-gray-500 mb-1 block">Repartidores</label>
+            <div className="border rounded-xl p-3 max-h-40 overflow-y-auto flex flex-col gap-2">
+              {empleados.map(emp => (
+                <label key={emp.id} className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={seleccionados.includes(emp.id)}
+                    onChange={() => toggleEmpleado(emp.id)}
+                  />
+                  <span className="text-sm">{emp.nombre}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {seleccionados.length > 0 && (
+            <div>
+              <label className="text-sm text-gray-500 mb-1 block">Líder</label>
+              <select
+                value={lider || ''}
+                onChange={e => setLider(Number(e.target.value))}
+                className="w-full border rounded-xl px-3 py-2 text-sm"
+              >
+                <option value="">Sin líder</option>
+                {seleccionados.map(id => {
+                  const emp = empleados.find(e => e.id === id)
+                  return emp ? <option key={id} value={id}>{emp.nombre}</option> : null
+                })}
+              </select>
+            </div>
+          )}
+
+          <div>
+            <label className="text-sm text-gray-500 mb-1 block">Notas (opcional)</label>
+            <textarea
+              value={notas}
+              onChange={e => setNotas(e.target.value)}
+              className="w-full border rounded-xl px-3 py-2 text-sm"
+              rows={2}
+              placeholder="Instrucciones especiales..."
+            />
+          </div>
+        </div>
+
+        {error && <p className="text-red-500 text-sm mb-3">{error}</p>}
+
+        <button
+          onClick={guardar}
+          disabled={loading}
+          className="w-full bg-green-700 text-white py-3 rounded-2xl font-semibold text-sm disabled:opacity-50"
+        >
+          {loading ? 'Guardando...' : 'Guardar cambios'}
+        </button>
+      </div>
     </div>
   )
 }
