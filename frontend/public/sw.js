@@ -1,4 +1,4 @@
-const CACHE_NAME = 'trotamundos-v3'
+const CACHE_NAME = 'trotamundos-v4'
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -79,3 +79,24 @@ self.addEventListener('push', function(event) {
       clients.openWindow(event.notification.data.url)
     )
   })
+
+// Cuando el servicio push invalida la suscripción (expira o se revoca),
+// re-suscribirse y avisar a las ventanas abiertas para que actualicen el servidor
+self.addEventListener('pushsubscriptionchange', (event) => {
+    event.waitUntil((async () => {
+        try {
+            const subscription = await self.registration.pushManager.subscribe(
+                event.oldSubscription.options
+            )
+            const clientList = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+            clientList.forEach(client => client.postMessage({
+                type: 'PUSH_RESUBSCRIBED',
+                subscription: subscription.toJSON(),
+            }))
+        } catch {
+            // No se pudo re-suscribir (permiso revocado, etc.)
+            const clientList = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+            clientList.forEach(client => client.postMessage({ type: 'PUSH_NEEDS_RESUBSCRIBE' }))
+        }
+    })())
+})

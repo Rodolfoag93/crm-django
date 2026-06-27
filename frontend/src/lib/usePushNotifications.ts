@@ -18,6 +18,16 @@ async function getVapidPublicKey(): Promise<string> {
   return data.vapid_public_key
 }
 
+async function registrarEnServidor(subJson: PushSubscriptionJSON) {
+  await api.post('/push/suscribir/', {
+    endpoint: subJson.endpoint,
+    keys: {
+      p256dh: subJson.keys?.p256dh,
+      auth: subJson.keys?.auth,
+    },
+  })
+}
+
 async function suscribir() {
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) return
   if (Notification.permission === 'denied') return
@@ -33,23 +43,20 @@ async function suscribir() {
     }
 
     const vapidKey = await getVapidPublicKey()
-
     const existing = await registration.pushManager.getSubscription()
-    if (existing) return
+
+    if (existing) {
+      // Siempre re-registrar con el servidor: si el servidor borró la suscripción
+      // (por un 410 anterior), esto la restaura sin crear una nueva en el navegador.
+      await registrarEnServidor(existing.toJSON())
+      return
+    }
 
     const subscription = await registration.pushManager.subscribe({
       userVisibleOnly: true,
       applicationServerKey: urlBase64ToUint8Array(vapidKey),
     })
-
-    const subJson = subscription.toJSON()
-    await api.post('/push/suscribir/', {
-      endpoint: subJson.endpoint,
-      keys: {
-        p256dh: subJson.keys?.p256dh,
-        auth: subJson.keys?.auth,
-      },
-    })
+    await registrarEnServidor(subscription.toJSON())
   } catch (err: any) {
     console.error('Error push:', err?.response?.data || err?.message)
   }
@@ -58,6 +65,19 @@ async function suscribir() {
 export function usePushNotifications(isAuthenticated: boolean) {
   useEffect(() => {
     if (!isAuthenticated) return
+
     suscribir().catch(console.error)
+
+    // El SW avisa cuando la suscripción cambia o expira
+    const handleSwMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'PUSH_RESUBSCRIBED') {
+        registrarEnServidor(event.data.subscription).catch(console.error)
+      } else if (event.data?.type === 'PUSH_NEEDS_RESUBSCRIBE') {
+        suscribir().catch(console.error)
+      }
+    }
+
+    navigator.serviceWorker?.addEventListener('message', handleSwMessage)
+    return () => navigator.serviceWorker?.removeEventListener('message', handleSwMessage)
   }, [isAuthenticated])
 }
