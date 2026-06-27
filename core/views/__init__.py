@@ -48,6 +48,8 @@ from core.views.rutas import (
     crear_ruta,
     detalle_ruta,
     agregar_parada,
+    editar_ruta,
+    eliminar_parada,
     cambiar_estado_ruta,
     lista_recogidas,
     api_mis_rutas,
