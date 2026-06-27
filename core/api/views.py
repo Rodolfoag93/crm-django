@@ -87,9 +87,19 @@ class NominaViewSet(viewsets.ModelViewSet):
     serializer_class = NominaSerializer
     permission_classes = [IsAuthenticated]
 
+    def _sync(self, nomina):
+        from core.utils import sincronizar_gasto_nomina
+        nomina.total = nomina.calcular_total()
+        nomina.save()
+        sincronizar_gasto_nomina(nomina)
+
     def perform_create(self, serializer):
         nomina = serializer.save()
-        nomina.save()
+        self._sync(nomina)
+
+    def perform_update(self, serializer):
+        nomina = serializer.save()
+        self._sync(nomina)
 
     def get_queryset(self):
         user = self.request.user

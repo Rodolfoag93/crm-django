@@ -1,8 +1,7 @@
 from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
-from core.models import RentaProducto, Renta, PedidoFinanzas, Nomina, Empleado, Gasto
+from core.models import RentaProducto, Renta, PedidoFinanzas
 from core.services.ocupacion import recalcular_ocupacion_producto_dia
-from core.utils import calcular_total
 
 @receiver(post_save, sender=RentaProducto)
 @receiver(post_delete, sender=RentaProducto)
@@ -28,15 +27,3 @@ def crear_o_actualizar_pedido_finanzas(sender, instance, **kwargs):
     pedido.total = total
     pedido.save()
 
-@receiver(post_save, sender=Nomina)
-def crear_gasto_nomina(sender, instance, created, **kwargs):
-    if not created:
-        return
-
-    Gasto.objects.create(
-        tipo='NOMINA',
-        descripcion=f"Nómina {instance.empleado}",
-        monto=instance.total,
-        fecha=instance.fecha_fin,
-        referencia=f"Nomina ID {instance.id}"
-    )
