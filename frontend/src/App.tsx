@@ -30,6 +30,7 @@ import CalificarCoordinador from './pages/animador/CalificarCoordinador'
 import RankingCoordinadores from './pages/RankingCoordinadores'
 import ListaEventosAnimador from './pages/animador/ListaEventosAnimador'
 import CalificarAnimador from './pages/coordinador/CalificarAnimador'
+import OfflineBanner from './components/OfflineBanner'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
@@ -39,6 +40,7 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
 export default function App() {
   return (
     <BrowserRouter>
+      <OfflineBanner />
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/registro" element={<Registro />} />

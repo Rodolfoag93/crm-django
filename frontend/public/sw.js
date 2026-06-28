@@ -1,4 +1,5 @@
-const CACHE_NAME = 'trotamundos-v4'
+const CACHE_NAME = 'trotamundos-v5'
+const API_CACHE = 'trotamundos-api-v1'
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -19,40 +20,54 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
+      Promise.all(
+        keys
+          .filter((k) => k !== CACHE_NAME && k !== API_CACHE)
+          .map((k) => caches.delete(k))
+      )
     )
   )
   self.clients.claim()
 })
 
-// Estrategia: Network first, fallback a cache
 self.addEventListener('fetch', (event) => {
-  // No cachear llamadas a la API
-  if (event.request.url.includes('/v1/')) {
-    return
-  }
-
   // Solo manejar GET
-  if (event.request.method !== 'GET') {
+  if (event.request.method !== 'GET') return
+
+  const url = event.request.url
+
+  // Llamadas a la API: network first, guardar en cache, fallback a cache si offline
+  // No cachear endpoints de autenticación
+  if (url.includes('/v1/') && !url.includes('/v1/auth/')) {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => {
+          if (response && response.status === 200) {
+            const clone = response.clone()
+            caches.open(API_CACHE).then((cache) => cache.put(event.request, clone))
+          }
+          return response
+        })
+        .catch(() => caches.match(event.request))
+    )
     return
   }
 
+  // Assets estáticos: network first, fallback a cache, último recurso index.html
   event.respondWith(
     fetch(event.request)
       .then((response) => {
-        // Solo cachear respuestas válidas
         if (response && response.status === 200) {
           const clone = response.clone()
           caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone))
         }
         return response
       })
-      .catch(() => {
-        return caches.match(event.request).then((cached) => {
-          // Si no hay cache, devolver index.html para que React Router maneje la ruta
-          return cached || caches.match('/index.html')
-        })
-      })
+      .catch(() =>
+        caches.match(event.request).then((cached) =>
+          cached || caches.match('/index.html')
+        )
+      )
   )
 })
 
@@ -60,9 +75,9 @@ self.addEventListener('fetch', (event) => {
 
 self.addEventListener('push', function(event) {
     if (!event.data) return
-  
+
     const data = event.data.json()
-  
+
     event.waitUntil(
       self.registration.showNotification(data.title, {
         body: data.body,
@@ -72,7 +87,7 @@ self.addEventListener('push', function(event) {
       })
     )
   })
-  
+
   self.addEventListener('notificationclick', function(event) {
     event.notification.close()
     event.waitUntil(
