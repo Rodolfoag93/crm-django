@@ -31,10 +31,23 @@ import RankingCoordinadores from './pages/RankingCoordinadores'
 import ListaEventosAnimador from './pages/animador/ListaEventosAnimador'
 import CalificarAnimador from './pages/coordinador/CalificarAnimador'
 import OfflineBanner from './components/OfflineBanner'
+import CRMLayout from './layouts/CRMLayout'
+import Dashboard from './pages/crm/Dashboard'
+import Rentas from './pages/crm/Rentas'
+import Clientes from './pages/crm/Clientes'
+import Rankings from './pages/crm/Rankings'
+import Placeholder from './pages/crm/Placeholder'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
   return isAuthenticated ? <>{children}</> : <Navigate to="/login" />
+}
+
+function PrivateAdminRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, user } = useAuthStore()
+  if (!isAuthenticated) return <Navigate to="/login" />
+  if (!user?.es_admin) return <Navigate to="/home" />
+  return <>{children}</>
 }
 
 export default function App() {
@@ -134,6 +147,22 @@ export default function App() {
         <Route path='/animador/eventos' element={
           <PrivateRoute><ListaEventosAnimador /></PrivateRoute>
         } />
+        {/* CRM — admin only */}
+        <Route path="/crm" element={<PrivateAdminRoute><CRMLayout /></PrivateAdminRoute>}>
+          <Route index element={<Dashboard />} />
+          <Route path="rentas" element={<Rentas />} />
+          <Route path="clientes" element={<Clientes />} />
+          <Route path="rankings" element={<Rankings />} />
+          <Route path="productos" element={<Placeholder />} />
+          <Route path="rutas" element={<Placeholder />} />
+          <Route path="empleados" element={<Placeholder />} />
+          <Route path="nomina" element={<Placeholder />} />
+          <Route path="animacion" element={<Placeholder />} />
+          <Route path="contabilidad" element={<Placeholder />} />
+          <Route path="gastos" element={<Placeholder />} />
+          <Route path="cuentas" element={<Placeholder />} />
+        </Route>
+
         <Route path="*" element={<Navigate to="/login" />} />
       </Routes>
     </BrowserRouter>
