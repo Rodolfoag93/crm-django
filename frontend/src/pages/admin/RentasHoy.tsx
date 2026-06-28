@@ -24,19 +24,41 @@ const ESTADO_LABELS: Record<string, { label: string; color: string }> = {
   CANCELADO: { label: 'Cancelado', color: 'bg-red-100 text-red-700' },
 }
 
+function toLocalDateString(d: Date): string {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+function formatDateLabel(iso: string): string {
+  const [y, m, d] = iso.split('-').map(Number)
+  const fecha = new Date(y, m - 1, d)
+  const hoy = toLocalDateString(new Date())
+  const mañana = toLocalDateString(new Date(new Date().setDate(new Date().getDate() + 1)))
+  const ayer = toLocalDateString(new Date(new Date().setDate(new Date().getDate() - 1)))
+  if (iso === hoy) return 'Hoy'
+  if (iso === mañana) return 'Mañana'
+  if (iso === ayer) return 'Ayer'
+  return fecha.toLocaleDateString('es-MX', { weekday: 'short', day: 'numeric', month: 'short' })
+}
+
 export default function RentasHoy() {
   const navigate = useNavigate()
+  const hoy = toLocalDateString(new Date())
+  const [fecha, setFecha] = useState(hoy)
   const [rentas, setRentas] = useState<Renta[]>([])
   const [loading, setLoading] = useState(true)
   const [filtro, setFiltro] = useState('')
   const [busqueda, setBusqueda] = useState('')
 
   useEffect(() => {
-    api.get('/rentas-hoy/')
+    setLoading(true)
+    api.get('/rentas-hoy/', { params: { fecha } })
       .then(res => setRentas(res.data))
       .catch(console.error)
       .finally(() => setLoading(false))
-  }, [])
+  }, [fecha])
 
   const filtradas = rentas
     .filter(r => !filtro || r.estado_entrega === filtro)
@@ -48,22 +70,62 @@ export default function RentasHoy() {
   const llamar = (tel: string) => { window.location.href = `tel:${tel}` }
   const mapa = (dir: string) => { window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(dir)}`, '_blank') }
 
-  if (loading) return (
-    <div className="flex items-center justify-center h-screen">
-      <p className="text-gray-500">Cargando rentas...</p>
-    </div>
-  )
+  const cambiarDia = (delta: number) => {
+    const [y, m, d] = fecha.split('-').map(Number)
+    const nueva = new Date(y, m - 1, d + delta)
+    setFecha(toLocalDateString(nueva))
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 pb-24">
       {/* Header */}
       <div className="bg-green-900 text-white px-4 py-5 flex items-center gap-3">
         <button onClick={() => navigate('/home')} className="text-green-300 text-xl">←</button>
-        <h1 className="text-xl font-bold">📦 Rentas de hoy</h1>
-        <span className="ml-auto bg-green-700 px-3 py-1 rounded-full text-sm">{rentas.length}</span>
+        <h1 className="text-xl font-bold">📦 Rentas</h1>
+        {!loading && (
+          <span className="ml-auto bg-green-700 px-3 py-1 rounded-full text-sm">{rentas.length}</span>
+        )}
       </div>
 
       <div className="p-4 max-w-lg mx-auto">
+
+        {/* Navegación de fechas */}
+        <div className="flex items-center gap-2 mb-3">
+          <button
+            onClick={() => cambiarDia(-1)}
+            className="p-2 rounded-xl border bg-white text-gray-600 font-bold text-lg leading-none"
+          >
+            ‹
+          </button>
+          <div className="flex-1 relative">
+            <input
+              type="date"
+              value={fecha}
+              onChange={e => setFecha(e.target.value)}
+              className="w-full border rounded-xl px-4 py-2 text-sm text-center appearance-none bg-white"
+            />
+            <span className="absolute inset-0 flex items-center justify-center text-sm font-medium text-gray-700 pointer-events-none">
+              {formatDateLabel(fecha)}
+              {fecha !== hoy && (
+                <span className="ml-1 text-xs text-gray-400">({fecha})</span>
+              )}
+            </span>
+          </div>
+          <button
+            onClick={() => cambiarDia(1)}
+            className="p-2 rounded-xl border bg-white text-gray-600 font-bold text-lg leading-none"
+          >
+            ›
+          </button>
+          {fecha !== hoy && (
+            <button
+              onClick={() => setFecha(hoy)}
+              className="text-xs bg-green-800 text-white px-3 py-2 rounded-xl whitespace-nowrap"
+            >
+              Hoy
+            </button>
+          )}
+        </div>
 
         {/* Búsqueda */}
         <input
@@ -90,53 +152,57 @@ export default function RentasHoy() {
         </div>
 
         {/* Lista */}
-        <div className="flex flex-col gap-3">
-          {filtradas.length === 0 && (
-            <p className="text-center text-gray-400 py-8">No hay rentas con ese filtro.</p>
-          )}
-          {filtradas.map(r => {
-            const estado = ESTADO_LABELS[r.estado_entrega] || { label: r.estado_entrega, color: 'bg-gray-100 text-gray-600' }
-            return (
-              <div key={r.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
-                <div className="flex justify-between items-start mb-2">
-                  <div>
-                    <p className="font-semibold text-gray-900">{r.cliente}</p>
-                    <p className="text-xs text-gray-400">{r.folio}</p>
+        {loading ? (
+          <p className="text-center text-gray-400 py-8">Cargando rentas...</p>
+        ) : (
+          <div className="flex flex-col gap-3">
+            {filtradas.length === 0 && (
+              <p className="text-center text-gray-400 py-8">No hay rentas con ese filtro.</p>
+            )}
+            {filtradas.map(r => {
+              const estado = ESTADO_LABELS[r.estado_entrega] || { label: r.estado_entrega, color: 'bg-gray-100 text-gray-600' }
+              return (
+                <div key={r.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
+                  <div className="flex justify-between items-start mb-2">
+                    <div>
+                      <p className="font-semibold text-gray-900">{r.cliente}</p>
+                      <p className="text-xs text-gray-400">{r.folio}</p>
+                    </div>
+                    <span className={`text-xs px-2 py-1 rounded-full font-medium ${estado.color}`}>
+                      {estado.label}
+                    </span>
                   </div>
-                  <span className={`text-xs px-2 py-1 rounded-full font-medium ${estado.color}`}>
-                    {estado.label}
-                  </span>
-                </div>
 
-                <div className="text-xs text-gray-500 space-y-1 mb-3">
-                  {r.hora_inicio && <p>🕐 {r.hora_inicio} – {r.hora_fin}</p>}
-                  <p>📍 {r.direccion}</p>
-                  <div className="flex flex-wrap gap-1 mt-1">
-                    {r.productos.map((p, i) => (
-                      <span key={i} className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full">{p}</span>
-                    ))}
+                  <div className="text-xs text-gray-500 space-y-1 mb-3">
+                    {r.hora_inicio && <p>🕐 {r.hora_inicio} – {r.hora_fin}</p>}
+                    <p>📍 {r.direccion}</p>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {r.productos.map((p, i) => (
+                        <span key={i} className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded-full">{p}</span>
+                      ))}
+                    </div>
                   </div>
-                </div>
 
-                <div className="flex items-center justify-between">
-                  <span className={`text-xs font-medium ${r.pagado ? 'text-green-600' : 'text-red-500'}`}>
-                    {r.pagado ? '✅ Pagado' : '⚠️ Sin pagar'} — ${parseFloat(r.total).toLocaleString('es-MX')}
-                  </span>
-                  <div className="flex gap-2">
-                    <button onClick={() => llamar(r.telefono)}
-                      className="text-xs bg-green-50 text-green-600 px-3 py-1.5 rounded-xl border border-green-200">
-                      📞
-                    </button>
-                    <button onClick={() => mapa(r.direccion)}
-                      className="text-xs bg-blue-50 text-blue-600 px-3 py-1.5 rounded-xl border border-blue-200">
-                      🗺
-                    </button>
+                  <div className="flex items-center justify-between">
+                    <span className={`text-xs font-medium ${r.pagado ? 'text-green-600' : 'text-red-500'}`}>
+                      {r.pagado ? '✅ Pagado' : '⚠️ Sin pagar'} — ${parseFloat(r.total).toLocaleString('es-MX')}
+                    </span>
+                    <div className="flex gap-2">
+                      <button onClick={() => llamar(r.telefono)}
+                        className="text-xs bg-green-50 text-green-600 px-3 py-1.5 rounded-xl border border-green-200">
+                        📞
+                      </button>
+                      <button onClick={() => mapa(r.direccion)}
+                        className="text-xs bg-blue-50 text-blue-600 px-3 py-1.5 rounded-xl border border-blue-200">
+                        🗺
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            )
-          })}
-        </div>
+              )
+            })}
+          </div>
+        )}
       </div>
     </div>
   )

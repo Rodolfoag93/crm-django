@@ -5,6 +5,7 @@ from rest_framework.permissions import IsAuthenticated, AllowAny, BasePermission
 from django_filters.rest_framework import DjangoFilterBackend
 from django.utils import timezone
 from django.shortcuts import get_object_or_404
+from django.db.models import Q
 from core.push_notifications import VAPID_PUBLIC_KEY
 from datetime import timedelta, date
 from decimal import Decimal
@@ -633,12 +634,25 @@ def api_rentas_hoy(request):
     if not request.user.is_staff:
         return Response({'error': 'No autorizado.'}, status=403)
 
-    hoy = date.today()
+    fecha_param = request.query_params.get('fecha')
+    try:
+        fecha = date.fromisoformat(fecha_param) if fecha_param else date.today()
+    except ValueError:
+        return Response({'error': 'Fecha inválida. Usa formato YYYY-MM-DD.'}, status=400)
 
-    rentas = Renta.objects.filter(
-        fecha_renta=hoy,
+    busqueda = request.query_params.get('busqueda', '').strip()
+
+    qs = Renta.objects.filter(
+        fecha_renta=fecha,
         status='ACTIVO'
-    ).select_related('cliente').prefetch_related('rentaproductos__producto').order_by('hora_inicio')
+    ).select_related('cliente').prefetch_related('rentaproductos__producto')
+
+    if busqueda:
+        qs = qs.filter(
+            Q(cliente__nombre__icontains=busqueda) | Q(folio__icontains=busqueda)
+        )
+
+    rentas = qs.order_by('hora_inicio')
 
     data = []
     for r in rentas:
