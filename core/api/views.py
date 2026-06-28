@@ -196,14 +196,27 @@ class AsistenciaViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
-        # Admin ve todas las asistencias, empleado solo las suyas
+        params = self.request.query_params
+
         if user.is_staff or user.is_superuser:
-            return Asistencia.objects.select_related('empleado').all()
-        try:
-            empleado = user.empleado
-            return Asistencia.objects.filter(empleado=empleado)
-        except Exception:
-            return Asistencia.objects.none()
+            qs = Asistencia.objects.select_related('empleado').all()
+            empleado_id = params.get('empleado')
+            if empleado_id:
+                qs = qs.filter(empleado_id=empleado_id)
+        else:
+            try:
+                qs = Asistencia.objects.filter(empleado=user.empleado)
+            except Exception:
+                return Asistencia.objects.none()
+
+        fecha_inicio = params.get('fecha_inicio')
+        fecha_fin = params.get('fecha_fin')
+        if fecha_inicio:
+            qs = qs.filter(fecha__gte=fecha_inicio)
+        if fecha_fin:
+            qs = qs.filter(fecha__lte=fecha_fin)
+
+        return qs
     @action(detail=False, methods=['post'])
     def checkin(self, request):
         ubicacion = request.data.get('ubicacion', '')
