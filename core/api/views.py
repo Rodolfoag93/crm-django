@@ -10,11 +10,12 @@ from core.push_notifications import VAPID_PUBLIC_KEY
 from datetime import timedelta, date
 from decimal import Decimal
 
+from django.db.models import Count, Sum
 from core.models import (
     Cliente, Producto, Renta, RentaProducto, Empleado,
     Nomina, Gasto, MovimientoContable, Asistencia, SolicitudRegistro, HorasExtra, PushSuscripcion,
     AsignacionCoordinador, ListaMaterialEvento, MaterialEvento, MaterialAnimacion,
-    EvidenciaMaterial, TipoPagoExtra, PagoExtraNomina,
+    EvidenciaMaterial, TipoPagoExtra, PagoExtraNomina, AnimadorEvento,
     Ruta, RutaEmpleado, RutaRenta,
     BitacoraMantenimiento, TurnoAsistencia,
     Cuenta, PedidoFinanzas,
@@ -70,24 +71,38 @@ class RentaViewSet(viewsets.ModelViewSet):
     search_fields = ['folio', 'cliente__nombre', 'cliente__telefono']
     ordering_fields = ['fecha_renta', 'precio_total']
 
+    def get_queryset(self):
+        qs = Renta.objects.select_related('cliente').prefetch_related(
+            'rentaproductos__producto'
+        ).filter(status='ACTIVO')
+        params = self.request.query_params
+        fecha_inicio = params.get('fecha_inicio')
+        fecha_fin = params.get('fecha_fin')
+        estado = params.get('estado_entrega')
+        pagado = params.get('pagado')
+        if fecha_inicio:
+            qs = qs.filter(fecha_renta__gte=fecha_inicio)
+        if fecha_fin:
+            qs = qs.filter(fecha_renta__lte=fecha_fin)
+        if estado:
+            qs = qs.filter(estado_entrega=estado)
+        if pagado is not None and pagado != '':
+            qs = qs.filter(pagado=pagado.lower() == 'true')
+        return qs.order_by('-fecha_renta', 'hora_inicio')
+
     @action(detail=False, methods=['get'])
     def semana_actual(self, request):
         hoy = timezone.localdate()
         lunes = hoy - timedelta(days=hoy.weekday())
         domingo = lunes + timedelta(days=6)
-        rentas = self.queryset.filter(
-            fecha_renta__range=[lunes, domingo],
-            status='ACTIVO'
-        )
+        rentas = self.get_queryset().filter(fecha_renta__range=[lunes, domingo])
         serializer = self.get_serializer(rentas, many=True)
         return Response(serializer.data)
 
     @action(detail=False, methods=['get'])
     def sin_pago(self, request):
-        rentas = self.queryset.filter(
-            status='ACTIVO',
-            pagado=False,
-            fecha_renta__lt=timezone.localdate()
+        rentas = self.get_queryset().filter(
+            pagado=False, fecha_renta__lt=timezone.localdate()
         )
         serializer = self.get_serializer(rentas, many=True)
         return Response(serializer.data)
@@ -1966,3 +1981,74 @@ def api_registro_solicitud(request):
             status=status.HTTP_201_CREATED
         )
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+# ── Rankings por eventos extra (CRM) ──────────────────────────────────────────
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def api_rankings_eventos(request):
+    if not request.user.is_staff:
+        return Response({'error': 'No autorizado.'}, status=403)
+
+    rol = request.query_params.get('rol', 'coordinadores')
+    año = request.query_params.get('año')
+    mes = request.query_params.get('mes')
+
+    if rol == 'coordinadores':
+        filtros = {}
+        if año:
+            filtros['renta__fecha_renta__year'] = int(año)
+        if mes:
+            filtros['renta__fecha_renta__month'] = int(mes)
+
+        qs = (AsignacionCoordinador.objects
+              .filter(**filtros, coordinador__isnull=False)
+              .values('coordinador__id', 'coordinador__first_name', 'coordinador__last_name')
+              .annotate(total_eventos=Count('id'))
+              .order_by('-total_eventos'))
+
+        data = [{'id': r['coordinador__id'],
+                 'nombre': f"{r['coordinador__first_name']} {r['coordinador__last_name']}".strip(),
+                 'total_eventos': r['total_eventos'],
+                 'total_monto': None} for r in qs]
+
+    elif rol == 'animadores':
+        filtros = {'estado': 'ACEPTADO'}
+        if año:
+            filtros['asignacion__renta__fecha_renta__year'] = int(año)
+        if mes:
+            filtros['asignacion__renta__fecha_renta__month'] = int(mes)
+
+        qs = (AnimadorEvento.objects
+              .filter(**filtros)
+              .values('animador__id', 'animador__nombre')
+              .annotate(total_eventos=Count('id'))
+              .order_by('-total_eventos'))
+
+        data = [{'id': r['animador__id'],
+                 'nombre': r['animador__nombre'],
+                 'total_eventos': r['total_eventos'],
+                 'total_monto': None} for r in qs]
+
+    elif rol == 'repartidores':
+        filtros = {'tipo__descuenta_horas': True}
+        if año:
+            filtros['nomina__fecha_inicio__year'] = int(año)
+        if mes:
+            filtros['nomina__fecha_inicio__month'] = int(mes)
+
+        qs = (PagoExtraNomina.objects
+              .filter(**filtros)
+              .values('nomina__empleado__id', 'nomina__empleado__nombre')
+              .annotate(total_eventos=Count('id'), total_monto=Sum('monto'))
+              .order_by('-total_eventos'))
+
+        data = [{'id': r['nomina__empleado__id'],
+                 'nombre': r['nomina__empleado__nombre'],
+                 'total_eventos': r['total_eventos'],
+                 'total_monto': str(r['total_monto'] or 0)} for r in qs]
+
+    else:
+        return Response({'error': 'Rol inválido. Usa: coordinadores, animadores, repartidores'}, status=400)
+
+    return Response(data)
