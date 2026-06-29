@@ -1117,7 +1117,7 @@ def api_buscar_clientes(request):
 
     q = request.GET.get('q', '')
     clientes = Cliente.objects.filter(
-        nombre__icontains=q
+        Q(nombre__icontains=q) | Q(telefono__icontains=q)
     ).values('id', 'nombre', 'telefono', 'calle_y_numero', 'colonia', 'ciudad_o_municipio')[:10]
     return Response(list(clientes))
 

@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import api from '../../lib/api'
 
 interface Renta {
@@ -35,6 +36,7 @@ function formatFecha(iso: string) {
 const PAGE_SIZE = 25
 
 export default function Rentas() {
+  const navigate = useNavigate()
   const hoy = toLocalIso(new Date())
   const [fechaInicio, setFechaInicio] = useState(hoy)
   const [fechaFin, setFechaFin] = useState(hoy)
@@ -168,6 +170,12 @@ export default function Rentas() {
           </p>
         </div>
         <div className="flex gap-2">
+          <button onClick={() => navigate('/crm/rentas/nueva')}
+            className="flex items-center gap-1.5 text-sm font-semibold px-4 py-1.5 rounded-lg transition-colors"
+            style={{ background: '#16a34a', color: 'white' }}>
+            <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Nueva renta
+          </button>
           {[['hoy','Hoy'],['semana','Esta semana'],['mes','Este mes']].map(([p,l]) => (
             <button key={p} onClick={() => setPreset(p)}
               className="text-xs px-3 py-1.5 rounded-lg border transition-colors"

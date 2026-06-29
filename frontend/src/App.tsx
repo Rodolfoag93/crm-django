@@ -37,6 +37,7 @@ import Rentas from './pages/crm/Rentas'
 import Clientes from './pages/crm/Clientes'
 import Rankings from './pages/crm/Rankings'
 import Placeholder from './pages/crm/Placeholder'
+import NuevaRentaCRM from './pages/crm/NuevaRenta'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
@@ -151,6 +152,7 @@ export default function App() {
         <Route path="/crm" element={<PrivateAdminRoute><CRMLayout /></PrivateAdminRoute>}>
           <Route index element={<Dashboard />} />
           <Route path="rentas" element={<Rentas />} />
+          <Route path="rentas/nueva" element={<NuevaRentaCRM />} />
           <Route path="clientes" element={<Clientes />} />
           <Route path="rankings" element={<Rankings />} />
           <Route path="productos" element={<Placeholder />} />
