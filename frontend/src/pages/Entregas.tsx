@@ -56,12 +56,34 @@ export default function Entregas() {
   const [depositoModal, setDepositoModal] = useState<{ monto: number; folio: string; rentaId: number } | null>(null)
 
   const geoRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const wakeLockRef = useRef<WakeLockSentinel | null>(null)
 
   useEffect(() => {
     api.get('/rutas/mis-rutas/')
       .then((res: any) => setRutas(res.data))
       .catch(() => setError('No se pudo cargar tu ruta del día.'))
       .finally(() => setLoading(false))
+  }, [])
+
+  // Wake Lock: keep screen on while on this page so GPS interval keeps running
+  useEffect(() => {
+    const adquirir = async () => {
+      try {
+        if ('wakeLock' in navigator) {
+          wakeLockRef.current = await (navigator as any).wakeLock.request('screen')
+          // Re-acquire if the system releases it (e.g. tab goes to background and comes back)
+          wakeLockRef.current?.addEventListener('release', () => { adquirir() })
+        }
+      } catch { /* not critical */ }
+    }
+    adquirir()
+    // Re-acquire on visibility change (iOS releases on tab switch)
+    const onVisible = () => { if (document.visibilityState === 'visible') adquirir() }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible)
+      wakeLockRef.current?.release().catch(() => {})
+    }
   }, [])
 
   // GPS tracking: send position every 30s while page is open
