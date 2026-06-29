@@ -27,7 +27,8 @@ export default function Login() {
     setError('')
     try {
       await login(data.username, data.password)
-      navigate('/home')
+      const { user } = useAuthStore.getState()
+      navigate(user?.es_admin && window.innerWidth >= 1024 ? '/crm' : '/home')
     } catch {
       setError('Usuario o contraseña incorrectos')
     } finally {

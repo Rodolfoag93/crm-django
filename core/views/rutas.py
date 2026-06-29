@@ -202,7 +202,9 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
 from django.utils import timezone
+from django.contrib.auth import get_user_model
 from core.models import EntregaDetalle, RentaProducto
+from core.push_notifications import enviar_notificacion_todos
 
 
 @api_view(['GET'])
@@ -239,6 +241,8 @@ def api_mis_rutas(request):
                     'nombre': rp.producto.nombre,
                     'tipo': rp.producto.tipo,
                     'cantidad': rp.cantidad,
+                    'precio_unitario': float(rp.precio_unitario) if rp.precio_unitario else 0,
+                    'subtotal': float(rp.subtotal) if rp.subtotal else 0,
                     'es_brincolin': rp.producto.tipo == 'BR',
                 })
 
@@ -262,6 +266,9 @@ def api_mis_rutas(request):
                 'hora_inicio': str(renta.hora_inicio) if renta.hora_inicio else None,
                 'hora_fin': str(renta.hora_fin) if renta.hora_fin else None,
                 'folio': renta.folio,
+                'pagado': renta.pagado,
+                'precio_total': float(renta.precio_total) if renta.precio_total else 0,
+                'anticipo': float(renta.anticipo) if renta.anticipo else 0,
                 'productos': productos,
                 'recogida_programada': recogida,
                 'latitud': float(parada.latitud) if parada.latitud else None,
@@ -332,17 +339,56 @@ def api_confirmar_entrega(request, parada_id):
             }
         )
 
+    recoger_inmediato = data.get('recoger_inmediato', False)
+
     # Guardar geolocalización
     parada.latitud = data.get('latitud')
     parada.longitud = data.get('longitud')
-    parada.estado = 'entregado'
     parada.hora_confirmacion = timezone.now()
     parada.notas_campo = data.get('notas_campo', '')
-    parada.save()
 
-    # Actualizar estado_entrega en la Renta
+    User = get_user_model()
+    admins = User.objects.filter(is_staff=True)
+    repartidor = getattr(request.user, 'empleado', None)
+    nombre_rep = repartidor.nombre if repartidor else request.user.username
+    folio = parada.renta.folio
+    cliente = parada.renta.cliente.nombre
+
+    if recoger_inmediato:
+        parada.estado = 'recogido'
+        parada.save()
+        for rp in parada.renta.rentaproductos.select_related('producto').all():
+            rp.producto.liberar_stock(rp.cantidad)
+        parada.renta.estado_entrega = 'RECOGIDO'
+        parada.renta.save()
+        deposito = None
+        dep = parada.renta.rentaproductos.select_related('producto').filter(
+            producto__nombre__icontains='deposito'
+        ).first()
+        if dep:
+            deposito = {
+                'monto': float(dep.subtotal or 0),
+                'folio': parada.renta.folio,
+                'renta_id': parada.renta.id,
+            }
+        enviar_notificacion_todos(
+            admins,
+            f'✅ Entregado y recogido — {folio}',
+            f'{nombre_rep} entregó y recogió el pedido de {cliente}.',
+            url='/crm/rentas',
+        )
+        return Response({'ok': True, 'mensaje': 'Entrega y recogida confirmadas.', 'deposito': deposito})
+
+    parada.estado = 'entregado'
+    parada.save()
     parada.renta.estado_entrega = 'ENTREGADO'
     parada.renta.save()
+    enviar_notificacion_todos(
+        admins,
+        f'📦 Pedido entregado — {folio}',
+        f'{nombre_rep} entregó el pedido de {cliente}.',
+        url='/crm/rentas',
+    )
 
     return Response({'ok': True, 'mensaje': 'Entrega confirmada.'})
 
@@ -380,4 +426,28 @@ def api_confirmar_recogida(request, parada_id):
     parada.renta.estado_entrega = 'RECOGIDO'
     parada.renta.save()
 
-    return Response({'ok': True, 'mensaje': 'Recogida confirmada.'})
+    deposito = None
+    dep = parada.renta.rentaproductos.select_related('producto').filter(
+        producto__nombre__icontains='deposito'
+    ).first()
+    if dep:
+        deposito = {
+            'monto': float(dep.subtotal or 0),
+            'folio': parada.renta.folio,
+            'renta_id': parada.renta.id,
+        }
+
+    User = get_user_model()
+    admins = User.objects.filter(is_staff=True)
+    repartidor = getattr(request.user, 'empleado', None)
+    nombre_rep = repartidor.nombre if repartidor else request.user.username
+    folio = parada.renta.folio
+    cliente = parada.renta.cliente.nombre
+    enviar_notificacion_todos(
+        admins,
+        f'🔄 Pedido recogido — {folio}',
+        f'{nombre_rep} recogió el pedido de {cliente}.',
+        url='/crm/rentas',
+    )
+
+    return Response({'ok': True, 'mensaje': 'Recogida confirmada.', 'deposito': deposito})

@@ -37,6 +37,10 @@ import Rentas from './pages/crm/Rentas'
 import Clientes from './pages/crm/Clientes'
 import Rankings from './pages/crm/Rankings'
 import Placeholder from './pages/crm/Placeholder'
+import Productos from './pages/crm/Productos'
+import Rutas from './pages/crm/Rutas'
+import Empleados from './pages/crm/Empleados'
+import NominaCRM from './pages/crm/Nomina'
 import NuevaRentaCRM from './pages/crm/NuevaRenta'
 import EditarRentaCRM from './pages/crm/EditarRenta'
 
@@ -157,10 +161,10 @@ export default function App() {
           <Route path="rentas/:id/editar" element={<EditarRentaCRM />} />
           <Route path="clientes" element={<Clientes />} />
           <Route path="rankings" element={<Rankings />} />
-          <Route path="productos" element={<Placeholder />} />
-          <Route path="rutas" element={<Placeholder />} />
-          <Route path="empleados" element={<Placeholder />} />
-          <Route path="nomina" element={<Placeholder />} />
+          <Route path="productos" element={<Productos />} />
+          <Route path="rutas" element={<Rutas />} />
+          <Route path="empleados" element={<Empleados />} />
+          <Route path="nomina" element={<NominaCRM />} />
           <Route path="animacion" element={<Placeholder />} />
           <Route path="contabilidad" element={<Placeholder />} />
           <Route path="gastos" element={<Placeholder />} />

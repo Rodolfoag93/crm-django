@@ -21,7 +21,7 @@ class SessionExpiradaMiddleware:
             if not es_publica:
                 if request.method == 'POST' and hasattr(request, '_messages'):
                     messages.warning(request, 'Tu sesión expiró. Por favor inicia sesión de nuevo.')
-                return redirect('/')
+                return redirect(f'/?next={request.get_full_path()}')
 
         response = self.get_response(request)
         return response

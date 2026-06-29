@@ -1,5 +1,5 @@
-const CACHE_NAME = 'trotamundos-v5'
-const API_CACHE = 'trotamundos-api-v1'
+const CACHE_NAME = 'trotamundos-v6'
+const API_CACHE = 'trotamundos-api-v2'
 const STATIC_ASSETS = [
   '/',
   '/index.html',

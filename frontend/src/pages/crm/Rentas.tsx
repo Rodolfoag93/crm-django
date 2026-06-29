@@ -25,6 +25,11 @@ const ESTADOS: Record<string, { label: string; bg: string; text: string }> = {
   CANCELADO:  { label: 'Cancelado',  bg: '#fee2e2', text: '#b91c1c' },
 }
 
+interface StatsData {
+  total: number; pendientes: number; ingreso: number; sin_cobrar: number
+  anterior: { total: number; ingreso: number }
+}
+
 function toLocalIso(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
 }
@@ -34,13 +39,39 @@ function formatFecha(iso: string) {
   return new Date(y,m-1,d).toLocaleDateString('es-MX',{day:'numeric',month:'short'})
 }
 
+function formatMonto(n: number) {
+  if (n >= 1000) return `$${(n / 1000).toFixed(n % 1000 === 0 ? 0 : 1)}k`
+  return `$${n.toLocaleString('es-MX')}`
+}
+
+function getWeekRange() {
+  const hoyDate = new Date()
+  const day = hoyDate.getDay()
+  const lunes = new Date(hoyDate)
+  lunes.setDate(hoyDate.getDate() - (day === 0 ? 6 : day - 1))
+  const domingo = new Date(lunes)
+  domingo.setDate(lunes.getDate() + 6)
+  return { inicio: toLocalIso(lunes), fin: toLocalIso(domingo) }
+}
+
+function detectPreset(inicio: string, fin: string): 'semana' | 'mes' | 'otro' {
+  const hoyDate = new Date()
+  const wr = getWeekRange()
+  if (inicio === wr.inicio && fin === wr.fin) return 'semana'
+  const mesInicio = toLocalIso(new Date(hoyDate.getFullYear(), hoyDate.getMonth(), 1))
+  const mesFin = toLocalIso(new Date(hoyDate.getFullYear(), hoyDate.getMonth() + 1, 0))
+  if (inicio === mesInicio && fin === mesFin) return 'mes'
+  return 'otro'
+}
+
 const PAGE_SIZE = 25
 
 export default function Rentas() {
   const navigate = useNavigate()
-  const hoy = toLocalIso(new Date())
-  const [fechaInicio, setFechaInicio] = useState(hoy)
-  const [fechaFin, setFechaFin] = useState(hoy)
+  const wr = getWeekRange()
+  const [fechaInicio, setFechaInicio] = useState(wr.inicio)
+  const [fechaFin, setFechaFin] = useState(wr.fin)
+  const [statsData, setStatsData] = useState<StatsData | null>(null)
   const [busqueda, setBusqueda] = useState('')
   const [estado, setEstado] = useState('')
   const [pagado, setPagado] = useState('')
@@ -64,6 +95,31 @@ export default function Rentas() {
 
   // ── Modal ticket ───────────────────────────────────────────────────────────
   const [ticketRenta, setTicketRenta] = useState<{ id: number; folio: string } | null>(null)
+
+  // ── Cambiar estado entrega ─────────────────────────────────────────────────
+  const [cambiandoEstado, setCambiandoEstado] = useState(false)
+  const [modalDeposito, setModalDeposito] = useState<{ monto: number; folio: string; rentaId: number } | null>(null)
+
+  const cambiarEstado = async (nuevoEstado: string) => {
+    if (!detalle || cambiandoEstado) return
+    setCambiandoEstado(true)
+    try {
+      const res = await api.post(`/rentas/${detalle.id}/cambiar_estado/`, { estado_entrega: nuevoEstado })
+      const actualizado = { ...detalle, estado_entrega: nuevoEstado }
+      setDetalle(actualizado)
+      setData(prev => prev ? {
+        ...prev,
+        results: prev.results.map(r => r.id === detalle.id ? actualizado : r)
+      } : prev)
+      if (res.data.deposito) {
+        setModalDeposito({ ...res.data.deposito, rentaId: detalle.id })
+      }
+    } catch {
+      alert('Error al cambiar el estado.')
+    } finally {
+      setCambiandoEstado(false)
+    }
+  }
 
   // ── Modal cancelar ─────────────────────────────────────────────────────────
   const [modalCancelar, setModalCancelar] = useState(false)
@@ -150,6 +206,13 @@ export default function Rentas() {
 
   useEffect(() => { fetchRentas() }, [fetchRentas])
 
+  useEffect(() => {
+    if (!fechaInicio || !fechaFin) return
+    api.get('/rentas/stats/', { params: { fecha_inicio: fechaInicio, fecha_fin: fechaFin } })
+      .then(r => setStatsData(r.data))
+      .catch(console.error)
+  }, [fechaInicio, fechaFin])
+
   // Debounce búsqueda
   const [searchInput, setSearchInput] = useState('')
   useEffect(() => {
@@ -200,6 +263,82 @@ export default function Rentas() {
           ))}
         </div>
       </div>
+
+      {/* Stats */}
+      {(() => {
+        const preset = detectPreset(fechaInicio, fechaFin)
+        const label = preset === 'semana' ? 'semana' : preset === 'mes' ? 'mes' : 'periodo'
+        const s = statsData
+        const diffTotal = s ? s.total - s.anterior.total : 0
+        const diffIngreso = s ? s.ingreso - s.anterior.ingreso : 0
+        const hasPrev = s ? s.anterior.total > 0 || s.anterior.ingreso > 0 : false
+        return (
+          <div className="grid grid-cols-4 gap-4">
+            {/* Rentas */}
+            <div className="bg-white rounded-xl border p-4" style={{ borderColor: '#ddeadd' }}>
+              <div className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: '#5a7060', letterSpacing: '0.3px' }}>
+                Rentas esta {label}
+              </div>
+              <div className="font-bold leading-none mb-1" style={{ fontSize: 26, letterSpacing: '-1px', color: '#162016' }}>
+                {s?.total ?? '—'}
+              </div>
+              {s && hasPrev && (
+                <div className="text-xs mt-1.5 font-medium" style={{ color: diffTotal >= 0 ? '#16a34a' : '#ef4444' }}>
+                  {diffTotal >= 0 ? '↑' : '↓'} {Math.abs(diffTotal)} vs {label} anterior
+                </div>
+              )}
+              <div className="mt-3 h-1 rounded-full" style={{ background: '#ddeadd' }}>
+                <div className="h-full rounded-full" style={{ width: `${Math.min(((s?.total ?? 0) / 50) * 100, 100)}%`, background: '#16a34a' }} />
+              </div>
+            </div>
+            {/* Pendientes */}
+            <div className="bg-white rounded-xl border p-4" style={{ borderColor: '#ddeadd' }}>
+              <div className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: '#5a7060', letterSpacing: '0.3px' }}>
+                Pendientes
+              </div>
+              <div className="font-bold leading-none mb-1" style={{ fontSize: 26, letterSpacing: '-1px', color: '#162016' }}>
+                {s?.pendientes ?? '—'}
+              </div>
+              <div className="text-xs mt-1.5" style={{ color: '#8fa890' }}>Sin asignar a ruta</div>
+              <div className="mt-3 h-1 rounded-full" style={{ background: '#ddeadd' }}>
+                <div className="h-full rounded-full" style={{ width: `${s && s.total ? Math.min((s.pendientes / s.total) * 100, 100) : 0}%`, background: '#f59e0b' }} />
+              </div>
+            </div>
+            {/* Ingreso */}
+            <div className="bg-white rounded-xl border p-4" style={{ borderColor: '#ddeadd' }}>
+              <div className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: '#5a7060', letterSpacing: '0.3px' }}>
+                Ingreso esta {label}
+              </div>
+              <div className="font-bold leading-none mb-1" style={{ fontSize: s && s.ingreso >= 10000 ? 22 : 26, letterSpacing: '-1px', color: '#162016', fontVariantNumeric: 'tabular-nums' }}>
+                {s ? formatMonto(s.ingreso) : '—'}
+              </div>
+              {s && hasPrev && (
+                <div className="text-xs mt-1.5 font-medium" style={{ color: diffIngreso >= 0 ? '#16a34a' : '#ef4444' }}>
+                  {diffIngreso >= 0 ? '↑' : '↓'} {formatMonto(Math.abs(diffIngreso))} vs {label} anterior
+                </div>
+              )}
+              <div className="mt-3 h-1 rounded-full" style={{ background: '#ddeadd' }}>
+                <div className="h-full rounded-full" style={{ width: `${Math.min(((s?.ingreso ?? 0) / 100000) * 100, 100)}%`, background: '#8b5cf6' }} />
+              </div>
+            </div>
+            {/* Sin cobrar */}
+            <div className="bg-white rounded-xl border p-4" style={{ borderColor: '#ddeadd' }}>
+              <div className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: '#5a7060', letterSpacing: '0.3px' }}>
+                Sin cobrar
+              </div>
+              <div className="font-bold leading-none mb-1" style={{ fontSize: s && (s.sin_cobrar) >= 10000 ? 22 : 26, letterSpacing: '-1px', fontVariantNumeric: 'tabular-nums', color: (s?.sin_cobrar ?? 0) > 0 ? '#dc2626' : '#162016' }}>
+                {s ? `$${s.sin_cobrar.toLocaleString('es-MX')}` : '—'}
+              </div>
+              <div className="text-xs mt-1.5" style={{ color: '#8fa890' }}>
+                Rentas del periodo sin pago
+              </div>
+              <div className="mt-3 h-1 rounded-full" style={{ background: '#ddeadd' }}>
+                <div className="h-full rounded-full" style={{ width: `${s && s.ingreso ? Math.min((s.sin_cobrar / s.ingreso) * 100, 100) : 0}%`, background: '#ef4444' }} />
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* Filtros */}
       <div className="bg-white rounded-xl border p-4 flex flex-wrap gap-3 items-end" style={{ borderColor: '#ddeadd' }}>
@@ -400,6 +539,43 @@ export default function Rentas() {
                 <Field label="Anticipo" value={`$${parseFloat(detalle.anticipo || '0').toLocaleString('es-MX')}`} />
                 <Field label="Estado pago" value={detalle.pagado ? '✓ Pagado' : '✗ Sin pagar'} />
               </Section>
+
+              {detalle.estado_entrega !== 'CANCELADO' && (
+                <div>
+                  <div className="text-xs font-bold uppercase tracking-wide mb-2.5" style={{ color: '#8fa890', letterSpacing: '0.6px' }}>
+                    Estado de entrega
+                  </div>
+                  <div className="flex gap-2">
+                    {([
+                      { key: 'PENDIENTE', label: 'Pendiente',  activeColor: '#a16207', activeBg: '#fef9c3' },
+                      { key: 'ENTREGADO', label: 'Entregado',  activeColor: '#15803d', activeBg: '#dcfce7' },
+                      { key: 'RECOGIDO',  label: 'Recogido',   activeColor: '#6d28d9', activeBg: '#ede9fe' },
+                    ] as const).map(({ key, label, activeColor, activeBg }) => {
+                      const isActive = detalle.estado_entrega === key
+                      return (
+                        <button
+                          key={key}
+                          onClick={() => !isActive && cambiarEstado(key)}
+                          disabled={cambiandoEstado || isActive}
+                          className="flex-1 text-xs font-semibold py-2 rounded-lg border transition-all"
+                          style={{
+                            background: isActive ? activeBg : 'white',
+                            color: isActive ? activeColor : '#8fa890',
+                            borderColor: isActive ? activeColor : '#ddeadd',
+                            cursor: isActive ? 'default' : 'pointer',
+                            opacity: cambiandoEstado && !isActive ? 0.5 : 1,
+                          }}
+                        >
+                          {label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <p className="text-xs mt-1.5" style={{ color: '#8fa890' }}>
+                    Útil para pedidos que el cliente recoge en bodega
+                  </p>
+                </div>
+              )}
             </div>
 
             <div className="flex flex-col gap-2 p-4" style={{ borderTop: '1px solid #ddeadd' }}>
@@ -714,6 +890,97 @@ export default function Rentas() {
           onClose={() => setTicketRenta(null)}
         />
       )}
+
+      {/* Modal devolución depósito */}
+      {modalDeposito && (
+        <ModalDevolucionDeposito
+          monto={modalDeposito.monto}
+          folio={modalDeposito.folio}
+          rentaId={modalDeposito.rentaId}
+          onClose={() => setModalDeposito(null)}
+        />
+      )}
+    </div>
+  )
+}
+
+function ModalDevolucionDeposito({ monto, folio, rentaId, onClose }: {
+  monto: number; folio: string; rentaId: number; onClose: () => void
+}) {
+  const [guardando, setGuardando] = useState(false)
+  const [listo, setListo] = useState(false)
+
+  const confirmar = async () => {
+    setGuardando(true)
+    try {
+      await api.post(`/rentas/${rentaId}/devolver_deposito/`, { monto })
+      setListo(true)
+    } catch {
+      alert('Error al registrar la devolución.')
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.5)' }}>
+      <div className="bg-white rounded-2xl shadow-xl" style={{ width: 400, maxWidth: '95vw' }}>
+        {listo ? (
+          <div className="flex flex-col items-center gap-3 px-6 py-8 text-center">
+            <div className="w-14 h-14 rounded-full flex items-center justify-center" style={{ background: '#dcfce7' }}>
+              <svg width="28" height="28" fill="none" stroke="#16a34a" strokeWidth="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+            </div>
+            <p className="font-bold text-lg" style={{ color: '#162016' }}>Devolución registrada</p>
+            <p className="text-sm" style={{ color: '#5a7060' }}>
+              Se descontaron <strong>${monto.toLocaleString('es-MX')}</strong> de la caja.
+            </p>
+            <button onClick={onClose} className="mt-2 w-full text-sm font-semibold py-2.5 rounded-xl"
+              style={{ background: '#16a34a', color: 'white' }}>
+              Cerrar
+            </button>
+          </div>
+        ) : (
+          <>
+            <div className="px-6 pt-5 pb-4" style={{ borderBottom: '1px solid #ddeadd' }}>
+              <div className="flex items-center gap-3 mb-1">
+                <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: '#fef9c3' }}>
+                  <span style={{ fontSize: 20 }}>💰</span>
+                </div>
+                <div>
+                  <p className="font-bold" style={{ color: '#162016' }}>Renta con depósito</p>
+                  <p style={{ fontSize: 12, color: '#8fa890', fontFamily: 'monospace' }}>{folio}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="px-6 py-5">
+              <div className="rounded-xl p-4 mb-4" style={{ background: '#fefce8', border: '1px solid #fde68a' }}>
+                <p className="text-sm" style={{ color: '#92400e' }}>
+                  Esta renta incluye un depósito cobrado al cliente. Al regresar el equipo hay que devolver el depósito en efectivo.
+                </p>
+              </div>
+              <div className="flex items-center justify-between px-4 py-3 rounded-xl" style={{ background: '#f8fbf8', border: '1px solid #ddeadd' }}>
+                <span className="text-sm font-medium" style={{ color: '#5a7060' }}>Monto a regresar</span>
+                <span className="font-bold" style={{ fontSize: 22, color: '#162016', letterSpacing: '-0.5px', fontVariantNumeric: 'tabular-nums' }}>
+                  ${monto.toLocaleString('es-MX')}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex gap-2 px-6 pb-5">
+              <button onClick={onClose} className="flex-1 text-sm font-medium py-2.5 rounded-xl border"
+                style={{ borderColor: '#ddeadd', color: '#5a7060' }}>
+                Omitir
+              </button>
+              <button onClick={confirmar} disabled={guardando}
+                className="flex-1 text-sm font-semibold py-2.5 rounded-xl transition-colors disabled:opacity-50"
+                style={{ background: '#16a34a', color: 'white' }}>
+                {guardando ? 'Registrando…' : 'Confirmar devolución'}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   )
 }

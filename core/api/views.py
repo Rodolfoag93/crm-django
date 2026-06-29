@@ -10,7 +10,7 @@ from core.push_notifications import VAPID_PUBLIC_KEY
 from datetime import timedelta, date
 from decimal import Decimal
 
-from django.db.models import Count, Sum
+from django.db.models import Count, Sum, Max, Min, Avg, Subquery, OuterRef
 from core.models import (
     Cliente, Producto, Renta, RentaProducto, Empleado,
     Nomina, Gasto, MovimientoContable, Asistencia, SolicitudRegistro, HorasExtra, PushSuscripcion,
@@ -45,20 +45,118 @@ class EsAdminOSoloLectura(BasePermission):
 
 
 class ClienteViewSet(viewsets.ModelViewSet):
-    queryset = Cliente.objects.all().order_by('nombre')
+    queryset = Cliente.objects.all()  # requerido por el router para el basename
     serializer_class = ClienteSerializer
     permission_classes = [EsAdminOSoloLectura]
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['nombre', 'telefono']
     ordering_fields = ['nombre']
 
+    def _base_qs(self):
+        colonia_reciente = Renta.objects.filter(
+            cliente=OuterRef('pk'), status='ACTIVO'
+        ).order_by('-fecha_renta').values('colonia')[:1]
+        return Cliente.objects.annotate(
+            rentas_count=Count('renta', filter=Q(renta__status='ACTIVO')),
+            total_gastado=Sum('renta__precio_total', filter=Q(renta__status='ACTIVO')),
+            ultima_renta=Max('renta__fecha_renta', filter=Q(renta__status='ACTIVO')),
+            colonia_frecuente=Subquery(colonia_reciente),
+        ).order_by('nombre')
+
+    def get_queryset(self):
+        return self._base_qs()
+
+    @action(detail=False, methods=['get'])
+    def stats(self, request):
+        hoy = date.today()
+        mes_inicio = hoy.replace(day=1)
+
+        total = Cliente.objects.count()
+
+        # Recurrentes: más de 1 renta activa
+        recurrentes = Cliente.objects.annotate(
+            rc=Count('renta', filter=Q(renta__status='ACTIVO'))
+        ).filter(rc__gt=1).count()
+
+        # Nuevos este mes: primera renta fue este mes
+        nuevos_mes = Cliente.objects.annotate(
+            primera=Min('renta__fecha_renta', filter=Q(renta__status='ACTIVO'))
+        ).filter(primera__gte=mes_inicio).count()
+
+        # Ticket promedio: promedio de precio_total por renta activa
+        ticket_promedio = Renta.objects.filter(
+            status='ACTIVO'
+        ).aggregate(avg=Avg('precio_total'))['avg'] or 0
+
+        return Response({
+            'total': total,
+            'recurrentes': recurrentes,
+            'nuevos_mes': nuevos_mes,
+            'ticket_promedio': float(ticket_promedio),
+        })
+
 
 class ProductoViewSet(viewsets.ModelViewSet):
-    queryset = Producto.objects.filter(activo=True).order_by('nombre')
+    queryset = Producto.objects.all()  # requerido por el router
     serializer_class = ProductoSerializer
     permission_classes = [EsAdminOSoloLectura]
     filter_backends = [filters.SearchFilter]
     search_fields = ['nombre', 'tipo']
+
+    def get_queryset(self):
+        qs = Producto.objects.annotate(
+            veces_rentado=Count('rentaproductos__renta', distinct=True, filter=Q(rentaproductos__renta__status='ACTIVO')),
+            ultima_renta=Max('rentaproductos__renta__fecha_renta', filter=Q(rentaproductos__renta__status='ACTIVO')),
+        )
+        solo_activos = self.request.query_params.get('activo')
+        if solo_activos == 'true':
+            qs = qs.filter(activo=True)
+        elif solo_activos == 'false':
+            qs = qs.filter(activo=False)
+        search = self.request.query_params.get('search', '').strip()
+        if search:
+            qs = qs.filter(Q(nombre__icontains=search) | Q(tipo__icontains=search))
+        tipo = self.request.query_params.get('tipo', '').strip()
+        if tipo:
+            qs = qs.filter(tipo=tipo)
+        return qs.order_by('nombre')
+
+    @action(detail=False, methods=['get'])
+    def stats(self, request):
+        total_activos = Producto.objects.filter(activo=True).count()
+        brincolines   = Producto.objects.filter(activo=True, tipo='BR').count()
+        precio_prom   = Producto.objects.filter(activo=True).aggregate(avg=Avg('precio'))['avg'] or 0
+
+        mas_rentado_qs = (
+            Producto.objects.filter(activo=True, tipo='BR')
+            .annotate(
+                vr=Count('rentaproductos__renta', distinct=True, filter=Q(rentaproductos__renta__status='ACTIVO')),
+                total_generado=Sum('rentaproductos__subtotal', filter=Q(rentaproductos__renta__status='ACTIVO')),
+            )
+            .order_by('-vr')
+            .values('nombre', 'vr', 'total_generado')
+            .first()
+        )
+        mas_rentado = {
+            'nombre': mas_rentado_qs['nombre'],
+            'vr': mas_rentado_qs['vr'],
+            'total_generado': float(mas_rentado_qs['total_generado'] or 0),
+        } if mas_rentado_qs else None
+
+        conteo_por_tipo = list(
+            Producto.objects.filter(activo=True)
+            .values('tipo')
+            .annotate(total=Count('id'))
+            .order_by('-total')
+        )
+
+        return Response({
+            'total_activos': total_activos,
+            'brincolines': brincolines,
+            'precio_promedio': float(precio_prom),
+            'mas_rentado': mas_rentado,
+            'por_tipo': conteo_por_tipo,
+        })
 
 
 class RentaViewSet(viewsets.ModelViewSet):
@@ -220,6 +318,53 @@ class RentaViewSet(viewsets.ModelViewSet):
             renta.save(update_fields=['status', 'estado_entrega', 'comentarios'])
         return Response({'ok': True})
 
+    @action(detail=True, methods=['post'])
+    def cambiar_estado(self, request, pk=None):
+        if not request.user.is_staff:
+            return Response({'error': 'No autorizado.'}, status=403)
+        renta = self.get_object()
+        nuevo_estado = request.data.get('estado_entrega')
+        if nuevo_estado not in ('PENDIENTE', 'ENTREGADO', 'RECOGIDO'):
+            return Response({'error': 'Estado inválido.'}, status=400)
+        estado_anterior = renta.estado_entrega
+        renta.estado_entrega = nuevo_estado
+        renta.save(update_fields=['estado_entrega'])
+        deposito = None
+        if nuevo_estado == 'RECOGIDO' and estado_anterior != 'RECOGIDO':
+            for rp in renta.rentaproductos.select_related('producto').all():
+                rp.producto.liberar_stock(rp.cantidad)
+            dep = renta.rentaproductos.select_related('producto').filter(
+                producto__nombre__icontains='deposito'
+            ).first()
+            if dep:
+                deposito = {
+                    'monto': float(dep.subtotal or 0),
+                    'folio': renta.folio,
+                }
+        return Response({'ok': True, 'estado_entrega': nuevo_estado, 'deposito': deposito})
+
+    @action(detail=True, methods=['post'])
+    def devolver_deposito(self, request, pk=None):
+        if not request.user.is_staff:
+            return Response({'error': 'No autorizado.'}, status=403)
+        renta = self.get_object()
+        monto = request.data.get('monto')
+        if not monto:
+            return Response({'error': 'Monto requerido.'}, status=400)
+        from core.models import Gasto, Cuenta
+        from django.utils import timezone as tz
+        caja = Cuenta.objects.filter(tipo__iexact='efectivo').first()
+        Gasto.objects.create(
+            tipo='GASTO',
+            categoria='DEVOLUCION',
+            cuenta=caja,
+            descripcion=f'Devolución depósito — Renta {renta.folio}',
+            monto=monto,
+            fecha=tz.localdate(),
+            referencia=renta.folio,
+        )
+        return Response({'ok': True})
+
     @action(detail=True, methods=['patch'])
     def editar(self, request, pk=None):
         from django.db import transaction as db_transaction
@@ -267,11 +412,13 @@ class RentaViewSet(viewsets.ModelViewSet):
 
             renta.save()
 
-            # Actualizar Google Calendar si existe
+            # Sincronizar con Google Calendar (crea o actualiza)
             try:
-                if renta.evento_google_id:
-                    from core.google_calendar import actualizar_evento_renta
-                    actualizar_evento_renta(renta)
+                from core.google_calendar import crear_evento_renta
+                evento_id = crear_evento_renta(renta)
+                if evento_id:
+                    renta.evento_google_id = evento_id
+                    renta.save(update_fields=['evento_google_id'])
             except Exception:
                 pass
 
@@ -325,6 +472,49 @@ class RentaViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(rentas, many=True)
         return Response(serializer.data)
 
+    @action(detail=False, methods=['get'])
+    def stats(self, request):
+        fecha_inicio_str = request.query_params.get('fecha_inicio')
+        fecha_fin_str = request.query_params.get('fecha_fin')
+        try:
+            fecha_inicio = date.fromisoformat(fecha_inicio_str) if fecha_inicio_str else date.today()
+            fecha_fin = date.fromisoformat(fecha_fin_str) if fecha_fin_str else date.today()
+        except ValueError:
+            return Response({'error': 'Fecha inválida.'}, status=400)
+
+        qs = Renta.objects.filter(
+            fecha_renta__gte=fecha_inicio,
+            fecha_renta__lte=fecha_fin,
+            status='ACTIVO',
+        )
+        total = qs.count()
+        pendientes = qs.filter(estado_entrega='PENDIENTE').count()
+        ingreso = qs.aggregate(t=Sum('precio_total'))['t'] or 0
+        sin_cobrar = qs.filter(pagado=False).aggregate(t=Sum('precio_total'))['t'] or 0
+
+        # Periodo anterior (misma duración)
+        duracion = (fecha_fin - fecha_inicio).days + 1
+        prev_fin = fecha_inicio - timedelta(days=1)
+        prev_inicio = prev_fin - timedelta(days=duracion - 1)
+        qs_prev = Renta.objects.filter(
+            fecha_renta__gte=prev_inicio,
+            fecha_renta__lte=prev_fin,
+            status='ACTIVO',
+        )
+        prev_total = qs_prev.count()
+        prev_ingreso = qs_prev.aggregate(t=Sum('precio_total'))['t'] or 0
+
+        return Response({
+            'total': total,
+            'pendientes': pendientes,
+            'ingreso': float(ingreso),
+            'sin_cobrar': float(sin_cobrar),
+            'anterior': {
+                'total': prev_total,
+                'ingreso': float(prev_ingreso),
+            },
+        })
+
 
 class EmpleadoViewSet(viewsets.ModelViewSet):
     queryset = Empleado.objects.filter(activo=True).order_by('nombre')
@@ -332,6 +522,13 @@ class EmpleadoViewSet(viewsets.ModelViewSet):
     permission_classes = [EsAdminOSoloLectura]
     filter_backends = [filters.SearchFilter]
     search_fields = ['nombre', 'tipo_empleado']
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        tipo = self.request.query_params.get('tipo_empleado')
+        if tipo:
+            qs = qs.filter(tipo_empleado=tipo)
+        return qs
 
 
 class NominaViewSet(viewsets.ModelViewSet):
@@ -847,12 +1044,53 @@ def api_dashboard_admin(request):
     rutas_en_camino = rutas_hoy.filter(estado='en_camino').count()
 
     # Asistencia
-    asistencias_hoy = Asistencia.objects.filter(fecha=hoy)
+    asistencias_hoy = Asistencia.objects.filter(fecha=hoy).select_related('empleado')
     con_entrada = asistencias_hoy.filter(hora_entrada__isnull=False).count()
     con_salida = asistencias_hoy.filter(hora_salida__isnull=False).count()
 
+    # Ingreso del mes actual
+    mes_inicio = hoy.replace(day=1)
+    ingreso_mes = Renta.objects.filter(
+        fecha_renta__gte=mes_inicio,
+        fecha_renta__lte=hoy,
+        status='ACTIVO',
+    ).aggregate(total=Sum('precio_total'))['total'] or 0
+
+    # Ingreso del mes anterior (mes completo)
+    mes_anterior_fin = mes_inicio - timedelta(days=1)
+    mes_anterior_inicio = mes_anterior_fin.replace(day=1)
+    ingreso_mes_anterior = Renta.objects.filter(
+        fecha_renta__gte=mes_anterior_inicio,
+        fecha_renta__lte=mes_anterior_fin,
+        status='ACTIVO',
+    ).aggregate(total=Sum('precio_total'))['total'] or 0
+
+    # Sin cobrar hoy (suma de totales de rentas de hoy sin pago)
+    sin_cobrar_monto = rentas_hoy.filter(pagado=False).aggregate(
+        total=Sum('precio_total')
+    )['total'] or 0
+
     # Solicitudes pendientes
     solicitudes_pendientes = SolicitudRegistro.objects.filter(estado='PENDIENTE').count()
+
+    # Lista de empleados activos con su asistencia de hoy
+    registros_hoy = {a.empleado_id: a for a in asistencias_hoy}
+    empleados_activos_qs = Empleado.objects.filter(
+        activo=True, tipo_empleado__in=['REPARTIDOR', 'ENCARGADO']
+    ).order_by('nombre')[:8]
+    asistencia_lista = [
+        {
+            'id': emp.id,
+            'nombre': emp.nombre,
+            'tipo': emp.get_tipo_empleado_display(),
+            'hora_entrada': (
+                registros_hoy[emp.id].hora_entrada.strftime('%H:%M')
+                if emp.id in registros_hoy and registros_hoy[emp.id].hora_entrada
+                else None
+            ),
+        }
+        for emp in empleados_activos_qs
+    ]
 
     return Response({
         'pedidos': {
@@ -869,6 +1107,10 @@ def api_dashboard_admin(request):
             'con_entrada': con_entrada,
             'con_salida': con_salida,
         },
+        'ingreso_mes': float(ingreso_mes),
+        'ingreso_mes_anterior': float(ingreso_mes_anterior),
+        'sin_cobrar_monto': float(sin_cobrar_monto),
+        'asistencia_lista': asistencia_lista,
         'solicitudes_pendientes': solicitudes_pendientes,
     })
 
@@ -930,17 +1172,19 @@ def api_asistencia_hoy(request):
     if not request.user.is_staff:
         return Response({'error': 'No autorizado.'}, status=403)
 
-    hoy = date.today()
+    fecha_param = request.GET.get('fecha')
+    try:
+        fecha = date.fromisoformat(fecha_param) if fecha_param else date.today()
+    except ValueError:
+        fecha = date.today()
 
-    # Todos los empleados activos
     empleados = Empleado.objects.filter(
         activo=True,
         tipo_empleado__in=['REPARTIDOR', 'ENCARGADO']
-    ).select_related('user')
+    ).select_related('user').order_by('nombre')
 
-    # Asistencias de hoy
-    asistencias_hoy = Asistencia.objects.filter(fecha=hoy).select_related('empleado')
-    asistencias_dict = {a.empleado_id: a for a in asistencias_hoy}
+    asistencias = Asistencia.objects.filter(fecha=fecha).select_related('empleado')
+    asistencias_dict = {a.empleado_id: a for a in asistencias}
 
     data = []
     for emp in empleados:
@@ -956,16 +1200,63 @@ def api_asistencia_hoy(request):
             'horas_trabajadas': str(asistencia.horas_trabajadas) if asistencia and asistencia.horas_trabajadas else None,
         })
 
-    # Ordenar: primero los que ya entraron, luego los que no
     data.sort(key=lambda x: (not x['tiene_entrada'], x['nombre']))
 
     return Response({
-        'fecha': str(hoy),
+        'fecha': str(fecha),
         'total': len(data),
         'con_entrada': sum(1 for d in data if d['tiene_entrada']),
         'con_salida': sum(1 for d in data if d['tiene_salida']),
         'empleados': data,
     })
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def api_editar_asistencia_admin(request):
+    if not request.user.is_staff:
+        return Response({'error': 'No autorizado.'}, status=403)
+
+    from datetime import datetime, timezone as dt_timezone, timedelta
+    data = request.data
+    empleado_id = data.get('empleado_id')
+    fecha_str = data.get('fecha')
+    hora_entrada = data.get('hora_entrada')
+    hora_salida = data.get('hora_salida')
+
+    try:
+        empleado = Empleado.objects.get(id=empleado_id)
+    except Empleado.DoesNotExist:
+        return Response({'error': 'Empleado no encontrado.'}, status=404)
+
+    utc_offset = dt_timezone(timedelta(hours=-6))
+
+    def hora_a_datetime(fecha_s, hora_s):
+        if not hora_s:
+            return None
+        dt = datetime.strptime(f"{fecha_s} {hora_s}", "%Y-%m-%d %H:%M")
+        return dt.replace(tzinfo=utc_offset)
+
+    entrada_dt = hora_a_datetime(fecha_str, hora_entrada)
+    salida_dt = hora_a_datetime(fecha_str, hora_salida) if hora_salida else None
+
+    asistencia, _ = Asistencia.objects.get_or_create(empleado=empleado, fecha=fecha_str)
+    asistencia.hora_entrada = entrada_dt
+    asistencia.hora_salida = salida_dt
+    asistencia.save()
+
+    from core.models import TurnoAsistencia
+    TurnoAsistencia.objects.update_or_create(
+        asistencia=asistencia,
+        numero_turno=1,
+        defaults={
+            'hora_entrada': entrada_dt,
+            'hora_salida': salida_dt,
+            'horas_trabajadas': asistencia.horas_trabajadas,
+        }
+    )
+
+    return Response({'ok': True, 'horas_trabajadas': str(asistencia.horas_trabajadas) if asistencia.horas_trabajadas else None})
 
 # ── Rutas Admin PWA ────────────────────────────────────────────────────────────
 
@@ -1066,20 +1357,27 @@ def api_rentas_disponibles(request):
         return Response({'error': 'No autorizado.'}, status=403)
     fecha = request.GET.get('fecha', str(date.today()))
     ruta_id = request.GET.get('ruta_id')
-    tipo = request.GET.get('tipo', 'entrega')  # 'entrega' o 'recoleccion'
+    tipo = request.GET.get('tipo')  # 'entrega', 'recogida' o vacío (ambos)
 
     if tipo in ('recoleccion', 'recogida'):
-        # Pedidos ya entregados, pendientes de recolectar
+        # Solo pedidos ya entregados, pendientes de recolectar
         rentas = Renta.objects.filter(
             status='ACTIVO',
             estado_entrega='ENTREGADO',
         )
-    else:
-        # Pedidos a entregar en la fecha seleccionada
+    elif tipo == 'entrega':
+        # Solo pedidos a entregar en la fecha seleccionada
         rentas = Renta.objects.filter(
             fecha_renta=fecha,
             status='ACTIVO',
             estado_entrega='PENDIENTE',
+        )
+    else:
+        # Mixto: pedidos pendientes de esa fecha + pedidos entregados pendientes de recoger
+        from django.db.models import Q
+        rentas = Renta.objects.filter(status='ACTIVO').filter(
+            Q(estado_entrega='PENDIENTE', fecha_renta=fecha) |
+            Q(estado_entrega='ENTREGADO')
         )
 
     if ruta_id:
@@ -1115,6 +1413,7 @@ def api_editar_ruta(request, ruta_id):
     ruta.tipo = data.get('tipo', ruta.tipo)
     ruta.fecha = data.get('fecha', ruta.fecha)
     ruta.notas = data.get('notas', ruta.notas)
+    ruta.estado = data.get('estado', ruta.estado)
     ruta.save()
 
     ruta.empleados.all().delete()
@@ -2281,3 +2580,25 @@ def api_rankings_eventos(request):
         return Response({'error': 'Rol inválido. Usa: coordinadores, animadores, repartidores'}, status=400)
 
     return Response(data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def api_recibo_nomina(request, nomina_id):
+    from django.template.loader import render_to_string
+    from django.http import HttpResponse
+    from weasyprint import HTML
+
+    nomina = get_object_or_404(Nomina, id=nomina_id)
+    sueldo_base = nomina.dias_trabajados * nomina.empleado.sueldo_diario
+    total_extra = nomina.pago_eventos_extra()
+    html_string = render_to_string('nomina/recibo_nomina_pdf.html', {
+        'nomina': nomina,
+        'sueldo_base': sueldo_base,
+        'total_pagado': sueldo_base + total_extra,
+        'fecha': date.today(),
+    })
+    response = HttpResponse(content_type='application/pdf')
+    response['Content-Disposition'] = f'inline; filename="recibo_nomina_{nomina_id}.pdf"'
+    HTML(string=html_string).write_pdf(response)
+    return response

@@ -33,6 +33,8 @@
             {{ form.password }}
         </div>
 
+        <input type="hidden" name="next" id="next-field" value="{{ next }}">
+
         <button type="submit" style="
             width:100%;
             padding:10px;
@@ -48,4 +50,14 @@
     </form>
 
 </div>
+
+<script>
+  (function () {
+    var nextField = document.getElementById('next-field');
+    // Si no hay next definido (valor vacío) y es escritorio → mandar al CRM
+    if (!nextField.value && window.innerWidth >= 1024) {
+      nextField.value = '/crm/';
+    }
+  })();
+</script>
 {% endblock %}

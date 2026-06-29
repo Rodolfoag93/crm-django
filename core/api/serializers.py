@@ -7,15 +7,48 @@ from django.contrib.auth.hashers import make_password
 
 
 class ClienteSerializer(serializers.ModelSerializer):
+    rentas_count    = serializers.SerializerMethodField()
+    total_gastado   = serializers.SerializerMethodField()
+    ultima_renta    = serializers.SerializerMethodField()
+    colonia_frecuente = serializers.SerializerMethodField()
+
     class Meta:
         model = Cliente
-        fields = '__all__'
+        fields = ['id', 'nombre', 'telefono', 'calle_y_numero', 'colonia', 'ciudad_o_municipio',
+                  'rentas_count', 'total_gastado', 'ultima_renta', 'colonia_frecuente']
+
+    def get_rentas_count(self, obj):
+        return getattr(obj, 'rentas_count', None) or 0
+
+    def get_total_gastado(self, obj):
+        v = getattr(obj, 'total_gastado', None)
+        return float(v) if v else 0.0
+
+    def get_ultima_renta(self, obj):
+        d = getattr(obj, 'ultima_renta', None)
+        return str(d) if d else None
+
+    def get_colonia_frecuente(self, obj):
+        return getattr(obj, 'colonia_frecuente', None) or obj.colonia or None
 
 
 class ProductoSerializer(serializers.ModelSerializer):
+    tipo_display = serializers.CharField(source='get_tipo_display', read_only=True)
+    veces_rentado = serializers.SerializerMethodField()
+    ultima_renta   = serializers.SerializerMethodField()
+
     class Meta:
         model = Producto
-        fields = '__all__'
+        fields = ['id', 'nombre', 'tipo', 'tipo_display', 'precio',
+                  'stock_total', 'stock_disponible', 'activo',
+                  'veces_rentado', 'ultima_renta']
+
+    def get_veces_rentado(self, obj):
+        return getattr(obj, 'veces_rentado', None) or 0
+
+    def get_ultima_renta(self, obj):
+        d = getattr(obj, 'ultima_renta', None)
+        return str(d) if d else None
 
 
 class RentaProductoSerializer(serializers.ModelSerializer):
@@ -43,9 +76,15 @@ class RentaSerializer(serializers.ModelSerializer):
 
 
 class EmpleadoSerializer(serializers.ModelSerializer):
+    usuario_username = serializers.CharField(source='user.username', read_only=True, default=None)
+
     class Meta:
         model = Empleado
-        fields = ['id', 'nombre', 'telefono', 'correo', 'tipo_empleado', 'activo', 'sueldo_diario']
+        fields = [
+            'id', 'nombre', 'telefono', 'correo', 'tipo_empleado',
+            'activo', 'sueldo_diario', 'comentarios', 'es_eventual',
+            'usuario_username',
+        ]
 
 
 class PagoExtraNominaSerializer(serializers.ModelSerializer):
@@ -59,7 +98,7 @@ class PagoExtraNominaSerializer(serializers.ModelSerializer):
 class NominaSerializer(serializers.ModelSerializer):
     empleado_nombre = serializers.CharField(source='empleado.nombre', read_only=True)
     total = serializers.DecimalField(max_digits=10, decimal_places=2, required=False, default=0)
-    pagos_extra = PagoExtraNominaSerializer(many=True, read_only=True)
+    pagos_extra = PagoExtraNominaSerializer(many=True, read_only=True, source='pagos_extras')
 
     class Meta:
         model = Nomina
