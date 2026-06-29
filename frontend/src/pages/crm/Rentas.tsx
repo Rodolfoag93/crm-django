@@ -51,6 +51,32 @@ export default function Rentas() {
   const [cuentas, setCuentas] = useState<Cuenta[]>([])
   const [guardando, setGuardando] = useState(false)
   const [errorPago, setErrorPago] = useState('')
+  const [modalCancelar, setModalCancelar] = useState(false)
+  const [motivo, setMotivo] = useState('')
+  const [cancelando, setCancelando] = useState(false)
+  const [errorCancelar, setErrorCancelar] = useState('')
+
+  const confirmarCancelar = async () => {
+    if (!detalle) return
+    if (!motivo.trim()) { setErrorCancelar('Escribe el motivo de cancelación.'); return }
+    setCancelando(true); setErrorCancelar('')
+    try {
+      await api.post(`/rentas/${detalle.id}/cancelar/`, { motivo: motivo.trim() })
+      const actualizado = { ...detalle, estado_entrega: 'CANCELADO' }
+      setDetalle(actualizado)
+      setData(prev => prev ? {
+        ...prev,
+        results: prev.results.map(r => r.id === detalle.id ? actualizado : r)
+      } : prev)
+      setModalCancelar(false)
+      setMotivo('')
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { error?: string } } })?.response?.data?.error
+      setErrorCancelar(msg ?? 'Error al cancelar.')
+    } finally {
+      setCancelando(false)
+    }
+  }
 
   const abrirModalPago = () => {
     setMetodo('efectivo')
@@ -369,6 +395,80 @@ export default function Rentas() {
                   Mapa
                 </a>
               </div>
+              {detalle.estado_entrega !== 'CANCELADO' && (
+                <button
+                  onClick={() => { setMotivo(''); setErrorCancelar(''); setModalCancelar(true) }}
+                  className="w-full text-sm font-medium py-2 rounded-lg border transition-colors"
+                  style={{ borderColor: '#fca5a5', color: '#b91c1c', background: '#fff1f2' }}
+                >
+                  Cancelar renta
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal cancelar renta */}
+      {modalCancelar && detalle && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.4)' }}
+          onClick={e => { if (e.target === e.currentTarget) setModalCancelar(false) }}>
+          <div className="bg-white rounded-2xl shadow-xl" style={{ width: 420, maxWidth: '95vw' }}>
+            <div className="flex items-start justify-between px-6 pt-5 pb-4" style={{ borderBottom: '1px solid #fde8e8' }}>
+              <div>
+                <div className="font-bold" style={{ fontSize: 16, color: '#162016' }}>Cancelar renta</div>
+                <div className="text-sm mt-0.5" style={{ color: '#5a7060' }}>
+                  {detalle.cliente_nombre} · <span style={{ fontFamily: 'monospace' }}>{detalle.folio}</span>
+                </div>
+              </div>
+              <button onClick={() => setModalCancelar(false)}
+                className="w-7 h-7 flex items-center justify-center rounded-md border text-sm mt-0.5"
+                style={{ borderColor: '#ddeadd', color: '#5a7060' }}>×</button>
+            </div>
+
+            <div className="px-6 py-5 flex flex-col gap-4">
+              <div className="flex items-start gap-3 px-4 py-3 rounded-xl" style={{ background: '#fff1f2', border: '1px solid #fca5a5' }}>
+                <svg width="16" height="16" fill="none" stroke="#b91c1c" strokeWidth="2" viewBox="0 0 24 24" className="flex-shrink-0 mt-0.5">
+                  <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+                <p className="text-sm" style={{ color: '#b91c1c' }}>
+                  Esta acción no se puede deshacer. La renta quedará marcada como cancelada.
+                </p>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-wide block mb-1.5" style={{ color: '#8fa890', fontSize: 10.5 }}>
+                  Motivo de cancelación
+                </label>
+                <textarea
+                  value={motivo}
+                  onChange={e => setMotivo(e.target.value)}
+                  placeholder="Ej: Cliente canceló por cambio de fecha, doble reservación, etc."
+                  rows={3}
+                  className="w-full border rounded-xl px-3 py-2.5 text-sm resize-none outline-none"
+                  style={{ borderColor: errorCancelar ? '#fca5a5' : '#ddeadd', color: '#162016', lineHeight: 1.5 }}
+                  autoFocus
+                />
+                {errorCancelar && (
+                  <p className="text-xs mt-1.5" style={{ color: '#b91c1c' }}>{errorCancelar}</p>
+                )}
+              </div>
+            </div>
+
+            <div className="flex gap-2 px-6 pb-5">
+              <button onClick={() => setModalCancelar(false)}
+                className="flex-1 text-sm font-medium py-2.5 rounded-xl border"
+                style={{ borderColor: '#ddeadd', color: '#5a7060' }}>
+                Volver
+              </button>
+              <button
+                onClick={confirmarCancelar}
+                disabled={cancelando || !motivo.trim()}
+                className="flex-1 text-sm font-semibold py-2.5 rounded-xl transition-colors disabled:opacity-50"
+                style={{ background: '#dc2626', color: 'white' }}
+              >
+                {cancelando ? 'Cancelando…' : 'Confirmar cancelación'}
+              </button>
             </div>
           </div>
         </div>

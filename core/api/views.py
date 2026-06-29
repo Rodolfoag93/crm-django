@@ -148,6 +148,24 @@ class RentaViewSet(viewsets.ModelViewSet):
             )
         return Response({'ok': True, 'metodo_pago': metodo, 'cuenta': cuenta.nombre})
 
+    @action(detail=True, methods=['post'])
+    def cancelar(self, request, pk=None):
+        from django.db import transaction as db_transaction
+        if not request.user.is_staff:
+            return Response({'error': 'No autorizado.'}, status=403)
+        renta = self.get_object()
+        if renta.status == 'CANCELADO':
+            return Response({'error': 'La renta ya está cancelada.'}, status=400)
+        motivo = request.data.get('motivo', '').strip()
+        if not motivo:
+            return Response({'error': 'El motivo de cancelación es requerido.'}, status=400)
+        with db_transaction.atomic():
+            renta.status = 'CANCELADO'
+            renta.estado_entrega = 'CANCELADO'
+            renta.comentarios = motivo
+            renta.save(update_fields=['status', 'estado_entrega', 'comentarios'])
+        return Response({'ok': True})
+
     @action(detail=False, methods=['get'])
     def semana_actual(self, request):
         hoy = timezone.localdate()
