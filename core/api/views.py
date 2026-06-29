@@ -1241,6 +1241,9 @@ def api_editar_asistencia_admin(request):
     salida_dt = hora_a_datetime(fecha_str, hora_salida) if hora_salida else None
 
     asistencia, _ = Asistencia.objects.get_or_create(empleado=empleado, fecha=fecha_str)
+    entrada_anterior = asistencia.hora_entrada
+    salida_anterior = asistencia.hora_salida
+
     asistencia.hora_entrada = entrada_dt
     asistencia.hora_salida = salida_dt
     asistencia.save()
@@ -1255,6 +1258,24 @@ def api_editar_asistencia_admin(request):
             'horas_trabajadas': asistencia.horas_trabajadas,
         }
     )
+
+    # Notificar al empleado si se registró entrada o salida por primera vez
+    from core.push_notifications import enviar_notificacion
+    hora_fmt = lambda dt: dt.strftime('%H:%M') if dt else ''
+    if entrada_dt and not entrada_anterior:
+        enviar_notificacion(
+            empleado.user,
+            '✅ Entrada registrada',
+            f'Tu entrada de hoy quedó registrada a las {hora_fmt(entrada_dt)}.',
+            url='/home',
+        )
+    if salida_dt and not salida_anterior:
+        enviar_notificacion(
+            empleado.user,
+            '👋 Salida registrada',
+            f'Tu salida de hoy quedó registrada a las {hora_fmt(salida_dt)}.',
+            url='/home',
+        )
 
     return Response({'ok': True, 'horas_trabajadas': str(asistencia.horas_trabajadas) if asistencia.horas_trabajadas else None})
 
@@ -1319,13 +1340,26 @@ def api_crear_ruta(request):
         notas=data.get('notas', ''),
     )
 
-    for emp_id in data.get('empleados', []):
-        lider_id = data.get('lider_id')
+    lider_id = data.get('lider_id')
+    emp_ids = data.get('empleados', [])
+    for emp_id in emp_ids:
         RutaEmpleado.objects.create(
             ruta=ruta,
             empleado_id=emp_id,
             es_lider=(str(emp_id) == str(lider_id))
         )
+
+    # Notificar a los repartidores asignados
+    if emp_ids:
+        from core.push_notifications import enviar_notificacion
+        tipo_label = 'entrega' if ruta.tipo == 'entrega' else 'recogida'
+        for emp in Empleado.objects.filter(id__in=emp_ids).select_related('user'):
+            enviar_notificacion(
+                emp.user,
+                f'🚚 Ruta de {tipo_label} asignada',
+                f'Tienes una ruta "{ruta.nombre}" para hoy. Revisa tu app.',
+                url='/home',
+            )
 
     return Response({'ok': True, 'ruta_id': ruta.id})
 
@@ -1416,14 +1450,29 @@ def api_editar_ruta(request, ruta_id):
     ruta.estado = data.get('estado', ruta.estado)
     ruta.save()
 
+    empleados_previos = set(ruta.empleados.values_list('empleado_id', flat=True))
     ruta.empleados.all().delete()
     lider_id = data.get('lider_id')
-    for emp_id in data.get('empleados', []):
+    nuevos_ids = data.get('empleados', [])
+    for emp_id in nuevos_ids:
         RutaEmpleado.objects.create(
             ruta=ruta,
             empleado_id=emp_id,
             es_lider=(str(emp_id) == str(lider_id))
         )
+
+    # Notificar solo a repartidores recién agregados
+    recien_agregados = [eid for eid in nuevos_ids if int(eid) not in empleados_previos]
+    if recien_agregados:
+        from core.push_notifications import enviar_notificacion
+        tipo_label = 'entrega' if ruta.tipo == 'entrega' else 'recogida'
+        for emp in Empleado.objects.filter(id__in=recien_agregados).select_related('user'):
+            enviar_notificacion(
+                emp.user,
+                f'🚚 Ruta de {tipo_label} asignada',
+                f'Tienes una ruta "{ruta.nombre}" para hoy. Revisa tu app.',
+                url='/home',
+            )
 
     return Response({'ok': True})
 
