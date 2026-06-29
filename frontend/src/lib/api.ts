@@ -51,8 +51,9 @@ api.interceptors.response.use(
       const { data } = await axios.post(`${BASE_URL}/auth/token/refresh/`, { refresh })
 
       localStorage.setItem('access_token', data.access)
-      if (data.refresh) {
-        localStorage.setItem('refresh_token', data.refresh)
+      if (data.refresh) localStorage.setItem('refresh_token', data.refresh)
+      if ('caches' in window) {
+        caches.open('sw-auth').then(c => c.put('/sw-token', new Response(data.access)))
       }
 
       // Resolver peticiones en cola con el token nuevo

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'trotamundos-v6'
+const CACHE_NAME = 'trotamundos-v7'
 const API_CACHE = 'trotamundos-api-v2'
 const STATIC_ASSETS = [
   '/',
@@ -95,21 +95,35 @@ self.addEventListener('push', function(event) {
     )
   })
 
-// Cuando el servicio push invalida la suscripción (expira o se revoca),
-// re-suscribirse y avisar a las ventanas abiertas para que actualicen el servidor
+// Cuando la suscripción push rota (el navegador/OS la renueva automáticamente),
+// re-suscribirse y guardar en el servidor directamente — sin depender de que la app esté abierta
 self.addEventListener('pushsubscriptionchange', (event) => {
     event.waitUntil((async () => {
         try {
             const subscription = await self.registration.pushManager.subscribe(
                 event.oldSubscription.options
             )
-            const clientList = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
-            clientList.forEach(client => client.postMessage({
-                type: 'PUSH_RESUBSCRIBED',
-                subscription: subscription.toJSON(),
-            }))
+            const subJson = subscription.toJSON()
+
+            // Leer el token guardado en Cache Storage al hacer login
+            const cache = await caches.open('sw-auth')
+            const tokenResp = await cache.match('/sw-token')
+            const token = tokenResp ? await tokenResp.text() : null
+            if (!token) return // sin sesión activa, nada que hacer
+
+            await fetch('/v1/push/suscribir/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`,
+                },
+                body: JSON.stringify({
+                    endpoint: subJson.endpoint,
+                    keys: { p256dh: subJson.keys.p256dh, auth: subJson.keys.auth },
+                }),
+            })
         } catch {
-            // No se pudo re-suscribir (permiso revocado, etc.)
+            // Si falló (permiso revocado, token expirado, etc.), notificar a la app si está abierta
             const clientList = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
             clientList.forEach(client => client.postMessage({ type: 'PUSH_NEEDS_RESUBSCRIBE' }))
         }

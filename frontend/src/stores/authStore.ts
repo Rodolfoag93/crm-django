@@ -2,6 +2,12 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import api from '../lib/api.ts'
 
+function cachearTokenParaSW(token: string) {
+  if ('caches' in window) {
+    caches.open('sw-auth').then(c => c.put('/sw-token', new Response(token)))
+  }
+}
+
 interface User {
   id: number
   username: string
@@ -33,6 +39,7 @@ export const useAuthStore = create<AuthState>()(
         const { data } = await api.post('/auth/token/', { username, password })
         localStorage.setItem('access_token', data.access)
         localStorage.setItem('refresh_token', data.refresh)
+        cachearTokenParaSW(data.access)
         set({ isAuthenticated: true })
         const me = await api.get('/auth/me/')
         set({ user: me.data })
@@ -41,6 +48,7 @@ export const useAuthStore = create<AuthState>()(
       logout: () => {
         localStorage.removeItem('access_token')
         localStorage.removeItem('refresh_token')
+        if ('caches' in window) caches.open('sw-auth').then(c => c.delete('/sw-token'))
         set({
           user: null,
           isAuthenticated: false,
