@@ -424,13 +424,11 @@ def ticket_pdf(request, renta_id):
             'subtotal': subtotal
         })
     logo_url = request.build_absolute_uri(static('img/trota_logo.jpeg'))
-    html = render_to_string('core/ticket_renta.html', {
+    return render(request, 'core/ticket_renta.html', {
         'renta': renta,
         'productos': productos,
         'total': total,
         'anticipo': anticipo,
         'restante': restante,
-        'logo_url': logo_url
+        'logo_url': logo_url,
     })
-    pdf = weasyprint.HTML(string=html).write_pdf()
-    return HttpResponse(pdf, content_type='application/pdf')

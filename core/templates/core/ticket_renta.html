@@ -1,102 +1,272 @@
 {% load static %}
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <title>Ticket Renta {{ renta.folio }}</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ticket {{ renta.folio }}</title>
+  <style>
+    /* ── Pantalla ──────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-    <style>
-        @page {
-            size: 80mm auto;
-            margin: 0;
-        }
+    body {
+      background: #f0f4f0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      min-height: 100vh;
+      padding: 24px 16px 48px;
+      color: #162016;
+    }
 
-        body {
-            width: 62mm;
-            max-width: 62mm;
-            font-family: Courier, monospace;
-            font-size: 10.5px;
-            margin: 0;
-            padding: 2mm;
-        }
+    .page-header {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    .print-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: #0f3d22;
+      color: white;
+      border: none;
+      border-radius: 10px;
+      padding: 10px 22px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      letter-spacing: 0.2px;
+    }
+    .print-btn:hover { background: #1e6b3e; }
 
-        h2, h3 {
-            text-align: center;
-            margin: 4px 0;
-        }
+    .tickets-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      align-items: center;
+    }
 
-        h2 { font-size: 13px; }
-        h3 { font-size: 10px; }
+    .ticket {
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+      width: 100%;
+      max-width: 420px;
+      overflow: hidden;
+    }
 
-        p {
-            margin: 3px 0;
-        }
+    .ticket-header {
+      background: #0f3d22;
+      padding: 20px 20px 16px;
+      text-align: center;
+    }
+    .ticket-header img {
+      height: 48px;
+      object-fit: contain;
+      margin-bottom: 10px;
+      filter: brightness(0) invert(1);
+    }
+    .ticket-header .folio {
+      font-size: 13px;
+      color: #a7d8b4;
+      letter-spacing: 0.4px;
+      font-weight: 600;
+    }
+    .ticket-header .copy-label {
+      display: inline-block;
+      margin-top: 6px;
+      background: rgba(255,255,255,0.15);
+      color: white;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      padding: 3px 10px;
+      border-radius: 20px;
+    }
 
-        hr {
-            border: none;
-            border-top: 1px dashed #444;
-            margin: 6px 0;
-        }
+    .ticket-body { padding: 16px 20px; }
 
-        .totales {
-            text-align: right;
-            font-weight: bold;
-        }
+    .section { margin-bottom: 14px; }
+    .section-title {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: #8fa890;
+      margin-bottom: 6px;
+    }
 
-        .logo {
-            display: block;
-            margin: 0 auto 5px auto;
-            height: 40px;
-        }
+    .field-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 13px;
+      padding: 3px 0;
+      gap: 8px;
+    }
+    .field-row .lbl { color: #5a7060; flex-shrink: 0; }
+    .field-row .val { color: #162016; font-weight: 500; text-align: right; }
 
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 6px;
-            table-layout: fixed;
-        }
+    hr.div {
+      border: none;
+      border-top: 1px dashed #c8d8c8;
+      margin: 14px 0;
+    }
 
-        th, td {
-  		padding: 2px 0;
-  		border-bottom: 1px dotted #444;
-  		font-size: 9.5px;
-		}	
+    .products-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12.5px;
+    }
+    .products-table th {
+      text-align: left;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #8fa890;
+      padding: 0 0 5px;
+      border-bottom: 1px solid #e8f0e8;
+    }
+    .products-table th:not(:first-child),
+    .products-table td:not(:first-child) { text-align: right; }
+    .products-table td {
+      padding: 5px 0;
+      border-bottom: 1px dotted #e8f0e8;
+      color: #162016;
+    }
+    .products-table tr:last-child td { border-bottom: none; }
 
-        th {
-            font-weight: bold;
-            font-size: 9.5px;
-        }
+    .totals { margin-top: 12px; }
+    .total-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 13px;
+      padding: 3px 0;
+    }
+    .total-row .t-lbl { color: #5a7060; }
+    .total-row .t-val { font-weight: 600; color: #162016; font-variant-numeric: tabular-nums; }
+    .total-row.big .t-lbl { font-weight: 700; color: #162016; font-size: 14px; }
+    .total-row.big .t-val { font-weight: 700; color: #0f3d22; font-size: 16px; }
+    .total-row.pend .t-val { color: #b45309; }
 
-        /* Anchos exactos para 80mm */
-        th:nth-child(1), td:nth-child(1) { width: 38%; text-align: left; }
-        th:nth-child(2), td:nth-child(2) { width: 12%; text-align: center; }
-        th:nth-child(3), td:nth-child(3) { width: 20%; text-align: right; }
-        th:nth-child(4), td:nth-child(4) { width: 30%; text-align: right; }
+    .sign-field { margin-top: 10px; font-size: 12px; color: #5a7060; }
+    .sign-field p { margin-bottom: 4px; }
+    .sign-line { border-bottom: 1px solid #c8d8c8; margin: 18px 0 8px; }
 
-        table, tr, td {
-            page-break-inside: avoid;
-        }
+    .ticket-footer {
+      text-align: center;
+      padding: 12px 20px 16px;
+      font-size: 12px;
+      color: #8fa890;
+      border-top: 1px solid #e8f0e8;
+    }
 
-        .footer {
-            text-align: center;
-            margin-top: 10px;
-        }
+    /* ── Impresión ─────────────────────────────────────────── */
+    @media print {
+      body {
+        background: white;
+        padding: 0;
+        font-family: 'Courier New', Courier, monospace;
+        font-size: 10px;
+        color: black;
+        width: 80mm;
+      }
+      .page-header { display: none; }
+      .tickets-wrap { gap: 0; align-items: flex-start; }
+      .ticket {
+        width: 76mm;
+        max-width: 76mm;
+        border-radius: 0;
+        box-shadow: none;
+        page-break-after: always;
+      }
+      .ticket:last-child { page-break-after: avoid; }
+      .ticket-header {
+        background: white !important;
+        padding: 4px 4px 2px;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+      .ticket-header img { height: 30px; filter: none; }
+      .ticket-header .folio { color: black; font-size: 10px; }
+      .ticket-header .copy-label {
+        background: black !important;
+        color: white !important;
+        font-size: 9px;
+        border-radius: 0;
+        padding: 1px 4px;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+      .ticket-body { padding: 4px; }
+      .section-title { font-size: 9px; color: black; }
+      .field-row { font-size: 9.5px; }
+      .field-row .lbl, .field-row .val { color: black; }
+      hr.div { border-top: 1px dashed black; }
+      .products-table { font-size: 9px; }
+      .products-table th { font-size: 8.5px; color: black; border-bottom: 1px solid black; }
+      .products-table td { border-bottom: 1px dotted #888; padding: 2px 0; color: black; }
+      .total-row .t-lbl, .total-row .t-val { color: black; font-size: 10px; }
+      .total-row.big .t-lbl, .total-row.big .t-val { font-size: 11px; }
+      .total-row.pend .t-val { color: black; font-weight: bold; }
+      .sign-field { font-size: 9.5px; }
+      .ticket-footer { font-size: 9px; color: black; border-top: 1px dashed black; padding: 4px; }
+    }
 
-	/* Forzar fin de página (ayuda al corte) */
-	.cut {
-    		page-break-after: always;
-		}
-	</style>
-
-          
+    @page { size: 80mm auto; margin: 2mm; }
+  </style>
 </head>
-
-
-
 <body>
-{% include "partial/ticket_base.html" with tipo="cliente" %}
-<div class="cut"></div>
-{% include "partial/ticket_base.html" with tipo="admin" %}
+
+<div class="page-header">
+  <button class="print-btn" onclick="window.print()">
+    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+      <polyline points="6 9 6 2 18 2 18 9"/>
+      <path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/>
+      <rect x="6" y="14" width="12" height="8"/>
+    </svg>
+    Imprimir ticket
+  </button>
+</div>
+
+<div class="tickets-wrap">
+
+  <!-- ── Copia cliente ── -->
+  <div class="ticket">
+    <div class="ticket-header">
+      <img src="{{ logo_url }}" alt="Trota">
+      <div class="folio">Folio: {{ renta.folio }}</div>
+      <span class="copy-label">Copia cliente</span>
+    </div>
+    <div class="ticket-body">
+      {% include "partial/ticket_content.html" with is_admin=False %}
+    </div>
+    <div class="ticket-footer">¡Gracias por tu preferencia! · Av. Josefa Ortiz 165-C, Villa de Álvarez · Tel: 312&nbsp;152&nbsp;9952</div>
+  </div>
+
+  <!-- ── Copia administración ── -->
+  <div class="ticket">
+    <div class="ticket-header">
+      <img src="{{ logo_url }}" alt="Trota">
+      <div class="folio">Folio: {{ renta.folio }}</div>
+      <span class="copy-label">Copia administración</span>
+    </div>
+    <div class="ticket-body">
+      {% include "partial/ticket_content.html" with is_admin=True %}
+      <hr class="div">
+      <div class="sign-field">
+        <p><strong>Extensiones utilizadas:</strong></p>
+        <div class="sign-line"></div>
+        <p><strong>Motores instalados:</strong></p>
+        <div class="sign-line"></div>
+        <p><strong>Recolección — Día:</strong></p>
+        <div class="sign-line"></div>
+        <p><strong>Hora:</strong></p>
+        <div class="sign-line"></div>
+      </div>
+    </div>
+    <div class="ticket-footer">Copia interna – Administración · {{ renta.folio }}</div>
+  </div>
+
+</div>
 </body>
 </html>

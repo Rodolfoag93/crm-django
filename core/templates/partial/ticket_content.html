@@ -1,0 +1,76 @@
+<div class="section">
+  <div class="section-title">Datos del evento</div>
+  <div class="field-row">
+    <span class="lbl">Cliente</span>
+    <span class="val">{{ renta.cliente.nombre }}</span>
+  </div>
+  <div class="field-row">
+    <span class="lbl">Teléfono</span>
+    <span class="val">{{ renta.cliente.telefono }}</span>
+  </div>
+  <div class="field-row">
+    <span class="lbl">Fecha</span>
+    <span class="val">{{ renta.fecha_renta }}</span>
+  </div>
+  <div class="field-row">
+    <span class="lbl">Horario</span>
+    <span class="val">{{ renta.hora_inicio|slice:":5" }} – {{ renta.hora_fin|slice:":5" }}</span>
+  </div>
+  <div class="field-row">
+    <span class="lbl">Dirección</span>
+    <span class="val">{{ renta.calle_y_numero }}, {{ renta.colonia }}, {{ renta.ciudad_o_municipio }}</span>
+  </div>
+</div>
+
+<hr class="div">
+
+<div class="section">
+  <div class="section-title">Productos</div>
+  <table class="products-table">
+    <thead>
+      <tr>
+        <th>Producto</th>
+        <th>Cant</th>
+        <th>P.U.</th>
+        <th>Subtotal</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in productos %}
+      <tr>
+        <td>{{ p.nombre }}</td>
+        <td>{{ p.cantidad }}</td>
+        <td>${{ p.precio|floatformat:0 }}</td>
+        <td>${{ p.subtotal|floatformat:0 }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<hr class="div">
+
+<div class="totals">
+  <div class="total-row big">
+    <span class="t-lbl">Total</span>
+    <span class="t-val">${{ total|floatformat:0 }}</span>
+  </div>
+  {% if anticipo > 0 %}
+  <div class="total-row">
+    <span class="t-lbl">Anticipo recibido</span>
+    <span class="t-val">${{ anticipo|floatformat:0 }}</span>
+  </div>
+  <div class="total-row pend">
+    <span class="t-lbl">Saldo pendiente</span>
+    <span class="t-val">${{ restante|floatformat:0 }}</span>
+  </div>
+  {% endif %}
+</div>
+
+{% if renta.comentarios %}
+<hr class="div">
+<div class="section">
+  <div class="section-title">Comentarios</div>
+  <div style="font-size:12px; color:#162016; line-height:1.5">{{ renta.comentarios }}</div>
+</div>
+{% endif %}
