@@ -7,7 +7,7 @@ interface Renta {
   fecha_renta: string; hora_inicio: string | null; hora_fin: string | null
   calle_y_numero: string; colonia: string; ciudad_o_municipio: string
   precio_total: string; anticipo: string; pagado: boolean
-  estado_entrega: string; productos: { id: number; nombre: string; cantidad: number }[]
+  estado_entrega: string; productos: { id: number; producto_nombre: string; cantidad: number }[]
 }
 
 interface PaginatedResponse { count: number; next: string | null; previous: string | null; results: Renta[] }
@@ -43,6 +43,25 @@ export default function Rentas() {
   const [data, setData] = useState<PaginatedResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [detalle, setDetalle] = useState<Renta | null>(null)
+  const [marcandoPagado, setMarcandoPagado] = useState(false)
+
+  const marcarPagado = async () => {
+    if (!detalle || detalle.pagado) return
+    setMarcandoPagado(true)
+    try {
+      await api.patch(`/rentas/${detalle.id}/`, { pagado: true })
+      const actualizado = { ...detalle, pagado: true }
+      setDetalle(actualizado)
+      setData(prev => prev ? {
+        ...prev,
+        results: prev.results.map(r => r.id === detalle.id ? actualizado : r)
+      } : prev)
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setMarcandoPagado(false)
+    }
+  }
 
   const fetchRentas = useCallback(() => {
     setLoading(true)
@@ -193,7 +212,7 @@ export default function Rentas() {
                       <div className="flex flex-wrap gap-1">
                         {r.productos.slice(0,2).map(p => (
                           <span key={p.id} className="text-xs px-2 py-0.5 rounded-full" style={{ background: '#f0f4f0', color: '#5a7060' }}>
-                            {p.cantidad > 1 ? `${p.cantidad}× ` : ''}{p.nombre}
+                            {p.cantidad > 1 ? `${p.cantidad}× ` : ''}{p.producto_nombre}
                           </span>
                         ))}
                         {r.productos.length > 2 && <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: '#f0f4f0', color: '#5a7060' }}>+{r.productos.length - 2}</span>}
@@ -283,7 +302,7 @@ export default function Rentas() {
                 <div className="flex flex-wrap gap-1.5 col-span-2">
                   {detalle.productos.map(p => (
                     <span key={p.id} className="text-xs px-2.5 py-1 rounded-lg border" style={{ background: '#f8fbf8', borderColor: '#ddeadd', color: '#162016' }}>
-                      {p.cantidad > 1 ? `${p.cantidad}× ` : ''}{p.nombre}
+                      {p.cantidad > 1 ? `${p.cantidad}× ` : ''}{p.producto_nombre}
                     </span>
                   ))}
                 </div>
@@ -295,18 +314,36 @@ export default function Rentas() {
               </Section>
             </div>
 
-            <div className="flex gap-2 p-4" style={{ borderTop: '1px solid #ddeadd' }}>
-              <a href={`tel:${detalle.cliente_telefono}`}
-                className="flex-1 text-center text-sm font-medium py-2 rounded-lg border transition-colors"
-                style={{ borderColor: '#ddeadd', color: '#5a7060' }}>
-                Llamar
-              </a>
-              <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${detalle.calle_y_numero} ${detalle.colonia} ${detalle.ciudad_o_municipio}`)}`}
-                target="_blank" rel="noopener noreferrer"
-                className="flex-1 text-center text-sm font-medium py-2 rounded-lg border transition-colors"
-                style={{ borderColor: '#ddeadd', color: '#5a7060' }}>
-                Mapa
-              </a>
+            <div className="flex flex-col gap-2 p-4" style={{ borderTop: '1px solid #ddeadd' }}>
+              {!detalle.pagado && (
+                <button
+                  onClick={marcarPagado}
+                  disabled={marcandoPagado}
+                  className="w-full text-sm font-semibold py-2.5 rounded-lg transition-colors disabled:opacity-60"
+                  style={{ background: '#16a34a', color: 'white' }}
+                >
+                  {marcandoPagado ? 'Guardando…' : '✓ Marcar como pagado'}
+                </button>
+              )}
+              {detalle.pagado && (
+                <div className="w-full text-center text-sm font-semibold py-2.5 rounded-lg"
+                  style={{ background: '#dcfce7', color: '#15803d' }}>
+                  ✓ Renta pagada
+                </div>
+              )}
+              <div className="flex gap-2">
+                <a href={`tel:${detalle.cliente_telefono}`}
+                  className="flex-1 text-center text-sm font-medium py-2 rounded-lg border transition-colors"
+                  style={{ borderColor: '#ddeadd', color: '#5a7060' }}>
+                  Llamar
+                </a>
+                <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${detalle.calle_y_numero} ${detalle.colonia} ${detalle.ciudad_o_municipio}`)}`}
+                  target="_blank" rel="noopener noreferrer"
+                  className="flex-1 text-center text-sm font-medium py-2 rounded-lg border transition-colors"
+                  style={{ borderColor: '#ddeadd', color: '#5a7060' }}>
+                  Mapa
+                </a>
+              </div>
             </div>
           </div>
         </div>
