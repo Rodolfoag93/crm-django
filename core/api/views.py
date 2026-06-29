@@ -2691,4 +2691,45 @@ def api_mapa_entregas(request):
             'repartidores': repartidores,
         })
 
-    return Response(data)
+    # Posiciones de repartidores activos (última ubicación en la última hora)
+    from django.utils import timezone as tz
+    from datetime import timedelta
+    hace_una_hora = tz.now() - timedelta(hours=1)
+    repartidores_ids = set()
+    for ruta in rutas:
+        for re_emp in ruta.empleados.all():
+            repartidores_ids.add(re_emp.empleado.id)
+
+    from core.models import Empleado
+    repartidores_activos = []
+    if repartidores_ids:
+        for emp in Empleado.objects.filter(id__in=repartidores_ids, ultima_ubicacion__gte=hace_una_hora):
+            repartidores_activos.append({
+                'id': emp.id,
+                'nombre': emp.nombre,
+                'lat': float(emp.lat_actual) if emp.lat_actual else None,
+                'lon': float(emp.lon_actual) if emp.lon_actual else None,
+                'ultima_ubicacion': emp.ultima_ubicacion.isoformat() if emp.ultima_ubicacion else None,
+            })
+
+    return Response({'entregas': data, 'repartidores': repartidores_activos})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def api_actualizar_ubicacion(request):
+    try:
+        empleado = request.user.empleado
+    except Exception:
+        return Response({'error': 'Sin perfil de empleado.'}, status=403)
+
+    lat = request.data.get('lat')
+    lon = request.data.get('lon')
+    if lat is None or lon is None:
+        return Response({'error': 'lat y lon requeridos.'}, status=400)
+
+    empleado.lat_actual = lat
+    empleado.lon_actual = lon
+    empleado.ultima_ubicacion = timezone.now()
+    empleado.save(update_fields=['lat_actual', 'lon_actual', 'ultima_ubicacion'])
+    return Response({'ok': True})

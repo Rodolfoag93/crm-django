@@ -487,6 +487,9 @@ class Empleado(models.Model):
         blank=True,
         related_name='empleado'
     )
+    lat_actual = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    lon_actual = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    ultima_ubicacion = models.DateTimeField(null=True, blank=True)
 
     def __str__(self):
         return self.nombre

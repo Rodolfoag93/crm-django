@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
@@ -16,6 +16,14 @@ interface Parada {
   lat: number | null
   lon: number | null
   repartidores: string[]
+}
+
+interface RepartidorActivo {
+  id: number
+  nombre: string
+  lat: number | null
+  lon: number | null
+  ultima_ubicacion: string | null
 }
 
 const COLORES: Record<string, { fill: string; stroke: string; label: string }> = {
@@ -43,10 +51,33 @@ function svgIcon(fill: string, stroke: string, num: number) {
   })
 }
 
+function carIcon(nombre: string) {
+  const inicial = nombre.charAt(0).toUpperCase()
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 40 40">
+      <circle cx="20" cy="20" r="19" fill="#1d4ed8" stroke="#1e3a8a" stroke-width="1.5"/>
+      <text x="20" y="16" text-anchor="middle" dominant-baseline="middle"
+            font-family="system-ui,sans-serif" font-size="14">🚚</text>
+      <text x="20" y="30" text-anchor="middle" dominant-baseline="middle"
+            font-family="system-ui,sans-serif" font-size="9" font-weight="700" fill="white">
+        ${inicial}
+      </text>
+    </svg>`
+  return L.divIcon({
+    html: svg,
+    className: '',
+    iconSize: [40, 40],
+    iconAnchor: [20, 20],
+    popupAnchor: [0, -22],
+  })
+}
+
 function AjustarVista({ puntos }: { puntos: [number, number][] }) {
   const map = useMap()
+  const first = useRef(true)
   useEffect(() => {
-    if (puntos.length === 0) return
+    if (!first.current || puntos.length === 0) return
+    first.current = false
     if (puntos.length === 1) {
       map.setView(puntos[0], 14)
     } else {
@@ -58,18 +89,31 @@ function AjustarVista({ puntos }: { puntos: [number, number][] }) {
 
 export default function MapaEntregas() {
   const [paradas, setParadas] = useState<Parada[]>([])
+  const [repartidores, setRepartidores] = useState<RepartidorActivo[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
-  useEffect(() => {
+  const cargar = (inicial = false) => {
     api.get('/mapa-entregas/')
-      .then(r => setParadas(r.data))
-      .catch(() => setError('No se pudo cargar el mapa.'))
-      .finally(() => setLoading(false))
+      .then(r => {
+        setParadas(r.data.entregas ?? [])
+        setRepartidores(r.data.repartidores ?? [])
+      })
+      .catch(() => { if (inicial) setError('No se pudo cargar el mapa.') })
+      .finally(() => { if (inicial) setLoading(false) })
+  }
+
+  useEffect(() => {
+    cargar(true)
+    const id = setInterval(() => cargar(), 30_000)
+    return () => clearInterval(id)
   }, [])
 
   const conCoords = paradas.filter(p => p.lat !== null && p.lon !== null)
-  const puntos: [number, number][] = conCoords.map(p => [p.lat!, p.lon!])
+  const puntos: [number, number][] = [
+    ...conCoords.map(p => [p.lat!, p.lon!] as [number, number]),
+    ...repartidores.filter(r => r.lat && r.lon).map(r => [r.lat!, r.lon!] as [number, number]),
+  ]
 
   const counts = {
     pendiente: paradas.filter(p => p.estado === 'pendiente').length,
@@ -89,6 +133,12 @@ export default function MapaEntregas() {
               {counts[e]} {COLORES[e].label.toLowerCase()}
             </span>
           ))}
+          {repartidores.length > 0 && (
+            <span className="flex items-center gap-1 text-xs" style={{ color: '#5a7060' }}>
+              <span className="w-2 h-2 rounded-full inline-block" style={{ background: '#1d4ed8' }} />
+              {repartidores.length} en ruta
+            </span>
+          )}
         </div>
       </div>
 
@@ -119,6 +169,8 @@ export default function MapaEntregas() {
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
             />
             <AjustarVista puntos={puntos} />
+
+            {/* Pines de entregas */}
             {conCoords.map((p, i) => {
               const col = COLORES[p.estado] ?? COLORES.pendiente
               return (
@@ -156,6 +208,28 @@ export default function MapaEntregas() {
                 </Marker>
               )
             })}
+
+            {/* Marcadores de repartidores activos */}
+            {repartidores.filter(r => r.lat && r.lon).map(r => (
+              <Marker
+                key={`rep-${r.id}`}
+                position={[r.lat!, r.lon!]}
+                icon={carIcon(r.nombre)}
+              >
+                <Popup>
+                  <div style={{ minWidth: 140, fontFamily: 'system-ui, sans-serif' }}>
+                    <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 4, color: '#162016' }}>
+                      🚚 {r.nombre}
+                    </div>
+                    {r.ultima_ubicacion && (
+                      <div style={{ fontSize: 10, color: '#5a7060' }}>
+                        Última señal: {new Date(r.ultima_ubicacion).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
+                      </div>
+                    )}
+                  </div>
+                </Popup>
+              </Marker>
+            ))}
           </MapContainer>
         )}
         {!loading && !error && paradas.length > 0 && conCoords.length < paradas.length && (

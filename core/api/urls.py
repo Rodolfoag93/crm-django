@@ -13,7 +13,7 @@ from core.api.views import (
     api_responder_evento_animador, api_calificar_coordinador,
     api_ranking_coordinadores, api_mi_calificacion_coordinador, api_animadores_disponibles, api_asignar_animador, api_quitar_animador,
     api_calificar_animador, api_ranking_animadores, api_animadores_por_calificar, api_registro_solicitud,
-    api_rankings_eventos
+    api_rankings_eventos, api_actualizar_ubicacion
 )
 from core.views.rutas import api_mis_rutas, api_confirmar_entrega, api_confirmar_recogida
 from django.urls import path
@@ -38,6 +38,7 @@ urlpatterns = [
     path('nomina/pagos-extra/<int:pago_id>/eliminar/', api_eliminar_pago_extra),
     path('nomina/<int:nomina_id>/recibo/', api_recibo_nomina),
     path('mapa-entregas/', api_mapa_entregas),
+    path('ubicacion/', api_actualizar_ubicacion),
 ] + router.urls + [
     path('auth/me/', me, name='auth-me'),
     path('rutas/mis-rutas/', api_mis_rutas, name='api_mis_rutas'),

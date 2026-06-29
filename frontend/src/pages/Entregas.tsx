@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useAuthStore } from '../stores/authStore'
 import api from '../lib/api'
 
@@ -55,11 +55,28 @@ export default function Entregas() {
   const [ticketParada, setTicketParada] = useState<Parada | null>(null)
   const [depositoModal, setDepositoModal] = useState<{ monto: number; folio: string; rentaId: number } | null>(null)
 
+  const geoRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
   useEffect(() => {
     api.get('/rutas/mis-rutas/')
       .then((res: any) => setRutas(res.data))
       .catch(() => setError('No se pudo cargar tu ruta del día.'))
       .finally(() => setLoading(false))
+  }, [])
+
+  // GPS tracking: send position every 30s while page is open
+  useEffect(() => {
+    if (!navigator.geolocation) return
+    const enviar = () => {
+      navigator.geolocation.getCurrentPosition(
+        pos => api.post('/ubicacion/', { lat: pos.coords.latitude, lon: pos.coords.longitude }).catch(() => {}),
+        () => {},
+        { enableHighAccuracy: true, timeout: 10000 },
+      )
+    }
+    enviar()
+    geoRef.current = setInterval(enviar, 30_000)
+    return () => { if (geoRef.current) clearInterval(geoRef.current) }
   }, [])
 
   const abrirMapa = (direccion: string) => {
