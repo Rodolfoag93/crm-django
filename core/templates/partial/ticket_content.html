@@ -31,7 +31,6 @@
       <tr>
         <th>Producto</th>
         <th>Cant</th>
-        <th>P.U.</th>
         <th>Subtotal</th>
       </tr>
     </thead>
@@ -40,7 +39,6 @@
       <tr>
         <td>{{ p.nombre }}</td>
         <td>{{ p.cantidad }}</td>
-        <td>${{ p.precio|floatformat:0 }}</td>
         <td>${{ p.subtotal|floatformat:0 }}</td>
       </tr>
       {% endfor %}
