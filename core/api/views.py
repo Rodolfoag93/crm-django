@@ -220,6 +220,64 @@ class RentaViewSet(viewsets.ModelViewSet):
             renta.save(update_fields=['status', 'estado_entrega', 'comentarios'])
         return Response({'ok': True})
 
+    @action(detail=True, methods=['patch'])
+    def editar(self, request, pk=None):
+        from django.db import transaction as db_transaction
+        from decimal import Decimal, InvalidOperation
+        if not request.user.is_staff:
+            return Response({'error': 'No autorizado.'}, status=403)
+        renta = self.get_object()
+        data = request.data
+
+        campos = ['fecha_renta', 'hora_inicio', 'hora_fin',
+                  'calle_y_numero', 'colonia', 'ciudad_o_municipio', 'comentarios']
+        with db_transaction.atomic():
+            for campo in campos:
+                if campo in data:
+                    setattr(renta, campo, data[campo])
+
+            productos_raw = data.get('productos')
+            if productos_raw is not None:
+                renta.rentaproductos.all().delete()
+                total = Decimal('0')
+                for p in productos_raw:
+                    try:
+                        prod = Producto.objects.get(id=p['id'])
+                    except Producto.DoesNotExist:
+                        return Response({'error': f"Producto {p['id']} no encontrado."}, status=400)
+                    try:
+                        cantidad = int(p['cantidad'])
+                        precio = Decimal(str(p['precio_unitario']))
+                    except (ValueError, InvalidOperation):
+                        return Response({'error': 'Cantidad o precio inválido.'}, status=400)
+                    RentaProducto.objects.create(
+                        renta=renta, producto=prod,
+                        cantidad=cantidad, precio_unitario=precio,
+                    )
+                    total += precio * cantidad
+
+                precio_manual = data.get('precio_total')
+                if precio_manual:
+                    try:
+                        renta.precio_total = Decimal(str(precio_manual))
+                    except InvalidOperation:
+                        pass
+                else:
+                    renta.precio_total = total
+
+            renta.save()
+
+            # Actualizar Google Calendar si existe
+            try:
+                if renta.evento_google_id:
+                    from core.google_calendar import actualizar_evento_renta
+                    actualizar_evento_renta(renta)
+            except Exception:
+                pass
+
+        serializer = self.get_serializer(renta)
+        return Response(serializer.data)
+
     @action(detail=True, methods=['get'])
     def ticket(self, request, pk=None):
         from django.template.loader import render_to_string

@@ -418,6 +418,14 @@ export default function Rentas() {
                 </div>
               )}
               <div className="flex gap-2">
+                {detalle.estado_entrega !== 'CANCELADO' && (
+                  <button
+                    onClick={() => navigate(`/crm/rentas/${detalle.id}/editar`)}
+                    className="flex-1 text-center text-sm font-medium py-2 rounded-lg border transition-colors"
+                    style={{ borderColor: '#ddeadd', color: '#5a7060' }}>
+                    Editar
+                  </button>
+                )}
                 <a href={`tel:${detalle.cliente_telefono}`}
                   className="flex-1 text-center text-sm font-medium py-2 rounded-lg border transition-colors"
                   style={{ borderColor: '#ddeadd', color: '#5a7060' }}>
