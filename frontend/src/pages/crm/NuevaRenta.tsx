@@ -106,6 +106,8 @@ export default function NuevaRenta() {
   const [precioManual, setPrecioManual] = useState('')
   const [anticipo, setAnticipo] = useState('')
   const [metodoPago, setMetodoPago] = useState<'efectivo' | 'transferencia'>('efectivo')
+  const [cuentaAnticipoId, setCuentaAnticipoId] = useState<number | ''>('')
+  const [cuentas, setCuentas] = useState<{ id: number; nombre: string; banco?: string; tipo: string }[]>([])
   const [notas, setNotas] = useState('')
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
@@ -197,6 +199,7 @@ export default function NuevaRenta() {
         precio_total: totalFinal || null,
         anticipo: anticipo ? parseFloat(anticipo) : 0,
         metodo_pago: metodoPago,
+        ...(metodoPago === 'transferencia' && cuentaAnticipoId ? { cuenta_anticipo_id: cuentaAnticipoId } : {}),
         notas,
         productos: productos.map(p => ({
           id: p.id,
@@ -507,22 +510,59 @@ export default function NuevaRenta() {
             </div>
 
             {parseFloat(anticipo) > 0 && (
-              <div>
-                <Label>Método de anticipo</Label>
-                <div className="flex gap-2">
-                  {[['efectivo','💵 Efectivo'],['transferencia','🏦 Transferencia']].map(([v,l]) => (
-                    <button key={v} onClick={() => setMetodoPago(v as 'efectivo' | 'transferencia')}
-                      className="flex-1 text-sm font-medium py-2 rounded-xl border transition-all"
-                      style={{
-                        borderColor: metodoPago === v ? '#16a34a' : '#ddeadd',
-                        borderWidth: metodoPago === v ? 2 : 1,
-                        background: metodoPago === v ? '#f0fdf4' : 'white',
-                        color: metodoPago === v ? '#15803d' : '#5a7060',
-                      }}>
-                      {l}
-                    </button>
-                  ))}
+              <div className="flex flex-col gap-3">
+                <div>
+                  <Label>Método de anticipo</Label>
+                  <div className="flex gap-2">
+                    {[['efectivo','💵 Efectivo'],['transferencia','🏦 Transferencia']].map(([v,l]) => (
+                      <button key={v} onClick={() => {
+                        setMetodoPago(v as 'efectivo' | 'transferencia')
+                        setCuentaAnticipoId('')
+                        if (v === 'transferencia' && cuentas.length === 0) {
+                          api.get('/cuentas/').then(r => setCuentas(r.data)).catch(console.error)
+                        }
+                      }}
+                        className="flex-1 text-sm font-medium py-2 rounded-xl border transition-all"
+                        style={{
+                          borderColor: metodoPago === v ? '#16a34a' : '#ddeadd',
+                          borderWidth: metodoPago === v ? 2 : 1,
+                          background: metodoPago === v ? '#f0fdf4' : 'white',
+                          color: metodoPago === v ? '#15803d' : '#5a7060',
+                        }}>
+                        {l}
+                      </button>
+                    ))}
+                  </div>
                 </div>
+
+                {metodoPago === 'transferencia' && (
+                  <div>
+                    <Label>Cuenta destino del anticipo</Label>
+                    <div className="flex flex-col gap-1.5">
+                      {cuentas.filter(c => c.tipo.toLowerCase() !== 'efectivo').map(c => (
+                        <button key={c.id} onClick={() => setCuentaAnticipoId(c.id)}
+                          className="flex items-center gap-3 px-4 py-2.5 rounded-xl border text-left transition-all"
+                          style={{
+                            borderColor: cuentaAnticipoId === c.id ? '#16a34a' : '#ddeadd',
+                            borderWidth: cuentaAnticipoId === c.id ? 2 : 1,
+                            background: cuentaAnticipoId === c.id ? '#f0fdf4' : 'white',
+                          }}>
+                          <span style={{ fontSize: 16 }}>🏦</span>
+                          <div className="flex-1">
+                            <div className="text-sm font-medium" style={{ color: '#162016' }}>{c.nombre}</div>
+                            {c.banco && <div style={{ fontSize: 11.5, color: '#8fa890' }}>{c.banco}</div>}
+                          </div>
+                          {cuentaAnticipoId === c.id && (
+                            <div className="w-5 h-5 rounded-full flex items-center justify-center" style={{ background: '#16a34a' }}>
+                              <svg width="10" height="10" fill="none" stroke="white" strokeWidth="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+                            </div>
+                          )}
+                        </button>
+                      ))}
+                      {cuentas.length === 0 && <div className="text-sm" style={{ color: '#8fa890' }}>Cargando cuentas…</div>}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 

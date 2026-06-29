@@ -90,63 +90,117 @@ class RentaViewSet(viewsets.ModelViewSet):
             qs = qs.filter(pagado=pagado.lower() == 'true')
         return qs.order_by('-fecha_renta', 'hora_inicio')
 
+    def _resolver_cuenta(self, metodo, cuenta_id):
+        """Retorna (cuenta, error_str). efectivo → caja automática."""
+        from core.models import Cuenta
+        if metodo == 'efectivo':
+            try:
+                return Cuenta.objects.get(tipo__iexact='efectivo'), None
+            except Cuenta.DoesNotExist:
+                return None, 'No hay caja de efectivo configurada.'
+            except Cuenta.MultipleObjectsReturned:
+                return Cuenta.objects.filter(tipo__iexact='efectivo').first(), None
+        else:
+            if not cuenta_id:
+                return None, 'Debes seleccionar una cuenta destino.'
+            try:
+                return Cuenta.objects.get(id=cuenta_id), None
+            except Cuenta.DoesNotExist:
+                return None, 'Cuenta no encontrada.'
+
+    def _saldo_pendiente(self, renta):
+        """Saldo = precio_total - anticipo - pagos parciales ya registrados."""
+        from core.models import PedidoFinanzas
+        from django.db.models import Sum
+        anticipo = float(renta.anticipo or 0)
+        pagos = 0.0
+        pedido = PedidoFinanzas.objects.filter(renta=renta).first()
+        if pedido:
+            pagos = float(pedido.movimientos.filter(tipo='INGRESO').aggregate(t=Sum('monto'))['t'] or 0)
+        return round(float(renta.precio_total) - anticipo - pagos, 2)
+
+    @action(detail=True, methods=['get'])
+    def saldo(self, request, pk=None):
+        from core.models import PedidoFinanzas
+        from django.db.models import Sum
+        if not request.user.is_staff:
+            return Response({'error': 'No autorizado.'}, status=403)
+        renta = self.get_object()
+        anticipo = float(renta.anticipo or 0)
+        pagos = 0.0
+        pedido = PedidoFinanzas.objects.filter(renta=renta).first()
+        if pedido:
+            pagos = float(pedido.movimientos.filter(tipo='INGRESO').aggregate(t=Sum('monto'))['t'] or 0)
+        saldo = round(float(renta.precio_total) - anticipo - pagos, 2)
+        return Response({
+            'precio_total': float(renta.precio_total),
+            'anticipo': anticipo,
+            'pagos_registrados': pagos,
+            'saldo_pendiente': max(0.0, saldo),
+            'pagado': renta.pagado,
+        })
+
     @action(detail=True, methods=['post'])
-    def marcar_pagado(self, request, pk=None):
-        from core.models import PedidoFinanzas, Cuenta, MovimientoContable
+    def registrar_pago(self, request, pk=None):
+        from core.models import PedidoFinanzas, MovimientoContable
         from django.utils import timezone as tz
         from django.db import transaction as db_transaction
+        from decimal import Decimal
         if not request.user.is_staff:
             return Response({'error': 'No autorizado.'}, status=403)
         renta = self.get_object()
         if renta.pagado:
-            return Response({'error': 'Esta renta ya está pagada.'}, status=400)
+            return Response({'error': 'Esta renta ya está completamente pagada.'}, status=400)
         metodo = request.data.get('metodo_pago')
         cuenta_id = request.data.get('cuenta_id')
+        monto_raw = request.data.get('monto')
         if metodo not in ('efectivo', 'transferencia'):
             return Response({'error': 'metodo_pago inválido.'}, status=400)
-        if metodo == 'transferencia' and not cuenta_id:
-            return Response({'error': 'Debes seleccionar una cuenta destino.'}, status=400)
-        # Efectivo → caja principal automáticamente
-        if metodo == 'efectivo':
-            try:
-                cuenta = Cuenta.objects.get(tipo__iexact='efectivo')
-            except Cuenta.DoesNotExist:
-                return Response({'error': 'No hay caja de efectivo configurada.'}, status=400)
-            except Cuenta.MultipleObjectsReturned:
-                cuenta = Cuenta.objects.filter(tipo__iexact='efectivo').first()
-        else:
-            try:
-                cuenta = Cuenta.objects.get(id=cuenta_id)
-            except Cuenta.DoesNotExist:
-                return Response({'error': 'Cuenta no encontrada.'}, status=400)
-        # Saldo = total - anticipo ya pagado
-        anticipo = renta.anticipo or 0
-        saldo = renta.precio_total - anticipo
-        if saldo <= 0:
-            return Response({'error': 'La renta no tiene saldo pendiente.'}, status=400)
+        try:
+            monto = Decimal(str(monto_raw))
+            if monto <= 0:
+                raise ValueError
+        except Exception:
+            return Response({'error': 'Monto inválido.'}, status=400)
+        cuenta, err = self._resolver_cuenta(metodo, cuenta_id)
+        if err:
+            return Response({'error': err}, status=400)
+        saldo = Decimal(str(self._saldo_pendiente(renta)))
+        if monto > saldo:
+            return Response({'error': f'El monto supera el saldo pendiente (${saldo:,.2f}).'}, status=400)
+        liquidacion = monto >= saldo
         with db_transaction.atomic():
-            renta.pagado = True
-            renta.save(update_fields=['pagado'])
             finanza, _ = PedidoFinanzas.objects.get_or_create(
                 renta=renta, defaults={'total': saldo}
             )
             now = tz.now()
-            finanza.pagado = True
-            finanza.metodo_pago = metodo
-            finanza.cuenta_destino = cuenta
-            finanza.fecha_pago = now
-            finanza.total = saldo
-            finanza.save()
+            desc = f"Liquidación renta #{renta.folio or renta.id}" if liquidacion else f"Pago parcial renta #{renta.folio or renta.id}"
             MovimientoContable.objects.create(
-                pedido=finanza,
-                tipo='INGRESO',
-                monto=saldo,
-                metodo_pago=metodo,
-                cuenta=cuenta,
-                fecha=now,
-                descripcion=f"Liquidación renta #{renta.folio or renta.id}"
+                pedido=finanza, tipo='INGRESO', monto=monto,
+                metodo_pago=metodo, cuenta=cuenta, fecha=now, descripcion=desc,
             )
-        return Response({'ok': True, 'metodo_pago': metodo, 'cuenta': cuenta.nombre})
+            if liquidacion:
+                renta.pagado = True
+                renta.save(update_fields=['pagado'])
+                finanza.pagado = True
+                finanza.metodo_pago = metodo
+                finanza.cuenta_destino = cuenta
+                finanza.fecha_pago = now
+                finanza.total = saldo
+                finanza.save()
+        nuevo_saldo = max(0.0, float(saldo) - float(monto))
+        return Response({'ok': True, 'liquidado': liquidacion, 'saldo_pendiente': nuevo_saldo})
+
+    # Kept for backwards compat — delegates to registrar_pago logic
+    @action(detail=True, methods=['post'])
+    def marcar_pagado(self, request, pk=None):
+        saldo = self._saldo_pendiente(self.get_object())
+        request.data._mutable = True if hasattr(request.data, '_mutable') else None
+        try:
+            request.data['monto'] = str(saldo)
+        except Exception:
+            pass
+        return self.registrar_pago(request, pk=pk)
 
     @action(detail=True, methods=['post'])
     def cancelar(self, request, pk=None):
@@ -1071,11 +1125,22 @@ def api_nueva_renta(request):
         # Anticipo → movimiento contable
         anticipo = renta.anticipo
         if anticipo > 0:
-            metodo_pago = data.get('metodo_pago', 'EFECTIVO')
+            metodo_pago = (data.get('metodo_pago') or 'efectivo').lower()
+            cuenta_anticipo = None
+            if metodo_pago == 'efectivo':
+                cuenta_anticipo = Cuenta.objects.filter(tipo__iexact='efectivo').first()
+            elif data.get('cuenta_anticipo_id'):
+                try:
+                    cuenta_anticipo = Cuenta.objects.get(id=data['cuenta_anticipo_id'])
+                except Cuenta.DoesNotExist:
+                    pass
+            finanza_obj = PedidoFinanzas.objects.filter(renta=renta).first()
             MovimientoContable.objects.create(
+                pedido=finanza_obj,
                 tipo='INGRESO',
                 monto=anticipo,
                 metodo_pago=metodo_pago,
+                cuenta=cuenta_anticipo,
                 fecha=timezone.now(),
                 descripcion=f'Anticipo renta #{renta.folio}',
             )
