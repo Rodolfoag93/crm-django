@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../../lib/api'
+import TicketModal from '../../components/TicketModal'
 
 interface Renta {
   id: number; folio: string
@@ -60,6 +61,9 @@ export default function Rentas() {
   const [cuentas, setCuentas] = useState<Cuenta[]>([])
   const [guardando, setGuardando] = useState(false)
   const [errorPago, setErrorPago] = useState('')
+
+  // ── Modal ticket ───────────────────────────────────────────────────────────
+  const [ticketRenta, setTicketRenta] = useState<{ id: number; folio: string } | null>(null)
 
   // ── Modal cancelar ─────────────────────────────────────────────────────────
   const [modalCancelar, setModalCancelar] = useState(false)
@@ -268,7 +272,14 @@ export default function Rentas() {
                     onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = '#f8fbf8'}
                     onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = 'transparent'}
                   >
-                    <td className="px-4 py-3" style={{ fontFamily: 'monospace', fontSize: 12.5, color: '#5a7060' }}>{r.folio}</td>
+                    <td className="px-4 py-3">
+                      <button
+                        onClick={e => { e.stopPropagation(); setTicketRenta({ id: r.id, folio: r.folio }) }}
+                        className="underline decoration-dotted transition-colors"
+                        style={{ fontFamily: 'monospace', fontSize: 12.5, color: '#16a34a', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                        title="Ver ticket"
+                      >{r.folio}</button>
+                    </td>
                     <td className="px-4 py-3">
                       <div className="font-medium" style={{ color: '#162016' }}>{r.cliente_nombre}</div>
                       <div style={{ fontSize: 11.5, color: '#8fa890' }}>{r.cliente_telefono}</div>
@@ -346,7 +357,15 @@ export default function Rentas() {
             <div className="flex items-center gap-3 px-5 py-4" style={{ borderBottom: '1px solid #ddeadd' }}>
               <div>
                 <div className="font-bold" style={{ fontSize: 16, color: '#162016' }}>{detalle.cliente_nombre}</div>
-                <div style={{ fontSize: 12, color: '#8fa890' }}>{detalle.folio} · {formatFecha(detalle.fecha_renta)}</div>
+                <div style={{ fontSize: 12, color: '#8fa890' }}>
+                  <button
+                    onClick={() => setTicketRenta({ id: detalle.id, folio: detalle.folio })}
+                    className="underline decoration-dotted"
+                    style={{ fontFamily: 'monospace', color: '#16a34a', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 12 }}
+                    title="Ver ticket"
+                  >{detalle.folio}</button>
+                  {' '}· {formatFecha(detalle.fecha_renta)}
+                </div>
               </div>
               <span className="ml-auto text-xs font-semibold px-2 py-0.5 rounded-full"
                 style={{ background: ESTADOS[detalle.estado_entrega]?.bg ?? '#f3f4f6', color: ESTADOS[detalle.estado_entrega]?.text ?? '#6b7280' }}>
@@ -677,6 +696,15 @@ export default function Rentas() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Modal ticket */}
+      {ticketRenta && (
+        <TicketModal
+          rentaId={ticketRenta.id}
+          folio={ticketRenta.folio}
+          onClose={() => setTicketRenta(null)}
+        />
       )}
     </div>
   )

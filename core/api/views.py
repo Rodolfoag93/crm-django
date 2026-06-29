@@ -220,6 +220,36 @@ class RentaViewSet(viewsets.ModelViewSet):
             renta.save(update_fields=['status', 'estado_entrega', 'comentarios'])
         return Response({'ok': True})
 
+    @action(detail=True, methods=['get'])
+    def ticket(self, request, pk=None):
+        from django.template.loader import render_to_string
+        from django.templatetags.static import static
+        from django.http import HttpResponse
+        if not request.user.is_staff:
+            return HttpResponse('No autorizado.', status=403, content_type='text/plain')
+        renta = self.get_object()
+        productos = []
+        for rp in renta.rentaproductos.select_related('producto').all():
+            subtotal = float(rp.precio_unitario) * rp.cantidad
+            productos.append({
+                'nombre': rp.producto.nombre,
+                'cantidad': rp.cantidad,
+                'precio': float(rp.precio_unitario),
+                'subtotal': subtotal,
+            })
+        total = float(renta.precio_total or 0)
+        anticipo = float(renta.anticipo or 0)
+        logo_url = request.build_absolute_uri(static('img/trota_logo.jpeg'))
+        html = render_to_string('core/ticket_renta.html', {
+            'renta': renta,
+            'productos': productos,
+            'total': total,
+            'anticipo': anticipo,
+            'restante': total - anticipo,
+            'logo_url': logo_url,
+        })
+        return HttpResponse(html, content_type='text/html; charset=utf-8')
+
     @action(detail=False, methods=['get'])
     def semana_actual(self, request):
         hoy = timezone.localdate()

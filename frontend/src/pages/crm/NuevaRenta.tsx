@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../../lib/api'
+import TicketModal from '../../components/TicketModal'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -111,6 +112,7 @@ export default function NuevaRenta() {
   const [notas, setNotas] = useState('')
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
+  const [ticketRenta, setTicketRenta] = useState<{ id: number; folio: string } | null>(null)
 
   // — Buscar cliente por teléfono —
   useEffect(() => {
@@ -217,7 +219,7 @@ export default function NuevaRenta() {
         payload.cliente_ciudad = ciudadCliente
       }
       const r = await api.post('/nueva-renta/', payload)
-      navigate('/crm/rentas', { state: { folio: r.data.folio } })
+      setTicketRenta({ id: r.data.renta_id, folio: r.data.folio })
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { error?: string } } })?.response?.data?.error
       setError(msg ?? 'Error al guardar la renta.')
@@ -603,6 +605,14 @@ export default function NuevaRenta() {
             </button>
           </div>
         </div>
+      )}
+
+      {ticketRenta && (
+        <TicketModal
+          rentaId={ticketRenta.id}
+          folio={ticketRenta.folio}
+          onClose={() => navigate('/crm/rentas')}
+        />
       )}
     </div>
   )
