@@ -90,6 +90,39 @@ class RentaViewSet(viewsets.ModelViewSet):
             qs = qs.filter(pagado=pagado.lower() == 'true')
         return qs.order_by('-fecha_renta', 'hora_inicio')
 
+    @action(detail=True, methods=['post'])
+    def marcar_pagado(self, request, pk=None):
+        from core.models import PedidoFinanzas, Cuenta
+        from django.utils import timezone as tz
+        if not request.user.is_staff:
+            return Response({'error': 'No autorizado.'}, status=403)
+        renta = self.get_object()
+        metodo = request.data.get('metodo_pago')
+        cuenta_id = request.data.get('cuenta_id')
+        if metodo not in ('efectivo', 'transferencia'):
+            return Response({'error': 'metodo_pago inválido.'}, status=400)
+        if metodo == 'transferencia' and not cuenta_id:
+            return Response({'error': 'Debes seleccionar una cuenta destino.'}, status=400)
+        cuenta = None
+        if cuenta_id:
+            try:
+                cuenta = Cuenta.objects.get(id=cuenta_id)
+            except Cuenta.DoesNotExist:
+                return Response({'error': 'Cuenta no encontrada.'}, status=400)
+        renta.pagado = True
+        renta.save(update_fields=['pagado'])
+        finanza, _ = PedidoFinanzas.objects.get_or_create(
+            renta=renta,
+            defaults={'total': renta.precio_total}
+        )
+        finanza.pagado = True
+        finanza.metodo_pago = metodo
+        finanza.cuenta_destino = cuenta
+        finanza.fecha_pago = tz.now()
+        finanza.total = renta.precio_total
+        finanza.save()
+        return Response({'ok': True, 'metodo_pago': metodo})
+
     @action(detail=False, methods=['get'])
     def semana_actual(self, request):
         hoy = timezone.localdate()

@@ -10,6 +10,8 @@ interface Renta {
   estado_entrega: string; productos: { id: number; producto_nombre: string; cantidad: number }[]
 }
 
+interface Cuenta { id: number; nombre: string; banco?: string; tipo: string }
+
 interface PaginatedResponse { count: number; next: string | null; previous: string | null; results: Renta[] }
 
 const ESTADOS: Record<string, { label: string; bg: string; text: string }> = {
@@ -43,23 +45,48 @@ export default function Rentas() {
   const [data, setData] = useState<PaginatedResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [detalle, setDetalle] = useState<Renta | null>(null)
-  const [marcandoPagado, setMarcandoPagado] = useState(false)
+  const [modalPago, setModalPago] = useState(false)
+  const [metodo, setMetodo] = useState<'efectivo' | 'transferencia'>('efectivo')
+  const [cuentaId, setCuentaId] = useState<number | ''>('')
+  const [cuentas, setCuentas] = useState<Cuenta[]>([])
+  const [guardando, setGuardando] = useState(false)
+  const [errorPago, setErrorPago] = useState('')
 
-  const marcarPagado = async () => {
-    if (!detalle || detalle.pagado) return
-    setMarcandoPagado(true)
+  const abrirModalPago = () => {
+    setMetodo('efectivo')
+    setCuentaId('')
+    setErrorPago('')
+    if (cuentas.length === 0) {
+      api.get('/cuentas/').then(r => setCuentas(r.data)).catch(console.error)
+    }
+    setModalPago(true)
+  }
+
+  const confirmarPago = async () => {
+    if (!detalle) return
+    if (metodo === 'transferencia' && !cuentaId) {
+      setErrorPago('Selecciona una cuenta destino.')
+      return
+    }
+    setGuardando(true)
+    setErrorPago('')
     try {
-      await api.patch(`/rentas/${detalle.id}/`, { pagado: true })
+      await api.post(`/rentas/${detalle.id}/marcar_pagado/`, {
+        metodo_pago: metodo,
+        ...(metodo === 'transferencia' ? { cuenta_id: cuentaId } : {}),
+      })
       const actualizado = { ...detalle, pagado: true }
       setDetalle(actualizado)
       setData(prev => prev ? {
         ...prev,
         results: prev.results.map(r => r.id === detalle.id ? actualizado : r)
       } : prev)
-    } catch (e) {
-      console.error(e)
+      setModalPago(false)
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { error?: string } } })?.response?.data?.error
+      setErrorPago(msg ?? 'Error al guardar el pago.')
     } finally {
-      setMarcandoPagado(false)
+      setGuardando(false)
     }
   }
 
@@ -315,17 +342,15 @@ export default function Rentas() {
             </div>
 
             <div className="flex flex-col gap-2 p-4" style={{ borderTop: '1px solid #ddeadd' }}>
-              {!detalle.pagado && (
+              {!detalle.pagado ? (
                 <button
-                  onClick={marcarPagado}
-                  disabled={marcandoPagado}
-                  className="w-full text-sm font-semibold py-2.5 rounded-lg transition-colors disabled:opacity-60"
+                  onClick={abrirModalPago}
+                  className="w-full text-sm font-semibold py-2.5 rounded-lg transition-colors"
                   style={{ background: '#16a34a', color: 'white' }}
                 >
-                  {marcandoPagado ? 'Guardando…' : '✓ Marcar como pagado'}
+                  ✓ Marcar como pagado
                 </button>
-              )}
-              {detalle.pagado && (
+              ) : (
                 <div className="w-full text-center text-sm font-semibold py-2.5 rounded-lg"
                   style={{ background: '#dcfce7', color: '#15803d' }}>
                   ✓ Renta pagada
@@ -344,6 +369,127 @@ export default function Rentas() {
                   Mapa
                 </a>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal método de pago */}
+      {modalPago && detalle && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.4)' }}
+          onClick={e => { if (e.target === e.currentTarget) setModalPago(false) }}>
+          <div className="bg-white rounded-2xl shadow-xl" style={{ width: 420, maxWidth: '95vw' }}>
+            {/* Header */}
+            <div className="flex items-start justify-between px-6 pt-5 pb-4" style={{ borderBottom: '1px solid #ddeadd' }}>
+              <div>
+                <div className="font-bold" style={{ fontSize: 16, color: '#162016' }}>Registrar pago</div>
+                <div className="text-sm mt-0.5" style={{ color: '#5a7060' }}>
+                  {detalle.cliente_nombre} · <span style={{ fontFamily: 'monospace' }}>{detalle.folio}</span>
+                </div>
+              </div>
+              <button onClick={() => setModalPago(false)}
+                className="w-7 h-7 flex items-center justify-center rounded-md border text-sm mt-0.5"
+                style={{ borderColor: '#ddeadd', color: '#5a7060' }}>×</button>
+            </div>
+
+            <div className="px-6 py-5 flex flex-col gap-5">
+              {/* Total */}
+              <div className="flex items-center justify-between px-4 py-3 rounded-xl" style={{ background: '#f0fdf4', border: '1px solid #bbf7d0' }}>
+                <span className="text-sm font-medium" style={{ color: '#15803d' }}>Total a cobrar</span>
+                <span className="font-bold tabular-nums" style={{ fontSize: 20, color: '#15803d', letterSpacing: '-0.5px' }}>
+                  ${parseFloat(detalle.precio_total).toLocaleString('es-MX')}
+                </span>
+              </div>
+
+              {/* Método */}
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-wide mb-2.5" style={{ color: '#8fa890', fontSize: 10.5 }}>Método de pago</div>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { value: 'efectivo', label: 'Efectivo', icon: '💵', sub: 'Va a caja principal' },
+                    { value: 'transferencia', label: 'Transferencia', icon: '🏦', sub: 'Selecciona cuenta' },
+                  ].map(opt => (
+                    <button
+                      key={opt.value}
+                      onClick={() => setMetodo(opt.value as 'efectivo' | 'transferencia')}
+                      className="flex flex-col items-center gap-1 py-3.5 rounded-xl border transition-all"
+                      style={{
+                        borderColor: metodo === opt.value ? '#16a34a' : '#ddeadd',
+                        borderWidth: metodo === opt.value ? 2 : 1,
+                        background: metodo === opt.value ? '#f0fdf4' : 'white',
+                      }}
+                    >
+                      <span style={{ fontSize: 22 }}>{opt.icon}</span>
+                      <span className="font-semibold text-sm" style={{ color: '#162016' }}>{opt.label}</span>
+                      <span style={{ fontSize: 11, color: '#8fa890' }}>{opt.sub}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Cuenta destino */}
+              {metodo === 'transferencia' && (
+                <div>
+                  <div className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: '#8fa890', fontSize: 10.5 }}>Cuenta destino</div>
+                  {cuentas.length === 0 ? (
+                    <div className="text-sm text-center py-3" style={{ color: '#8fa890' }}>Cargando cuentas…</div>
+                  ) : (
+                    <div className="flex flex-col gap-1.5">
+                      {cuentas.filter(c => c.tipo === 'INGRESO' || c.tipo === 'AMBOS').map(c => (
+                        <button
+                          key={c.id}
+                          onClick={() => setCuentaId(c.id)}
+                          className="flex items-center gap-3 px-4 py-3 rounded-xl border text-left transition-all"
+                          style={{
+                            borderColor: cuentaId === c.id ? '#16a34a' : '#ddeadd',
+                            borderWidth: cuentaId === c.id ? 2 : 1,
+                            background: cuentaId === c.id ? '#f0fdf4' : 'white',
+                          }}
+                        >
+                          <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
+                            style={{ background: cuentaId === c.id ? '#dcfce7' : '#f0f4f0' }}>
+                            <span style={{ fontSize: 14 }}>🏦</span>
+                          </div>
+                          <div>
+                            <div className="font-medium text-sm" style={{ color: '#162016' }}>{c.nombre}</div>
+                            {c.banco && <div style={{ fontSize: 12, color: '#8fa890' }}>{c.banco}</div>}
+                          </div>
+                          {cuentaId === c.id && (
+                            <div className="ml-auto w-5 h-5 rounded-full flex items-center justify-center"
+                              style={{ background: '#16a34a' }}>
+                              <svg width="10" height="10" fill="none" stroke="white" strokeWidth="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>
+                            </div>
+                          )}
+                        </button>
+                      ))}
+                      {cuentas.filter(c => c.tipo === 'INGRESO' || c.tipo === 'AMBOS').length === 0 && (
+                        <div className="text-sm text-center py-3" style={{ color: '#8fa890' }}>No hay cuentas de ingreso configuradas.</div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {errorPago && (
+                <div className="text-sm px-4 py-2.5 rounded-lg" style={{ background: '#fee2e2', color: '#b91c1c' }}>{errorPago}</div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="flex gap-2 px-6 pb-5">
+              <button onClick={() => setModalPago(false)}
+                className="flex-1 text-sm font-medium py-2.5 rounded-xl border"
+                style={{ borderColor: '#ddeadd', color: '#5a7060' }}>
+                Cancelar
+              </button>
+              <button
+                onClick={confirmarPago}
+                disabled={guardando || (metodo === 'transferencia' && !cuentaId)}
+                className="flex-1 text-sm font-semibold py-2.5 rounded-xl transition-colors disabled:opacity-50"
+                style={{ background: '#16a34a', color: 'white' }}
+              >
+                {guardando ? 'Guardando…' : 'Confirmar pago'}
+              </button>
             </div>
           </div>
         </div>
