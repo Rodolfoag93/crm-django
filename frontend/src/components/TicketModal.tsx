@@ -24,7 +24,21 @@ export default function TicketModal({ rentaId, folio, onClose }: Props) {
     if (h && h > 100) setIframeH(Math.min(h + 32, window.innerHeight * 0.75))
   }
 
-  const handlePrint = () => iframeRef.current?.contentWindow?.print()
+  // Abre el HTML como blob en ventana nueva → el usuario imprime con Ctrl+P
+  // desde ahí el @media print y @page 80mm aplican sin interferencia del iframe
+  const handlePrint = () => {
+    if (!html) return
+    const blob = new Blob([html], { type: 'text/html; charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const win = window.open(url, '_blank')
+    if (win) {
+      win.onload = () => {
+        win.focus()
+        win.print()
+        setTimeout(() => URL.revokeObjectURL(url), 60_000)
+      }
+    }
+  }
 
   return (
     <div
@@ -47,7 +61,7 @@ export default function TicketModal({ rentaId, folio, onClose }: Props) {
               <button
                 onClick={handlePrint}
                 className="flex items-center gap-1.5 text-sm font-semibold px-4 py-1.5 rounded-lg"
-                style={{ background: '#0f3d22', color: 'white' }}
+                style={{ background: '#1a1a1a', color: 'white' }}
               >
                 <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                   <polyline points="6 9 6 2 18 2 18 9"/>
