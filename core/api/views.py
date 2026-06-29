@@ -239,7 +239,7 @@ class RentaViewSet(viewsets.ModelViewSet):
             })
         total = float(renta.precio_total or 0)
         anticipo = float(renta.anticipo or 0)
-        logo_url = request.build_absolute_uri(static('img/trota_logo.jpeg'))
+        logo_url = request.build_absolute_uri(static('img/logo1.png'))
         html = render_to_string('core/ticket_renta.html', {
             'renta': renta,
             'productos': productos,

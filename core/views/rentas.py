@@ -423,7 +423,7 @@ def ticket_pdf(request, renta_id):
             'precio': float(rp.precio_unitario),
             'subtotal': subtotal
         })
-    logo_url = request.build_absolute_uri(static('img/trota_logo.jpeg'))
+    logo_url = request.build_absolute_uri(static('img/logo1.png'))
     return render(request, 'core/ticket_renta.html', {
         'renta': renta,
         'productos': productos,
