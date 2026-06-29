@@ -181,6 +181,8 @@ class Renta(models.Model):
             models.Index(fields=['cliente']),
         ]
     evento_google_id = models.CharField(max_length=200, blank=True, null=True)
+    lat = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    lon = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     
     def save(self, *args, **kwargs):
         if not self.folio:

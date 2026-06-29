@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../../lib/api'
+import MapaEntregas from '../../components/MapaEntregas'
 
 interface AsistenciaEmpleado {
   id: number
@@ -35,7 +36,6 @@ const ESTADO: Record<string, { label: string; dot: string; pillBg: string; pillC
   CANCELADO:  { label: 'Cancelado',  dot: '#ef4444', pillBg: '#fee2e2', pillColor: '#b91c1c' },
 }
 
-const AVATAR_COLORS = ['#0f3d22', '#1a5c35', '#1e6b3e', '#1e3a5f', '#7c2d12', '#4c1d95']
 
 function StatCard({ label, value, sub, subColor, barColor, barPct, valueColor }: {
   label: string; value: string | number; sub?: string; subColor?: string
@@ -188,44 +188,7 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* Asistencia hoy */}
-        <div className="bg-white rounded-xl border overflow-hidden" style={{ borderColor: '#ddeadd' }}>
-          <div className="flex items-center justify-between px-4 py-3" style={{ borderBottom: '1px solid #ddeadd' }}>
-            <span className="font-semibold text-sm" style={{ color: '#162016' }}>Asistencia hoy</span>
-            <button onClick={() => navigate('/crm/empleados')} className="text-xs font-medium" style={{ color: '#16a34a' }}>
-              Ver todos →
-            </button>
-          </div>
-          {(data?.asistencia_lista ?? []).length === 0 ? (
-            <p className="text-sm text-center py-8" style={{ color: '#8fa890' }}>Sin empleados registrados</p>
-          ) : (
-            (data?.asistencia_lista ?? []).map((emp, i) => (
-              <div
-                key={emp.id}
-                className="flex items-center gap-3 px-4 py-2.5"
-                style={{ borderBottom: '1px solid #f5f8f5' }}
-              >
-                <div
-                  className="rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
-                  style={{ width: 28, height: 28, background: AVATAR_COLORS[i % AVATAR_COLORS.length] }}
-                >
-                  {emp.nombre.split(' ').slice(0, 2).map(n => n[0]).join('').toUpperCase()}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate" style={{ color: '#162016' }}>{emp.nombre}</p>
-                  <p className="text-xs truncate" style={{ color: '#8fa890' }}>
-                    {emp.tipo}{emp.hora_entrada ? ` · Entrada ${emp.hora_entrada}` : ''}
-                  </p>
-                </div>
-                {emp.hora_entrada ? (
-                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full flex-shrink-0" style={{ background: '#dcfce7', color: '#15803d' }}>✓</span>
-                ) : (
-                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full flex-shrink-0" style={{ background: '#fee2e2', color: '#b91c1c' }}>Sin entrada</span>
-                )}
-              </div>
-            ))
-          )}
-        </div>
+        <MapaEntregas />
       </div>
 
       {/* Solicitudes pendientes */}

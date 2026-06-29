@@ -2602,3 +2602,93 @@ def api_recibo_nomina(request, nomina_id):
     response['Content-Disposition'] = f'inline; filename="recibo_nomina_{nomina_id}.pdf"'
     HTML(string=html_string).write_pdf(response)
     return response
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def api_mapa_entregas(request):
+    if not request.user.is_staff:
+        return Response({'error': 'No autorizado.'}, status=403)
+
+    import requests as http_req
+    from concurrent.futures import ThreadPoolExecutor
+    from core.models import Ruta
+
+    hoy = date.today()
+    rutas = Ruta.objects.filter(fecha=hoy).prefetch_related(
+        'paradas__renta__cliente',
+        'empleados__empleado',
+    )
+
+    paradas_todas = []
+    for ruta in rutas:
+        repartidores = [re.empleado.nombre for re in ruta.empleados.all()]
+        for parada in ruta.paradas.all():
+            paradas_todas.append((parada, repartidores))
+
+    # Geocodificar rentas sin coordenadas secuencialmente (Nominatim: 1 req/s)
+    refrescar = request.query_params.get('refrescar') == '1'
+    if refrescar:
+        for parada, _ in paradas_todas:
+            parada.renta.lat = None
+            parada.renta.lon = None
+            parada.renta.save(update_fields=['lat', 'lon'])
+    sin_coords = [p for p, _ in paradas_todas if not p.renta.lat or not p.renta.lon]
+
+    def _nominatim(query):
+        try:
+            resp = http_req.get(
+                'https://nominatim.openstreetmap.org/search',
+                params={'q': query, 'format': 'json', 'limit': 1, 'countrycodes': 'mx'},
+                headers={'User-Agent': 'TrotaCRM/1.0 rodolfo.aguiar@codeablelabs.com'},
+                timeout=4,
+            )
+            results = resp.json()
+            return results[0] if results else None
+        except Exception:
+            return None
+
+    def geocodificar(parada):
+        import time
+        renta = parada.renta
+        ciudad = renta.ciudad_o_municipio or 'Colima'
+        # Estrategias de fallback: de más específico a menos
+        intentos = []
+        if renta.calle_y_numero and renta.colonia:
+            intentos.append(f"{renta.calle_y_numero}, {renta.colonia}, {ciudad}")
+        if renta.calle_y_numero:
+            intentos.append(f"{renta.calle_y_numero}, {ciudad}")
+        if renta.colonia:
+            intentos.append(f"{renta.colonia}, {ciudad}")
+        intentos.append(ciudad)
+
+        for query in intentos:
+            time.sleep(1)  # respetar rate limit de Nominatim
+            resultado = _nominatim(query)
+            if resultado:
+                renta.lat = resultado['lat']
+                renta.lon = resultado['lon']
+                renta.save(update_fields=['lat', 'lon'])
+                return
+
+    for parada in sin_coords:
+        geocodificar(parada)
+
+    data = []
+    for parada, repartidores in paradas_todas:
+        renta = parada.renta
+        data.append({
+            'parada_id': parada.id,
+            'renta_id': renta.id,
+            'folio': renta.folio,
+            'cliente': renta.cliente.nombre,
+            'telefono': renta.cliente.telefono,
+            'direccion': f"{renta.calle_y_numero}, {renta.colonia}",
+            'hora_inicio': str(renta.hora_inicio) if renta.hora_inicio else None,
+            'estado': parada.estado,
+            'lat': float(renta.lat) if renta.lat else None,
+            'lon': float(renta.lon) if renta.lon else None,
+            'repartidores': repartidores,
+        })
+
+    return Response(data)

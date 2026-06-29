@@ -6,7 +6,7 @@ from core.api.views import (
     api_mantenimiento, api_marcar_limpieza, api_dashboard_admin, api_rentas_hoy, api_asistencia_hoy, api_editar_asistencia_admin,
     api_rutas_admin, api_crear_ruta, api_agregar_parada_admin, api_editar_ruta, api_eliminar_parada_admin, api_rentas_disponibles,
     api_nueva_renta, api_buscar_clientes, api_buscar_productos, api_cuentas, api_crear_gasto,
-    api_catalogo_pagos_extra, api_crear_pago_extra_nomina, api_eliminar_pago_extra, api_recibo_nomina, api_mis_eventos, api_evento_detalle,
+    api_catalogo_pagos_extra, api_crear_pago_extra_nomina, api_eliminar_pago_extra, api_recibo_nomina, api_mapa_entregas, api_mis_eventos, api_evento_detalle,
     api_lista_material_evento, api_agregar_material_evento, api_quitar_material_evento, api_catalogo_materiales,
     api_listas_material_encargado, api_lista_material_detalle_encargado, api_surtir_lista, api_confirmar_llegada_coordinador,
     api_recibir_lista_bodega, api_subir_evidencia, api_evidencias_lista, api_enviar_lista_coordinador, api_mis_eventos_animador,
@@ -37,6 +37,7 @@ urlpatterns = [
     path('nomina/<int:nomina_id>/pagos-extra/', api_crear_pago_extra_nomina),
     path('nomina/pagos-extra/<int:pago_id>/eliminar/', api_eliminar_pago_extra),
     path('nomina/<int:nomina_id>/recibo/', api_recibo_nomina),
+    path('mapa-entregas/', api_mapa_entregas),
 ] + router.urls + [
     path('auth/me/', me, name='auth-me'),
     path('rutas/mis-rutas/', api_mis_rutas, name='api_mis_rutas'),
