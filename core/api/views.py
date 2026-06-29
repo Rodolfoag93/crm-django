@@ -92,36 +92,61 @@ class RentaViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def marcar_pagado(self, request, pk=None):
-        from core.models import PedidoFinanzas, Cuenta
+        from core.models import PedidoFinanzas, Cuenta, MovimientoContable
         from django.utils import timezone as tz
+        from django.db import transaction as db_transaction
         if not request.user.is_staff:
             return Response({'error': 'No autorizado.'}, status=403)
         renta = self.get_object()
+        if renta.pagado:
+            return Response({'error': 'Esta renta ya está pagada.'}, status=400)
         metodo = request.data.get('metodo_pago')
         cuenta_id = request.data.get('cuenta_id')
         if metodo not in ('efectivo', 'transferencia'):
             return Response({'error': 'metodo_pago inválido.'}, status=400)
         if metodo == 'transferencia' and not cuenta_id:
             return Response({'error': 'Debes seleccionar una cuenta destino.'}, status=400)
-        cuenta = None
-        if cuenta_id:
+        # Efectivo → caja principal automáticamente
+        if metodo == 'efectivo':
+            try:
+                cuenta = Cuenta.objects.get(tipo__iexact='efectivo')
+            except Cuenta.DoesNotExist:
+                return Response({'error': 'No hay caja de efectivo configurada.'}, status=400)
+            except Cuenta.MultipleObjectsReturned:
+                cuenta = Cuenta.objects.filter(tipo__iexact='efectivo').first()
+        else:
             try:
                 cuenta = Cuenta.objects.get(id=cuenta_id)
             except Cuenta.DoesNotExist:
                 return Response({'error': 'Cuenta no encontrada.'}, status=400)
-        renta.pagado = True
-        renta.save(update_fields=['pagado'])
-        finanza, _ = PedidoFinanzas.objects.get_or_create(
-            renta=renta,
-            defaults={'total': renta.precio_total}
-        )
-        finanza.pagado = True
-        finanza.metodo_pago = metodo
-        finanza.cuenta_destino = cuenta
-        finanza.fecha_pago = tz.now()
-        finanza.total = renta.precio_total
-        finanza.save()
-        return Response({'ok': True, 'metodo_pago': metodo})
+        # Saldo = total - anticipo ya pagado
+        anticipo = renta.anticipo or 0
+        saldo = renta.precio_total - anticipo
+        if saldo <= 0:
+            return Response({'error': 'La renta no tiene saldo pendiente.'}, status=400)
+        with db_transaction.atomic():
+            renta.pagado = True
+            renta.save(update_fields=['pagado'])
+            finanza, _ = PedidoFinanzas.objects.get_or_create(
+                renta=renta, defaults={'total': saldo}
+            )
+            now = tz.now()
+            finanza.pagado = True
+            finanza.metodo_pago = metodo
+            finanza.cuenta_destino = cuenta
+            finanza.fecha_pago = now
+            finanza.total = saldo
+            finanza.save()
+            MovimientoContable.objects.create(
+                pedido=finanza,
+                tipo='INGRESO',
+                monto=saldo,
+                metodo_pago=metodo,
+                cuenta=cuenta,
+                fecha=now,
+                descripcion=f"Liquidación renta #{renta.folio or renta.id}"
+            )
+        return Response({'ok': True, 'metodo_pago': metodo, 'cuenta': cuenta.nombre})
 
     @action(detail=False, methods=['get'])
     def semana_actual(self, request):
