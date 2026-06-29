@@ -435,7 +435,7 @@ export default function Rentas() {
                     <div className="text-sm text-center py-3" style={{ color: '#8fa890' }}>Cargando cuentas…</div>
                   ) : (
                     <div className="flex flex-col gap-1.5">
-                      {cuentas.map(c => (
+                      {cuentas.filter(c => c.tipo.toLowerCase() !== 'efectivo').map(c => (
                         <button
                           key={c.id}
                           onClick={() => setCuentaId(c.id)}
@@ -462,8 +462,8 @@ export default function Rentas() {
                           )}
                         </button>
                       ))}
-                      {cuentas.length === 0 && (
-                        <div className="text-sm text-center py-3" style={{ color: '#8fa890' }}>No hay cuentas configuradas.</div>
+                      {cuentas.filter(c => c.tipo.toLowerCase() !== 'efectivo').length === 0 && (
+                        <div className="text-sm text-center py-3" style={{ color: '#8fa890' }}>No hay cuentas bancarias configuradas.</div>
                       )}
                     </div>
                   )}
