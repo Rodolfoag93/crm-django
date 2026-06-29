@@ -440,11 +440,16 @@ export default function NuevaRenta() {
                 {productos.map(p => (
                   <div key={p.id} className="flex items-center gap-3 px-3 py-2.5 rounded-xl" style={{ background: '#f8fbf8', border: '1px solid #ddeadd' }}>
                     <span className="flex-1 text-sm font-medium truncate" style={{ color: '#162016' }}>{p.nombre}</span>
-                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                    <div className="flex items-center gap-1 flex-shrink-0">
                       <button onClick={() => actualizarLinea(p.id, 'cantidad', Math.max(1, p.cantidad - 1))}
                         className="w-6 h-6 flex items-center justify-center rounded-md text-sm font-bold"
                         style={{ background: '#e8f0e8', color: '#5a7060' }}>−</button>
-                      <span className="w-5 text-center text-sm font-bold tabular-nums" style={{ color: '#162016' }}>{p.cantidad}</span>
+                      <input
+                        type="number" min={1} value={p.cantidad}
+                        onChange={e => actualizarLinea(p.id, 'cantidad', Math.max(1, parseInt(e.target.value) || 1))}
+                        className="w-12 border rounded-lg text-center text-sm font-bold tabular-nums outline-none"
+                        style={{ borderColor: '#ddeadd', color: '#162016', padding: '3px 4px' }}
+                      />
                       <button onClick={() => actualizarLinea(p.id, 'cantidad', p.cantidad + 1)}
                         className="w-6 h-6 flex items-center justify-center rounded-md text-sm font-bold"
                         style={{ background: '#e8f0e8', color: '#5a7060' }}>+</button>
