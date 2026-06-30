@@ -2782,3 +2782,100 @@ def api_actualizar_ubicacion(request):
     empleado.ultima_ubicacion = timezone.now()
     empleado.save(update_fields=['lat_actual', 'lon_actual', 'ultima_ubicacion'])
     return Response({'ok': True})
+
+
+# ── CRM Animación ──────────────────────────────────────────────────────────────
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def api_eventos_animacion(request):
+    if not request.user.is_staff:
+        return Response({'error': 'No autorizado.'}, status=403)
+
+    año = request.query_params.get('año')
+    mes = request.query_params.get('mes')
+    filtros = {'rentaproductos__producto__tipo': 'AN', 'status': 'ACTIVO'}
+    if año:
+        filtros['fecha_renta__year'] = int(año)
+    if mes:
+        filtros['fecha_renta__month'] = int(mes)
+
+    rentas = (Renta.objects
+              .filter(**filtros)
+              .select_related('cliente', 'asignacion_coordinador__coordinador')
+              .prefetch_related('asignacion_coordinador__lista_material',
+                                'asignacion_coordinador__animadores',
+                                'rentaproductos__producto')
+              .distinct()
+              .order_by('fecha_renta'))
+
+    data = []
+    for renta in rentas:
+        asignacion = getattr(renta, 'asignacion_coordinador', None)
+        lista = getattr(asignacion, 'lista_material', None) if asignacion else None
+        animadores_count = asignacion.animadores.filter(estado='ACEPTADO').count() if asignacion else 0
+
+        servicios = list(
+            renta.rentaproductos
+            .select_related('producto')
+            .values_list('producto__nombre', flat=True)
+            .distinct()
+        )
+
+        data.append({
+            'id': renta.id,
+            'folio': renta.folio,
+            'fecha_renta': renta.fecha_renta.isoformat(),
+            'cliente_nombre': renta.cliente.nombre,
+            'servicios': servicios,
+            'asignacion_id': asignacion.id if asignacion else None,
+            'coordinador': {
+                'id': asignacion.coordinador.id,
+                'nombre': f"{asignacion.coordinador.first_name} {asignacion.coordinador.last_name}".strip(),
+            } if asignacion and asignacion.coordinador else None,
+            'lista_estado': lista.estado if lista else None,
+            'animadores_count': animadores_count,
+        })
+
+    return Response(data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def api_coordinadores_crm(request):
+    if not request.user.is_staff:
+        return Response({'error': 'No autorizado.'}, status=403)
+
+    from django.contrib.auth.models import User as DjangoUser
+    coordinadores = DjangoUser.objects.filter(
+        Q(empleado__tipo_empleado='COORDINADOR') | Q(groups__name='Coordinador')
+    ).distinct()
+
+    data = [{'id': u.id, 'nombre': f"{u.first_name} {u.last_name}".strip() or u.username} for u in coordinadores]
+    return Response(data)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def api_asignar_coordinador_crm(request):
+    if not request.user.is_staff:
+        return Response({'error': 'No autorizado.'}, status=403)
+
+    renta_id = request.data.get('renta_id')
+    coordinador_id = request.data.get('coordinador_id')
+
+    if not renta_id:
+        return Response({'error': 'renta_id requerido.'}, status=400)
+
+    renta = get_object_or_404(Renta, id=renta_id)
+
+    if coordinador_id:
+        from django.contrib.auth.models import User as DjangoUser
+        coordinador = get_object_or_404(DjangoUser, id=coordinador_id)
+        asignacion, _ = AsignacionCoordinador.objects.get_or_create(renta=renta)
+        asignacion.coordinador = coordinador
+        asignacion.save()
+    else:
+        AsignacionCoordinador.objects.filter(renta=renta).update(coordinador=None)
+
+    return Response({'ok': True})
