@@ -2705,11 +2705,11 @@ def api_mapa_entregas(request):
             parada.renta.save(update_fields=['lat', 'lon'])
     sin_coords = [p for p, _ in paradas_todas if not p.renta.lat or not p.renta.lon]
 
-    def _nominatim(query):
+    def _nominatim(params):
         try:
             resp = http_req.get(
                 'https://nominatim.openstreetmap.org/search',
-                params={'q': query, 'format': 'json', 'limit': 1, 'countrycodes': 'mx'},
+                params={**params, 'format': 'json', 'limit': 1, 'countrycodes': 'mx'},
                 headers={'User-Agent': 'TrotaCRM/1.0 rodolfo.aguiar@codeablelabs.com'},
                 timeout=4,
             )
@@ -2722,19 +2722,23 @@ def api_mapa_entregas(request):
         import time
         renta = parada.renta
         ciudad = renta.ciudad_o_municipio or 'Colima'
+        estado = 'Colima'  # todas las rentas son en Colima
+
         # Estrategias de fallback: de más específico a menos
+        # Usamos query estructurada primero para evitar que Nominatim confunda
+        # nombres de calles con municipios homónimos (ej. Av Venustiano Carranza)
         intentos = []
         if renta.calle_y_numero and renta.colonia:
-            intentos.append(f"{renta.calle_y_numero}, {renta.colonia}, {ciudad}")
+            intentos.append({'street': renta.calle_y_numero, 'city': ciudad, 'state': estado})
         if renta.calle_y_numero:
-            intentos.append(f"{renta.calle_y_numero}, {ciudad}")
+            intentos.append({'street': renta.calle_y_numero, 'city': ciudad, 'state': estado})
         if renta.colonia:
-            intentos.append(f"{renta.colonia}, {ciudad}")
-        intentos.append(ciudad)
+            intentos.append({'q': f"{renta.colonia}, {ciudad}, {estado}"})
+        intentos.append({'q': f"{ciudad}, {estado}, Mexico"})
 
-        for query in intentos:
+        for params in intentos:
             time.sleep(1)  # respetar rate limit de Nominatim
-            resultado = _nominatim(query)
+            resultado = _nominatim(params)
             if resultado:
                 renta.lat = resultado['lat']
                 renta.lon = resultado['lon']
