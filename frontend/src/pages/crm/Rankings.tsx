@@ -34,17 +34,9 @@ export default function Rankings() {
   useEffect(() => {
     setLoading(true)
     setError('')
-    const url = `/crm/rankings/?rol=${rol}&anio=${año}`
-    console.log('[Rankings] fetching', url)
-    api.get(url)
-      .then(r => {
-        console.log('[Rankings] response', r.status, r.data, 'isArray:', Array.isArray(r.data))
-        setData(Array.isArray(r.data) ? r.data : [])
-      })
-      .catch(e => {
-        console.error('[Rankings] error', e?.response?.status, e?.response?.data)
-        setError(e?.response?.data?.error || `Error ${e?.response?.status || ''}`)
-      })
+    api.get(`/crm/rankings/?rol=${rol}&anio=${año}`)
+      .then(r => setData(Array.isArray(r.data) ? r.data : []))
+      .catch(e => setError(e?.response?.data?.error || `Error ${e?.response?.status || ''}`))
       .finally(() => setLoading(false))
   }, [rol, año])
 
