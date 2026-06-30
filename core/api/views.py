@@ -1195,8 +1195,8 @@ def api_asistencia_hoy(request):
             'tipo': emp.get_tipo_empleado_display(),
             'tiene_entrada': asistencia is not None and asistencia.hora_entrada is not None,
             'tiene_salida': asistencia is not None and asistencia.hora_salida is not None,
-            'hora_entrada': str(asistencia.hora_entrada) if asistencia and asistencia.hora_entrada else None,
-            'hora_salida': str(asistencia.hora_salida) if asistencia and asistencia.hora_salida else None,
+            'hora_entrada': asistencia.hora_entrada.isoformat() if asistencia and asistencia.hora_entrada else None,
+            'hora_salida': asistencia.hora_salida.isoformat() if asistencia and asistencia.hora_salida else None,
             'horas_trabajadas': str(asistencia.horas_trabajadas) if asistencia and asistencia.horas_trabajadas else None,
         })
 

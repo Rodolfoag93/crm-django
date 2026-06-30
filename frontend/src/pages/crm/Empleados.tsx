@@ -56,9 +56,16 @@ function formatFechaLarga(iso: string) {
 }
 function extractHora(isoStr: string | null) {
   if (!isoStr) return ''
-  // "2026-06-29 08:00:00-06:00" or "2026-06-29T08:00:00-06:00"
-  const match = isoStr.match(/(\d{2}):(\d{2})/)
-  return match ? `${match[1]}:${match[2]}` : ''
+  try {
+    return new Date(isoStr).toLocaleTimeString('es-MX', {
+      timeZone: 'America/Mexico_City',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    })
+  } catch {
+    return ''
+  }
 }
 
 // ── Interfaces asistencia ──────────────────────────────────────────────────────
