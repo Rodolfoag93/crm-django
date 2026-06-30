@@ -24,6 +24,7 @@ interface Parada {
   id: number
   orden: number
   estado: string
+  tipo_parada: 'entrega' | 'recogida'
   cliente: string
   telefono: string
   direccion: string
@@ -108,10 +109,6 @@ export default function Entregas() {
 
   const llamar = (telefono: string) => {
     window.location.href = `tel:${telefono}`
-  }
-
-  const getRutaDeParada = (paradaId: number): Ruta | undefined => {
-    return rutas.find(r => r.paradas.some(p => p.id === paradaId))
   }
 
   if (loading) return (
@@ -213,7 +210,7 @@ export default function Entregas() {
                   </div>
 
                   {/* Info de recogida */}
-                  {parada.recogida_programada && ruta.tipo === 'recogida' && (
+                  {parada.recogida_programada && parada.tipo_parada === 'recogida' && (
                     <div className="bg-blue-50 rounded-lg px-3 py-2 text-xs text-blue-800 mt-1">
                       📅 Programado recoger: {parada.recogida_programada.fecha}
                       {parada.recogida_programada.tipo_horario === 'rango'
@@ -247,10 +244,10 @@ export default function Entregas() {
                     <button
                       onClick={() => setParadaActiva(parada)}
                       className={`w-full text-sm py-2.5 rounded-xl font-semibold text-white ${
-                        ruta.tipo === 'recogida' ? 'bg-blue-500' : 'bg-orange-500'
+                        parada.tipo_parada === 'recogida' ? 'bg-blue-500' : 'bg-orange-500'
                       }`}
                     >
-                      {ruta.tipo === 'recogida' ? '📦 Confirmar recogida' : '✅ Confirmar entrega'}
+                      {parada.tipo_parada === 'recogida' ? '📦 Confirmar recogida' : '✅ Confirmar entrega'}
                     </button>
                   )}
                 </div>
@@ -269,7 +266,6 @@ export default function Entregas() {
       {paradaActiva && (
         <ModalConfirmar
           parada={paradaActiva}
-          ruta={getRutaDeParada(paradaActiva.id)!}
           onClose={() => setParadaActiva(null)}
           onConfirmado={(deposito) => {
             setParadaActiva(null)
@@ -493,16 +489,14 @@ function ModalDevolucionDeposito({ monto, folio, rentaId, onClose }: {
 
 function ModalConfirmar({
   parada,
-  ruta,
   onClose,
   onConfirmado,
 }: {
   parada: Parada
-  ruta: Ruta
   onClose: () => void
   onConfirmado: (deposito?: { monto: number; folio: string; rentaId: number }) => void
 }) {
-  const esRecogida = ruta.tipo === 'recogida'
+  const esRecogida = parada.tipo_parada === 'recogida'
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [notas, setNotas] = useState('')

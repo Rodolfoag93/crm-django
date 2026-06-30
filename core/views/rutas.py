@@ -260,6 +260,7 @@ def api_mis_rutas(request):
                 'id': parada.id,
                 'orden': parada.orden,
                 'estado': parada.estado,
+                'tipo_parada': 'recogida' if renta.estado_entrega == 'ENTREGADO' else 'entrega',
                 'cliente': renta.cliente.nombre,
                 'telefono': renta.cliente.telefono,
                 'direccion': f"{renta.calle_y_numero}, {renta.colonia}, {renta.ciudad_o_municipio}",
