@@ -201,8 +201,8 @@ function RankingTab() {
   useEffect(() => {
     setCargando(true)
     Promise.all([
-      api.get(`/crm/rankings/?rol=coordinadores&año=${año}`),
-      api.get(`/crm/rankings/?rol=animadores&año=${año}`),
+      api.get(`/crm/rankings/?rol=coordinadores&anio=${año}`),
+      api.get(`/crm/rankings/?rol=animadores&anio=${año}`),
     ])
       .then(([r1, r2]) => {
         setCoordinadores(r1.data)

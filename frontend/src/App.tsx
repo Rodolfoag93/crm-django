@@ -30,6 +30,8 @@ import CalificarCoordinador from './pages/animador/CalificarCoordinador'
 import RankingCoordinadores from './pages/RankingCoordinadores'
 import ListaEventosAnimador from './pages/animador/ListaEventosAnimador'
 import CalificarAnimador from './pages/coordinador/CalificarAnimador'
+import CalificarEncargado from './pages/coordinador/CalificarEncargado'
+import CalificarCoordinadorEncargado from './pages/encargado/CalificarCoordinador'
 import OfflineBanner from './components/OfflineBanner'
 import CRMLayout from './layouts/CRMLayout'
 import Dashboard from './pages/crm/Dashboard'
@@ -108,6 +110,12 @@ export default function App() {
         } />
         <Route path="/coordinador/animadores/:animadorEventoId/calificar" element={
           <PrivateRoute><CalificarAnimador /></PrivateRoute>
+        } />
+        <Route path="/coordinador/listas/:listaId/calificar-encargado" element={
+          <PrivateRoute><CalificarEncargado /></PrivateRoute>
+        } />
+        <Route path="/encargado/listas/:id/calificar-coordinador" element={
+          <PrivateRoute><CalificarCoordinadorEncargado /></PrivateRoute>
         } />
         <Route path="/admin/nominas/nueva" element={
           <PrivateRoute><NuevaNomina /></PrivateRoute>

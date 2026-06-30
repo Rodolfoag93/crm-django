@@ -137,6 +137,7 @@ export default function DetalleListaMaterial() {
 
   const puedesSurtir = ['BORRADOR', 'ENVIADA', 'PENDIENTE', 'REVISADA', 'PREPARADA'].includes(lista.estado)
   const puedesRecibir = lista.estado === 'EN_EVENTO'
+  const puedesCalificar = lista.estado === 'REGRESADA' || lista.estado === 'RECIBIDA'
 
   return (
     <div className="min-h-screen bg-gray-50 pb-32">
@@ -252,6 +253,16 @@ export default function DetalleListaMaterial() {
                 className="w-full bg-blue-600 text-white py-3.5 rounded-2xl font-semibold text-sm disabled:opacity-50"
               >
                 {guardando ? 'Procesando...' : '✅ Confirmar recepción en bodega'}
+              </button>
+            )}
+
+            {/* Calificar coordinador */}
+            {puedesCalificar && (
+              <button
+                onClick={() => navigate(`/encargado/listas/${id}/calificar-coordinador`)}
+                className="w-full bg-amber-500 text-white py-3.5 rounded-2xl font-semibold text-sm"
+              >
+                ⭐ Calificar al coordinador
               </button>
             )}
           </>

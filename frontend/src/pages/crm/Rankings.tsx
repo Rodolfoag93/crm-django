@@ -29,12 +29,22 @@ export default function Rankings() {
   const [año, setAño] = useState(AÑO_ACTUAL)
   const [data, setData] = useState<RankingItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
 
   useEffect(() => {
     setLoading(true)
-    api.get('/crm/rankings/', { params: { rol, año } })
-      .then(r => setData(r.data.ranking ?? []))
-      .catch(console.error)
+    setError('')
+    const url = `/crm/rankings/?rol=${rol}&anio=${año}`
+    console.log('[Rankings] fetching', url)
+    api.get(url)
+      .then(r => {
+        console.log('[Rankings] response', r.status, r.data, 'isArray:', Array.isArray(r.data))
+        setData(Array.isArray(r.data) ? r.data : [])
+      })
+      .catch(e => {
+        console.error('[Rankings] error', e?.response?.status, e?.response?.data)
+        setError(e?.response?.data?.error || `Error ${e?.response?.status || ''}`)
+      })
       .finally(() => setLoading(false))
   }, [rol, año])
 
@@ -79,6 +89,12 @@ export default function Rankings() {
           </button>
         ))}
       </div>
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3">
+          {error}
+        </div>
+      )}
 
       {loading ? (
         <div className="flex flex-col gap-3">

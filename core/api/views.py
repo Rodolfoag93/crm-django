@@ -2108,6 +2108,27 @@ def api_recibir_lista_bodega(request, lista_id):
     lista.observaciones_recepcion = observaciones
     lista.save()
 
+    # Notificar a ambos para calificarse mutuamente
+    try:
+        asignacion = lista.asignacion
+        folio = asignacion.renta.folio
+        if asignacion.coordinador:
+            enviar_notificacion(
+                asignacion.coordinador,
+                '⭐ Califica al encargado',
+                f'El material de {folio} fue recibido. ¿Cómo estuvo el encargado?',
+                f'/coordinador/eventos/{asignacion.id}',
+            )
+        if lista.surtida_por:
+            enviar_notificacion(
+                lista.surtida_por,
+                '⭐ Califica al coordinador',
+                f'Material de {folio} recibido. ¿Cómo estuvo el coordinador?',
+                f'/encargado/listas/{lista.id}',
+            )
+    except Exception:
+        pass
+
     return Response({'ok': True, 'estado': lista.estado})
 
 
@@ -2568,7 +2589,7 @@ def api_rankings_eventos(request):
         return Response({'error': 'No autorizado.'}, status=403)
 
     rol = request.query_params.get('rol', 'coordinadores')
-    año = request.query_params.get('año')
+    año = request.query_params.get('anio') or request.query_params.get('año')
     mes = request.query_params.get('mes')
 
     if rol == 'coordinadores':
@@ -2877,5 +2898,90 @@ def api_asignar_coordinador_crm(request):
         asignacion.save()
     else:
         AsignacionCoordinador.objects.filter(renta=renta).update(coordinador=None)
+
+
+# ── Calificaciones Encargado ↔ Coordinador ────────────────────────────────────
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def api_estado_calificaciones_lista(request, lista_id):
+    from core.models import ListaMaterialEvento
+    lista = get_object_or_404(ListaMaterialEvento, id=lista_id)
+    ya_encargado = hasattr(lista, 'calificacion_al_encargado')
+    ya_coordinador = hasattr(lista, 'calificacion_al_coordinador')
+    return Response({
+        'ya_califico_coordinador': ya_encargado,
+        'promedio_al_encargado': str(lista.calificacion_al_encargado.promedio) if ya_encargado else None,
+        'ya_califico_encargado': ya_coordinador,
+        'promedio_al_coordinador': str(lista.calificacion_al_coordinador.promedio) if ya_coordinador else None,
+    })
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def api_calificar_encargado(request, lista_id):
+    from core.models import CalificacionEncargado, ListaMaterialEvento
+    lista = get_object_or_404(ListaMaterialEvento, id=lista_id)
+
+    if lista.asignacion.coordinador != request.user:
+        return Response({'error': 'No autorizado'}, status=403)
+    if hasattr(lista, 'calificacion_al_encargado'):
+        return Response({'error': 'Ya calificaste al encargado de este evento'}, status=400)
+
+    campos = ['puntualidad', 'orden', 'comunicacion', 'disposicion']
+    vals = {}
+    for campo in campos:
+        val = request.data.get(campo)
+        if val is None:
+            return Response({'error': f'Falta el campo {campo}'}, status=400)
+        try:
+            v = float(val)
+        except (TypeError, ValueError):
+            return Response({'error': f'Campo {campo} inválido'}, status=400)
+        if not (1 <= v <= 5):
+            return Response({'error': f'{campo} debe estar entre 1 y 5'}, status=400)
+        vals[campo] = val
+
+    cal = CalificacionEncargado.objects.create(
+        lista=lista,
+        calificador=request.user,
+        comentario=request.data.get('comentario', ''),
+        **vals,
+    )
+    return Response({'ok': True, 'promedio': str(cal.promedio)})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def api_calificar_coordinador_encargado(request, lista_id):
+    from core.models import CalificacionCoordinadorPorEncargado, ListaMaterialEvento
+    lista = get_object_or_404(ListaMaterialEvento, id=lista_id)
+
+    if lista.surtida_por != request.user and not request.user.is_staff:
+        return Response({'error': 'No autorizado'}, status=403)
+    if hasattr(lista, 'calificacion_al_coordinador'):
+        return Response({'error': 'Ya calificaste al coordinador de este evento'}, status=400)
+
+    campos = ['puntualidad', 'orden', 'comunicacion', 'disposicion']
+    vals = {}
+    for campo in campos:
+        val = request.data.get(campo)
+        if val is None:
+            return Response({'error': f'Falta el campo {campo}'}, status=400)
+        try:
+            v = float(val)
+        except (TypeError, ValueError):
+            return Response({'error': f'Campo {campo} inválido'}, status=400)
+        if not (1 <= v <= 5):
+            return Response({'error': f'{campo} debe estar entre 1 y 5'}, status=400)
+        vals[campo] = val
+
+    cal = CalificacionCoordinadorPorEncargado.objects.create(
+        lista=lista,
+        calificador=request.user,
+        comentario=request.data.get('comentario', ''),
+        **vals,
+    )
+    return Response({'ok': True, 'promedio': str(cal.promedio)})
 
     return Response({'ok': True})

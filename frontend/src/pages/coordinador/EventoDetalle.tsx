@@ -237,6 +237,15 @@ export default function EventoDetalle() {
               </button>
             )}
 
+            {lista?.existe && (lista.estado === 'REGRESADA' || lista.estado === 'REVISADA') && (
+              <button
+                onClick={() => navigate(`/coordinador/listas/${lista.lista_id}/calificar-encargado`)}
+                className="w-full bg-amber-500 text-white py-3.5 rounded-2xl font-semibold text-sm"
+              >
+                ⭐ Calificar al encargado de material
+              </button>
+            )}
+
             {lista?.existe && lista.items.length > 0 ? (
               <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 flex flex-col gap-3">
                 <p className="text-xs text-gray-500 font-medium">Lista de material — {lista.estado}</p>

@@ -1167,3 +1167,57 @@ class CalificacionAnimador(models.Model):
 
     def __str__(self):
         return f"Calificación de {self.animador_evento.asignacion.coordinador.username} a {self.animador_evento.animador.nombre}"
+
+
+class CalificacionEncargado(models.Model):
+    """Coordinador califica al encargado de material después del evento"""
+    lista = models.OneToOneField(
+        'ListaMaterialEvento',
+        on_delete=models.CASCADE,
+        related_name='calificacion_al_encargado',
+    )
+    calificador = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='calificaciones_dadas_a_encargados',
+    )
+    puntualidad  = models.DecimalField(max_digits=3, decimal_places=1)
+    orden        = models.DecimalField(max_digits=3, decimal_places=1)
+    comunicacion = models.DecimalField(max_digits=3, decimal_places=1)
+    disposicion  = models.DecimalField(max_digits=3, decimal_places=1)
+    comentario   = models.TextField(blank=True)
+    fecha        = models.DateTimeField(auto_now_add=True)
+
+    @property
+    def promedio(self):
+        campos = [self.puntualidad, self.orden, self.comunicacion, self.disposicion]
+        return round(sum(campos) / len(campos), 2)
+
+    def __str__(self):
+        return f"Cal. encargado — {self.lista_id}"
+
+
+class CalificacionCoordinadorPorEncargado(models.Model):
+    """Encargado de material califica al coordinador después del evento"""
+    lista = models.OneToOneField(
+        'ListaMaterialEvento',
+        on_delete=models.CASCADE,
+        related_name='calificacion_al_coordinador',
+    )
+    calificador = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='calificaciones_dadas_a_coordinadores',
+    )
+    puntualidad  = models.DecimalField(max_digits=3, decimal_places=1)
+    orden        = models.DecimalField(max_digits=3, decimal_places=1)
+    comunicacion = models.DecimalField(max_digits=3, decimal_places=1)
+    disposicion  = models.DecimalField(max_digits=3, decimal_places=1)
+    comentario   = models.TextField(blank=True)
+    fecha        = models.DateTimeField(auto_now_add=True)
+
+    @property
+    def promedio(self):
+        campos = [self.puntualidad, self.orden, self.comunicacion, self.disposicion]
+        return round(sum(campos) / len(campos), 2)
+
+    def __str__(self):
+        return f"Cal. coordinador — {self.lista_id}"
