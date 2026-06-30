@@ -117,7 +117,7 @@ export default function Rankings() {
               ].filter(Boolean).map((item) => {
                 if (!item) return null
                 const rank = item.rank
-                const height = rank === 0 ? 160 : rank === 1 ? 130 : 110
+                const height = rank === 0 ? 180 : rank === 1 ? 150 : 130
                 return (
                   <div
                     key={item.id}
@@ -131,8 +131,8 @@ export default function Rankings() {
                   >
                     <div style={{ fontSize: rank === 0 ? 28 : 22, lineHeight: 1 }}>{MEDAL[rank]}</div>
                     <div
-                      className="font-bold text-center mt-1 px-3 truncate w-full"
-                      style={{ fontSize: rank === 0 ? 15 : 13.5, color: '#162016' }}
+                      className="font-bold text-center mt-1"
+                      style={{ fontSize: rank === 0 ? 14 : 12.5, color: '#162016', maxWidth: '88%', lineHeight: 1.25 }}
                     >
                       {item.nombre.split(' ').slice(0, 2).join(' ')}
                     </div>
