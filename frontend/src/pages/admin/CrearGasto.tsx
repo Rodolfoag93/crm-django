@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../../lib/api'
 
@@ -23,9 +23,14 @@ const CATEGORIAS = [
   { value: 'NOMINA', label: 'Nómina' },
 ]
 
+const MAX_FILE_BYTES = 5 * 1024 * 1024
+const MONTO_COMPROBANTE = 500
+
 export default function CrearGasto() {
   const navigate = useNavigate()
   const hoy = new Date().toISOString().split('T')[0]
+  const cameraInputRef = useRef<HTMLInputElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const [cuentas, setCuentas] = useState<Cuenta[]>([])
   const [form, setForm] = useState({
@@ -37,6 +42,8 @@ export default function CrearGasto() {
     fecha: hoy,
     referencia: '',
   })
+  const [comprobante, setComprobante] = useState<File | null>(null)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
 
@@ -44,8 +51,43 @@ export default function CrearGasto() {
     api.get('/cuentas/').then(res => setCuentas(res.data))
   }, [])
 
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl)
+    }
+  }, [previewUrl])
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     setForm({ ...form, [e.target.name]: e.target.value })
+  }
+
+  const seleccionarComprobante = (file: File | undefined) => {
+    if (!file) return
+    setError('')
+
+    if (file.size > MAX_FILE_BYTES) {
+      setError('El comprobante no puede superar 5 MB.')
+      return
+    }
+
+    const esImagen = file.type.startsWith('image/')
+    const esPdf = file.type === 'application/pdf'
+    if (!esImagen && !esPdf) {
+      setError('Comprobante debe ser PDF, JPG o PNG.')
+      return
+    }
+
+    if (previewUrl) URL.revokeObjectURL(previewUrl)
+    setComprobante(file)
+    setPreviewUrl(esImagen ? URL.createObjectURL(file) : null)
+  }
+
+  const quitarComprobante = () => {
+    if (previewUrl) URL.revokeObjectURL(previewUrl)
+    setComprobante(null)
+    setPreviewUrl(null)
+    if (cameraInputRef.current) cameraInputRef.current.value = ''
+    if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
   const handleSubmit = async () => {
@@ -54,21 +96,37 @@ export default function CrearGasto() {
     if (!form.descripcion.trim()) return setError('Agrega una descripción.')
     if (!form.monto || Number(form.monto) <= 0) return setError('El monto debe ser mayor a 0.')
 
+    const monto = Number(form.monto)
+    if (monto > MONTO_COMPROBANTE && !comprobante) {
+      return setError('Gastos mayores a $500 requieren comprobante.')
+    }
+
     setGuardando(true)
     try {
-      await api.post('/crear-gasto/', {
-        ...form,
-        monto: Number(form.monto),
-        cuenta_id: Number(form.cuenta_id),
+      const fd = new FormData()
+      fd.append('tipo', form.tipo)
+      fd.append('categoria', form.categoria)
+      fd.append('cuenta_id', form.cuenta_id)
+      fd.append('descripcion', form.descripcion.trim())
+      fd.append('monto', String(monto))
+      fd.append('fecha', form.fecha)
+      fd.append('referencia', form.referencia)
+      if (comprobante) fd.append('comprobante', comprobante)
+
+      await api.post('/crear-gasto/', fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
       })
       alert('✅ Gasto registrado correctamente.')
       navigate(-1)
-    } catch {
-      setError('Error al guardar el gasto. Intenta de nuevo.')
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { error?: string } } }
+      setError(err.response?.data?.error || 'Error al guardar el gasto. Intenta de nuevo.')
     } finally {
       setGuardando(false)
     }
   }
+
+  const requiereComprobante = Number(form.monto) > MONTO_COMPROBANTE
 
   return (
     <div className="min-h-screen bg-gray-50 pb-24">
@@ -106,7 +164,7 @@ export default function CrearGasto() {
             <option value="">Selecciona una cuenta...</option>
             {cuentas.map(c => (
               <option key={c.id} value={c.id}>
-                {c.tipo === 'efectivo' ? '💵' : '🏦'} {c.nombre}
+                {c.tipo?.toLowerCase().includes('efectivo') ? '💵' : '🏦'} {c.nombre}
               </option>
             ))}
           </select>
@@ -144,6 +202,81 @@ export default function CrearGasto() {
           <input type="text" name="referencia" value={form.referencia} onChange={handleChange}
             placeholder="Ej. Factura #123, ticket, etc."
             className="mt-1 w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-600" />
+        </div>
+
+        {/* Comprobante */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 flex flex-col gap-3">
+          <div>
+            <label className="text-xs text-gray-500 font-medium">
+              Comprobante {requiereComprobante && <span className="text-red-400">*</span>}
+            </label>
+            <p className="text-xs text-gray-400 mt-0.5">
+              PDF, JPG o PNG · máx. 5 MB
+              {requiereComprobante && ' · obligatorio si el monto supera $500'}
+            </p>
+          </div>
+
+          {!comprobante ? (
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => cameraInputRef.current?.click()}
+                className="bg-green-50 border border-green-200 rounded-xl px-3 py-3 text-sm font-medium text-green-800"
+              >
+                📷 Tomar foto
+              </button>
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="bg-gray-50 border border-gray-200 rounded-xl px-3 py-3 text-sm font-medium text-gray-700"
+              >
+                📎 Elegir archivo
+              </button>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {previewUrl ? (
+                <img
+                  src={previewUrl}
+                  alt="Vista previa del comprobante"
+                  className="w-full max-h-48 object-contain rounded-xl border border-gray-200 bg-gray-50"
+                />
+              ) : (
+                <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600">
+                  📄 {comprobante.name}
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={quitarComprobante}
+                className="text-sm text-red-600 font-medium text-left"
+              >
+                Quitar comprobante
+              </button>
+            </div>
+          )}
+
+          <input
+            ref={cameraInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={e => {
+              seleccionarComprobante(e.target.files?.[0])
+              e.target.value = ''
+            }}
+          />
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".pdf,.jpg,.jpeg,.png,image/*,application/pdf"
+            className="hidden"
+            onChange={e => {
+              seleccionarComprobante(e.target.files?.[0])
+              e.target.value = ''
+            }}
+          />
         </div>
 
         {/* Error */}

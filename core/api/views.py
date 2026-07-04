@@ -1798,7 +1798,8 @@ def api_crear_gasto(request):
         data = dict(request.data)
         if 'cuenta_id' in data and 'cuenta' not in data:
             data['cuenta'] = data['cuenta_id']
-        gasto = gastos_service.crear_gasto(data)
+        comprobante = request.FILES.get('comprobante')
+        gasto = gastos_service.crear_gasto(data, comprobante=comprobante)
         return Response({'ok': True, 'gasto_id': gasto.id})
     except ValueError as e:
         return Response({'error': str(e)}, status=400)
