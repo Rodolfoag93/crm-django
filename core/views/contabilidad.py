@@ -20,6 +20,7 @@ from core.forms import (
     GastoForm, CompraForm, MovimientoForm, TransferenciaForm, TraspasoEfectivoBancoForm
 )
 from core.models import calcular_total
+from core.services import gastos as gastos_service
 from core.views.helpers import get_caja_efectivo
 
 
@@ -237,19 +238,20 @@ def nuevo_gasto(request):
     if request.method == 'POST':
         form = GastoForm(request.POST)
         if form.is_valid():
-            gasto = form.save(commit=False)
-            cuenta = form.cleaned_data.get('cuenta')
-            gasto.save()
-            MovimientoContable.objects.create(
-                tipo='EGRESO',
-                monto=gasto.monto,
-                metodo_pago='efectivo' if cuenta is None else 'transferencia',
-                cuenta=cuenta,
-                fecha=timezone.now(),
-                descripcion=f'Gasto: {gasto.descripcion}'
-            )
-            messages.success(request, "Gasto registrado correctamente.")
-            return redirect('lista_gastos')
+            cd = form.cleaned_data
+            try:
+                gastos_service.crear_gasto({
+                    'tipo': cd['tipo'],
+                    'categoria': cd['categoria'],
+                    'cuenta': cd['cuenta'].id if cd.get('cuenta') else None,
+                    'descripcion': cd['descripcion'],
+                    'monto': cd['monto'],
+                    'fecha': cd['fecha'],
+                })
+                messages.success(request, "Gasto registrado correctamente.")
+                return redirect('lista_gastos')
+            except ValueError as e:
+                form.add_error(None, str(e))
     else:
         form = GastoForm()
     return render(request, 'core/nuevo_gasto.html', {'form': form, 'titulo': 'Registrar Gasto'})
@@ -258,12 +260,26 @@ def nuevo_gasto(request):
 @login_required
 def editar_gasto(request, gasto_id):
     gasto = get_object_or_404(Gasto, id=gasto_id)
+    if gasto.nomina_id:
+        messages.error(request, "No puedes editar gastos generados automáticamente por nómina.")
+        return redirect('lista_gastos')
     if request.method == 'POST':
         form = GastoForm(request.POST, instance=gasto)
         if form.is_valid():
-            form.save()
-            messages.success(request, "Gasto actualizado correctamente.")
-            return redirect('lista_gastos')
+            cd = form.cleaned_data
+            try:
+                gastos_service.actualizar_gasto(gasto, {
+                    'tipo': cd['tipo'],
+                    'categoria': cd['categoria'],
+                    'cuenta': cd['cuenta'].id if cd.get('cuenta') else None,
+                    'descripcion': cd['descripcion'],
+                    'monto': cd['monto'],
+                    'fecha': cd['fecha'],
+                })
+                messages.success(request, "Gasto actualizado correctamente.")
+                return redirect('lista_gastos')
+            except ValueError as e:
+                form.add_error(None, str(e))
     else:
         form = GastoForm(instance=gasto)
     return render(request, 'core/nuevo_gasto.html', {'form': form, 'titulo': 'Editar Gasto'})
@@ -273,7 +289,10 @@ def editar_gasto(request, gasto_id):
 def eliminar_gasto(request, gasto_id):
     gasto = get_object_or_404(Gasto, id=gasto_id)
     if request.method == 'POST':
-        gasto.delete()
+        if gasto.nomina_id:
+            messages.error(request, "No puedes eliminar gastos generados automáticamente por nómina.")
+            return redirect('lista_gastos')
+        gastos_service.eliminar_gasto(gasto)
         messages.success(request, "Gasto eliminado correctamente.")
         return redirect('lista_gastos')
     return render(request, 'core/eliminar_gasto.html', {'gasto': gasto})

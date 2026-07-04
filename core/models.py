@@ -567,6 +567,11 @@ class Gasto(models.Model):
     monto = models.DecimalField(max_digits=10, decimal_places=2)
     fecha = models.DateField()
     referencia = models.CharField(max_length=100, blank=True, null=True)
+    comprobante = models.FileField(
+        upload_to='gastos/comprobantes/',
+        blank=True,
+        null=True,
+    )
 
     # 🔹 Relación opcional con Nomina
     nomina = models.ForeignKey(
@@ -581,6 +586,35 @@ class Gasto(models.Model):
         tipo = self.get_tipo_display()
         categoria = self.get_categoria_display()
         return f"{tipo} | {categoria} - ${self.monto}"
+
+
+class PresupuestoCategoria(models.Model):
+    """Presupuesto mensual editable desde Django Admin por categoría de gasto."""
+
+    categoria = models.CharField(
+        max_length=20,
+        choices=Gasto.CATEGORIA,
+        unique=True,
+    )
+    monto_mensual = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        help_text='Límite de gasto permitido en el mes calendario.',
+    )
+    activo = models.BooleanField(
+        default=True,
+        help_text='Si está inactivo, no se valida presupuesto para esta categoría.',
+    )
+    notas = models.CharField(max_length=255, blank=True)
+
+    class Meta:
+        verbose_name = 'Presupuesto por categoría'
+        verbose_name_plural = 'Presupuestos por categoría'
+        ordering = ['categoria']
+
+    def __str__(self):
+        estado = 'activo' if self.activo else 'inactivo'
+        return f"{self.get_categoria_display()} — ${self.monto_mensual}/mes ({estado})"
 
 
 
@@ -727,6 +761,14 @@ class MovimientoContable(models.Model):
         blank=True,
         on_delete=models.SET_NULL,
         related_name='movimientos'
+    )
+
+    gasto = models.ForeignKey(
+        'Gasto',
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name='movimientos',
     )
 
     tipo = models.CharField(max_length=10, choices=TIPO_MOVIMIENTO)

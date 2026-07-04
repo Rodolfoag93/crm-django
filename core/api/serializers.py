@@ -110,9 +110,32 @@ class NominaSerializer(serializers.ModelSerializer):
 
 
 class GastoSerializer(serializers.ModelSerializer):
+    tipo_display = serializers.CharField(source='get_tipo_display', read_only=True)
+    categoria_display = serializers.CharField(source='get_categoria_display', read_only=True)
+    cuenta_nombre = serializers.SerializerMethodField()
+    comprobante_url = serializers.SerializerMethodField()
+
     class Meta:
         model = Gasto
-        fields = '__all__'
+        fields = [
+            'id', 'tipo', 'tipo_display', 'categoria', 'categoria_display',
+            'cuenta', 'cuenta_nombre', 'descripcion', 'monto', 'fecha',
+            'referencia', 'comprobante', 'comprobante_url', 'nomina',
+        ]
+        read_only_fields = ['nomina']
+
+    def get_cuenta_nombre(self, obj):
+        if obj.cuenta:
+            return obj.cuenta.nombre
+        return 'Efectivo'
+
+    def get_comprobante_url(self, obj):
+        if obj.comprobante:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.comprobante.url)
+            return obj.comprobante.url
+        return None
 
 
 class MovimientoContableSerializer(serializers.ModelSerializer):

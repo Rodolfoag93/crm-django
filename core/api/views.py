@@ -20,6 +20,8 @@ from core.models import (
     BitacoraMantenimiento, TurnoAsistencia,
     Cuenta, PedidoFinanzas,
 )
+from core.utils import saldo_efectivo
+from core.services import gastos as gastos_service
 from core.api.serializers import (
     ClienteSerializer, ProductoSerializer, RentaSerializer,
     EmpleadoSerializer, NominaSerializer, GastoSerializer,
@@ -577,11 +579,141 @@ class NominaViewSet(viewsets.ModelViewSet):
 
 
 class GastoViewSet(viewsets.ModelViewSet):
-    queryset = Gasto.objects.all().order_by('-fecha')
+    queryset = Gasto.objects.select_related('cuenta').order_by('-fecha', '-id')
     serializer_class = GastoSerializer
     permission_classes = [EsAdmin]
     filter_backends = [filters.SearchFilter]
-    search_fields = ['descripcion', 'tipo', 'categoria']
+    search_fields = ['descripcion', 'referencia', 'tipo', 'categoria']
+
+    def get_queryset(self):
+        qs = Gasto.objects.select_related('cuenta').order_by('-fecha', '-id')
+        semana = self.request.query_params.get('semana_inicio', '').strip()
+        if semana:
+            try:
+                lunes = date.fromisoformat(semana)
+                domingo = lunes + timedelta(days=6)
+                qs = qs.filter(fecha__range=[lunes, domingo])
+            except ValueError:
+                pass
+        tipo = self.request.query_params.get('tipo', '').strip()
+        if tipo:
+            qs = qs.filter(tipo=tipo)
+        categoria = self.request.query_params.get('categoria', '').strip()
+        if categoria:
+            qs = qs.filter(categoria=categoria)
+        return qs
+
+    def get_serializer_context(self):
+        ctx = super().get_serializer_context()
+        ctx['request'] = self.request
+        return ctx
+
+    def create(self, request, *args, **kwargs):
+        try:
+            comprobante = request.FILES.get('comprobante')
+            data = self._parse_gasto_data(request.data)
+            gasto = gastos_service.crear_gasto(data, comprobante=comprobante)
+            serializer = self.get_serializer(gasto)
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        except ValueError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        gasto = self.get_object()
+        if gasto.nomina_id:
+            return Response(
+                {'error': 'No puedes editar gastos generados automáticamente por nómina.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            comprobante = request.FILES.get('comprobante')
+            data = self._parse_gasto_data(request.data)
+            gasto = gastos_service.actualizar_gasto(gasto, data, comprobante=comprobante)
+            serializer = self.get_serializer(gasto)
+            return Response(serializer.data)
+        except ValueError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    def destroy(self, request, *args, **kwargs):
+        gasto = self.get_object()
+        if gasto.nomina_id:
+            return Response(
+                {'error': 'No puedes eliminar gastos generados automáticamente por nómina.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        gastos_service.eliminar_gasto(gasto)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    def _parse_gasto_data(self, data):
+        parsed = {}
+        for key in ('tipo', 'categoria', 'descripcion', 'referencia', 'fecha'):
+            if key in data:
+                parsed[key] = data.get(key)
+        if 'monto' in data:
+            parsed['monto'] = data.get('monto')
+        cuenta = data.get('cuenta') or data.get('cuenta_id')
+        if cuenta not in (None, ''):
+            parsed['cuenta'] = cuenta
+        elif 'cuenta' in data or 'cuenta_id' in data:
+            parsed['cuenta'] = None
+        return parsed
+
+    @action(detail=False, methods=['get'])
+    def stats(self, request):
+        semana = request.query_params.get('semana_inicio', '').strip()
+        semana_inicio = None
+        if semana:
+            try:
+                semana_inicio = date.fromisoformat(semana)
+            except ValueError:
+                pass
+        return Response(gastos_service.stats_gastos(semana_inicio))
+
+    @action(detail=False, methods=['get'])
+    def catalogo(self, request):
+        cuentas = Cuenta.objects.filter(activa=True).order_by('nombre')
+        return Response({
+            'tipos': [{'value': v, 'label': l} for v, l in Gasto.TIPO],
+            'categorias': [{'value': v, 'label': l} for v, l in Gasto.CATEGORIA],
+            'cuentas': [
+                {
+                    'id': c.id,
+                    'nombre': c.nombre,
+                    'tipo': c.tipo,
+                    'banco': c.banco,
+                    'saldo': str(c.saldo_actual()),
+                }
+                for c in cuentas
+            ],
+            'saldo_efectivo': str(saldo_efectivo()),
+            'presupuestos': gastos_service.listar_presupuestos(),
+        })
+
+    @action(detail=False, methods=['get'], url_path='presupuesto')
+    def presupuesto(self, request):
+        categoria = request.query_params.get('categoria', '').strip()
+        excluir = request.query_params.get('excluir_id')
+        excluir_id = int(excluir) if excluir else None
+        if categoria not in dict(Gasto.CATEGORIA):
+            return Response({'error': 'Categoría no válida.'}, status=400)
+        return Response(gastos_service.presupuesto_disponible(categoria, excluir_id=excluir_id))
+
+    @action(detail=False, methods=['get'])
+    def duplicados(self, request):
+        descripcion = request.query_params.get('descripcion', '').strip()
+        monto = request.query_params.get('monto', '').strip()
+        categoria = request.query_params.get('categoria', '').strip()
+        excluir = request.query_params.get('excluir_id')
+        if not descripcion or not monto or not categoria:
+            return Response({'error': 'Parámetros requeridos: descripcion, monto, categoria.'}, status=400)
+        try:
+            monto_dec = Decimal(monto)
+        except Exception:
+            return Response({'error': 'Monto inválido.'}, status=400)
+        excluir_id = int(excluir) if excluir else None
+        dupes = gastos_service.buscar_duplicados(descripcion, monto_dec, categoria, excluir_id=excluir_id)
+        return Response({'duplicados': dupes, 'tiene_duplicados': len(dupes) > 0})
 
 
 class MovimientoContableViewSet(viewsets.ModelViewSet):
@@ -1643,8 +1775,17 @@ def api_buscar_productos(request):
 def api_cuentas(request):
     if not request.user.is_staff:
         return Response({'error': 'No autorizado.'}, status=403)
-    cuentas = Cuenta.objects.all().order_by('nombre')
-    data = [{'id': c.id, 'nombre': c.nombre, 'tipo': c.tipo} for c in cuentas]
+    cuentas = Cuenta.objects.filter(activa=True).order_by('nombre')
+    data = [
+        {
+            'id': c.id,
+            'nombre': c.nombre,
+            'tipo': c.tipo,
+            'banco': c.banco,
+            'saldo': str(c.saldo_actual()),
+        }
+        for c in cuentas
+    ]
     return Response(data)
 
 
@@ -1653,34 +1794,14 @@ def api_cuentas(request):
 def api_crear_gasto(request):
     if not request.user.is_staff:
         return Response({'error': 'No autorizado.'}, status=403)
-    data = request.data
-
     try:
-        cuenta = Cuenta.objects.get(id=data.get('cuenta_id'))
-    except Cuenta.DoesNotExist:
-        return Response({'error': 'Cuenta no válida.'}, status=400)
-
-    gasto = Gasto.objects.create(
-        tipo=data.get('tipo', 'GASTO'),
-        categoria=data.get('categoria', 'INSUMOS'),
-        cuenta=cuenta,
-        descripcion=data.get('descripcion', ''),
-        monto=data.get('monto'),
-        fecha=data.get('fecha', str(date.today())),
-        referencia=data.get('referencia', ''),
-    )
-
-    # Movimiento contable automático
-
-    MovimientoContable.objects.create(
-        tipo='EGRESO',
-        monto=gasto.monto,
-        descripcion=gasto.descripcion,
-        fecha=timezone.now(),
-        cuenta=cuenta,
-    )
-
-    return Response({'ok': True, 'gasto_id': gasto.id})
+        data = dict(request.data)
+        if 'cuenta_id' in data and 'cuenta' not in data:
+            data['cuenta'] = data['cuenta_id']
+        gasto = gastos_service.crear_gasto(data)
+        return Response({'ok': True, 'gasto_id': gasto.id})
+    except ValueError as e:
+        return Response({'error': str(e)}, status=400)
 
 # ── Nómina: Pagos Extra ────────────────────────────────────────────────────────
 
