@@ -18,6 +18,9 @@ ssh $SERVER "sudo -u trota $VENV/bin/pip install -r $APP_DIR/requirements.txt -q
 echo "==> Aplicando migraciones..."
 ssh $SERVER "sudo -u trota $PYTHON $APP_DIR/manage.py migrate --noinput"
 
+echo "==> Respaldando media..."
+ssh $SERVER "bash $APP_DIR/scripts/backup_media.sh"
+
 echo "==> Recolectando archivos estaticos..."
 ssh $SERVER "chown -R trota:www-data $APP_DIR/staticfiles && sudo -u trota $PYTHON $APP_DIR/manage.py collectstatic --noinput 2>&1 | tail -2"
 

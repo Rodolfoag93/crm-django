@@ -18,6 +18,25 @@ interface LineaProducto {
   id: number; nombre: string; cantidad: number; precio_unitario: number
 }
 
+interface MantelOpcion {
+  id: number; nombre: string; color: string; unidades_libres: number
+}
+
+interface PromoPreview {
+  sillas_total: number
+  mesas_por_familia: Record<string, number>
+  manteles_regalo: Record<string, number>
+  total_regalos: number
+  opciones?: Record<string, { cantidad_regalo: number; colores_disponibles: MantelOpcion[] }>
+}
+
+const FAMILIA_LABEL: Record<string, string> = {
+  TABLON: 'Tablón',
+  INFANTIL: 'Infantil',
+  REDONDO: 'Redondo',
+  IMPERIAL: 'Imperial',
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function toLocalIso(d: Date) {
@@ -113,6 +132,8 @@ export default function NuevaRenta() {
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
   const [ticketRenta, setTicketRenta] = useState<{ id: number; folio: string } | null>(null)
+  const [promoPreview, setPromoPreview] = useState<PromoPreview | null>(null)
+  const [eleccionesRegalo, setEleccionesRegalo] = useState<Record<string, number[]>>({})
 
   // — Buscar cliente por teléfono —
   useEffect(() => {
@@ -185,10 +206,59 @@ export default function NuevaRenta() {
   const totalCalculado = productos.reduce((s, p) => s + p.cantidad * p.precio_unitario, 0)
   const totalFinal = precioManual ? parseFloat(precioManual) : totalCalculado
 
+  useEffect(() => {
+    if (step !== 2 || productos.length === 0) {
+      setPromoPreview(null)
+      setEleccionesRegalo({})
+      return
+    }
+    api.post('/bot/promo-mantel/preview/', {
+      productos: productos.map(p => ({ id: p.id, cantidad: p.cantidad })),
+      fecha_renta: fechaRenta,
+      hora_inicio: horaInicio,
+      hora_fin: horaFin,
+    })
+      .then(res => {
+        setPromoPreview(res.data)
+        const nuevas: Record<string, number[]> = {}
+        const opciones = res.data.opciones || {}
+        for (const [familia, info] of Object.entries(opciones) as [string, { cantidad_regalo: number; colores_disponibles: MantelOpcion[] }][]) {
+          const defaultId = info.colores_disponibles[0]?.id || 0
+          nuevas[familia] = Array.from({ length: info.cantidad_regalo }, () => defaultId)
+        }
+        setEleccionesRegalo(nuevas)
+      })
+      .catch(() => {
+        setPromoPreview(null)
+        setEleccionesRegalo({})
+      })
+  }, [step, productos, fechaRenta, horaInicio, horaFin])
+
+  const construirMantelesRegalo = () => {
+    const conteo: Record<number, number> = {}
+    Object.values(eleccionesRegalo).flat().forEach(id => {
+      if (id) conteo[id] = (conteo[id] || 0) + 1
+    })
+    return Object.entries(conteo).map(([id, cantidad]) => ({
+      producto_id: parseInt(id, 10),
+      cantidad,
+    }))
+  }
+
+  const regaloCompleto = () => {
+    if (!promoPreview?.total_regalos) return true
+    const totalElegido = Object.values(eleccionesRegalo).flat().filter(Boolean).length
+    return totalElegido === promoPreview.total_regalos
+  }
+
   // — Enviar —
   const guardar = async () => {
     setError('')
     if (productos.length === 0) { setError('Agrega al menos un producto.'); return }
+    if (promoPreview?.total_regalos && !regaloCompleto()) {
+      setError('Selecciona el color de todos los manteles incluidos.')
+      return
+    }
     setGuardando(true)
     try {
       const payload: Record<string, unknown> = {
@@ -208,6 +278,10 @@ export default function NuevaRenta() {
           cantidad: p.cantidad,
           precio_unitario: p.precio_unitario,
         })),
+      }
+      const mantelesRegalo = construirMantelesRegalo()
+      if (mantelesRegalo.length > 0) {
+        payload.manteles_regalo = mantelesRegalo
       }
       if (clienteId) {
         payload.cliente_id = clienteId
@@ -484,6 +558,49 @@ export default function NuevaRenta() {
               </div>
             )}
           </div>
+
+          {promoPreview && promoPreview.total_regalos > 0 && (
+            <div className="bg-white rounded-2xl border p-5 flex flex-col gap-4" style={{ borderColor: '#bbf7d0', background: '#f0fdf4' }}>
+              <div>
+                <div className="text-sm font-semibold" style={{ color: '#15803d' }}>
+                  Manteles incluidos (regalo)
+                </div>
+                <p className="text-xs mt-1" style={{ color: '#5a7060' }}>
+                  {promoPreview.sillas_total} sillas · {promoPreview.total_regalos} mantel(es) sin costo
+                </p>
+              </div>
+              {Object.entries(promoPreview.opciones || {}).map(([familia, info]) => (
+                <div key={familia} className="flex flex-col gap-2">
+                  <div className="text-xs font-semibold uppercase tracking-wide" style={{ color: '#8fa890' }}>
+                    {FAMILIA_LABEL[familia] || familia} · {info.cantidad_regalo} incluido(s)
+                  </div>
+                  {Array.from({ length: info.cantidad_regalo }).map((_, idx) => (
+                    <select
+                      key={`${familia}-${idx}`}
+                      value={eleccionesRegalo[familia]?.[idx] || ''}
+                      onChange={e => {
+                        const val = parseInt(e.target.value, 10)
+                        setEleccionesRegalo(prev => {
+                          const copia = { ...prev, [familia]: [...(prev[familia] || [])] }
+                          copia[familia][idx] = val
+                          return copia
+                        })
+                      }}
+                      className="w-full border rounded-xl px-3 py-2.5 text-sm outline-none"
+                      style={{ borderColor: '#ddeadd', color: '#162016', background: 'white' }}
+                    >
+                      <option value="">Elige color…</option>
+                      {info.colores_disponibles.map(op => (
+                        <option key={op.id} value={op.id}>
+                          {op.color || op.nombre} ({op.unidades_libres} disp.)
+                        </option>
+                      ))}
+                    </select>
+                  ))}
+                </div>
+              ))}
+            </div>
+          )}
 
           {/* Pago */}
           <div className="bg-white rounded-2xl border p-5 flex flex-col gap-4" style={{ borderColor: '#ddeadd' }}>

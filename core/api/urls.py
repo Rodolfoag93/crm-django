@@ -18,6 +18,7 @@ from core.api.views import (
     api_calificar_encargado, api_calificar_coordinador_encargado, api_estado_calificaciones_lista,
 )
 from core.views.rutas import api_mis_rutas, api_confirmar_entrega, api_confirmar_recogida
+from core.api import bot_views
 from django.urls import path
 
 
@@ -99,4 +100,14 @@ urlpatterns = [
     path('encargado/listas/<int:lista_id>/calificar-coordinador/', api_calificar_coordinador_encargado),
     path('coordinador/listas/<int:lista_id>/calificar-encargado/', api_calificar_encargado),
     path('listas/<int:lista_id>/calificaciones/', api_estado_calificaciones_lista),
+
+    # ── Bot WhatsApp ──────────────────────────────────────────────────
+    path('bot/cliente/', bot_views.bot_cliente),
+    path('bot/disponibilidad/', bot_views.bot_disponibilidad),
+    path('bot/manteles-regalo/', bot_views.bot_manteles_regalo),
+    path('bot/promo-mantel/preview/', bot_views.bot_promo_mantel_preview),
+    path('bot/cotizacion/', bot_views.bot_cotizacion),
+    path('bot/renta/crear/', bot_views.bot_renta_crear),
+    path('bot/renta/', bot_views.bot_renta_detalle),
+    path('bot/renta/<str:folio>/', bot_views.bot_renta_detalle),
 ]
