@@ -1,0 +1,528 @@
+{
+  "name": "BR TEST - Search (T1a) + Select (T1b)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "br-test-search",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "t1a-0001",
+      "name": "T1a Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        200
+      ],
+      "webhookId": "br-test-search"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body ?? $input.first().json;\n\nif (!body.telefono) throw new Error('T1a: falta telefono');\nif (!body.user_text) throw new Error('T1a: falta user_text');\nif (!body.session) throw new Error('T1a: falta session');\nif (!body.session.fecha_renta) throw new Error('T1a: falta session.fecha_renta');\nif (!body.session.hora_inicio) throw new Error('T1a: falta session.hora_inicio');\nif (!body.session.hora_fin) throw new Error('T1a: falta session.hora_fin');\n\nreturn [{\n  json: {\n    telefono: String(body.telefono).replace(/\\D/g, ''),\n    user_text: String(body.user_text).trim(),\n    session: {\n      ...body.session,\n      telefono: String(body.telefono).replace(/\\D/g, ''),\n    },\n    purpose: 'disponibilidad',\n    tipo: 'BR',\n    solo_disponibles: true,\n    limit: 15,\n  }\n}];"
+      },
+      "id": "t1a-0002",
+      "name": "T1a Preparar Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// === BR Rewrite (canónico + merge prep T1a) ===\nconst __prep = $input.first().json;\nconst text = String(__prep.user_text || '').trim();\nif (!text) throw new Error('BR Rewrite: falta user_text');\n\nconst raw = text.toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '');\nconst synonyms = {\n  chiquito: 'chico', chiquita: 'chico', pequeno: 'chico',\n  grande: 'grande', tobogan: 'tobogan', 'hombre arana': 'spiderman',\n};\nlet normalized = raw;\nfor (const [from, to] of Object.entries(synonyms)) {\n  normalized = normalized.replace(new RegExp(from.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&'), 'g'), to);\n}\nconst stop = new Set(['con','de','el','la','los','las','un','una','para','brincolin','brincolines']);\nconst tokens = normalized.split(/[^a-z0-9]+/).map(t => synonyms[t] || t)\n  .filter(t => t.length >= 2 && !stop.has(t)).slice(0, 6);\nconst unique = [...new Set(tokens)];\n\nreturn [{\n  json: {\n    ...__prep,\n    user_text: text,\n    search_tokens: unique,\n    query_crm: unique.join(' '),\n    search: unique.join(' '),\n    tipo: 'BR',\n    alt_queries: unique.length > 1 ? [unique[0]] : [],\n    needs_human: unique.length === 0,\n    reason: unique.length ? null : 'No se pudo extraer tokens de búsqueda',\n  },\n}];"
+      },
+      "id": "t1a-0003",
+      "name": "BR Rewrite",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * Nodo Code n8n — nombre FIJO: \"Session To CRM Query\"\n *\n * Único convertidor Session → payloads CRM.\n * Shapes SEPARADOS a propósito (no mezclar GET y POST):\n *\n *   disponibilidad_query / disponibilidad_qs\n *     → SOLO para GET /v1/bot/disponibilidad/\n *     → Nunca incluye productos, dirección ni cliente\n *\n *   cotizacion_body\n *     → SOLO para POST /v1/bot/cotizacion/\n *     → horario (fecha_renta) + productos + manteles_regalo?\n *\n *   renta_crear_body\n *     → SOLO para POST /v1/bot/renta/crear/\n *     → body completo (cliente, dirección, productos, horario, anticipo…)\n *\n * Input:\n *   $json.purpose = \"disponibilidad\" | \"cotizacion\" | \"renta_crear\"\n *   (default: \"disponibilidad\")\n *   + session en $json / $json.session / nodo \"Session\"\n *   + extras: tipo, search|query_crm, solo_disponibles, limit, accion…\n *\n * Si falta un campo requerido para el purpose → THROW ruidoso\n * (no dejar que el CRM conteste 400 genérico dos nodos después).\n */\n\nconst SESSION_NODE = 'Session';\nconst PURPOSE = String(($input.first().json || {}).purpose || 'disponibilidad').toLowerCase();\n\nfunction loadSession() {\n  const direct = $input.first().json || {};\n  if (direct.session && typeof direct.session === 'object') {\n    return { ...direct.session };\n  }\n  try {\n    return { ...$(SESSION_NODE).first().json };\n  } catch (_) {\n    return { ...direct };\n  }\n}\n\nfunction requireFields(obj, fields, ctx) {\n  const missing = fields.filter((f) => {\n    const v = obj[f];\n    if (v === undefined || v === null) return true;\n    if (typeof v === 'string' && !v.trim()) return true;\n    if (Array.isArray(v) && v.length === 0) return true;\n    return false;\n  });\n  if (missing.length) {\n    throw new Error(\n      `session_to_crm_query: falta ${missing.join(', ')} en session ` +\n      `(purpose=${ctx}). No llames al CRM hasta completar el flujo conversacional.`\n    );\n  }\n}\n\nconst extras = $input.first().json || {};\nconst session = loadSession();\n\n// Horario: canónico en session es fecha_renta (no fecha)\nconst fecha_renta = session.fecha_renta || extras.fecha_renta;\nconst hora_inicio = session.hora_inicio || extras.hora_inicio;\nconst hora_fin = session.hora_fin || extras.hora_fin;\n\nconst horario = {\n  fecha_renta: fecha_renta ? String(fecha_renta) : '',\n  hora_inicio: hora_inicio ? String(hora_inicio) : '',\n  hora_fin: hora_fin ? String(hora_fin) : '',\n};\n\n// ─── GET /bot/disponibilidad/ ─────────────────────────────────────────\nrequireFields(horario, ['fecha_renta', 'hora_inicio', 'hora_fin'], PURPOSE === 'disponibilidad' ? 'disponibilidad' : `${PURPOSE}/horario`);\n\nconst tipo = extras.tipo || session.tipo_busqueda || '';\nconst search = extras.search ?? extras.query_crm ?? session.query_crm ?? '';\nconst solo_disponibles = extras.solo_disponibles ?? true;\nconst limit = extras.limit ?? 15;\n\nconst disponibilidad_query = {\n  fecha: horario.fecha_renta, // RENAME session.fecha_renta → ?fecha=\n  hora_inicio: horario.hora_inicio,\n  hora_fin: horario.hora_fin,\n  solo_disponibles: solo_disponibles ? 'true' : 'false',\n  limit: String(limit),\n};\nif (tipo) disponibilidad_query.tipo = String(tipo);\nif (search) disponibilidad_query.search = String(search);\n\nconst disponibilidad_qs = Object.entries(disponibilidad_query)\n  .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)\n  .join('&');\n\n// ─── POST /bot/cotizacion/ ────────────────────────────────────────────\nlet cotizacion_body = null;\nif (PURPOSE === 'cotizacion' || PURPOSE === 'renta_crear') {\n  const productos = session.productos || extras.productos;\n  requireFields({ ...horario, productos }, ['fecha_renta', 'hora_inicio', 'hora_fin', 'productos'], 'cotizacion');\n  cotizacion_body = {\n    fecha_renta: horario.fecha_renta,\n    hora_inicio: horario.hora_inicio,\n    hora_fin: horario.hora_fin,\n    productos,\n    manteles_regalo: session.manteles_regalo || extras.manteles_regalo || [],\n  };\n}\n\n// ─── POST /bot/renta/crear/ ───────────────────────────────────────────\nlet renta_crear_body = null;\nif (PURPOSE === 'renta_crear') {\n  const telefono = session.telefono || extras.telefono;\n  const productos = session.productos || extras.productos;\n  requireFields(\n    { ...horario, telefono, productos },\n    ['fecha_renta', 'hora_inicio', 'hora_fin', 'telefono', 'productos'],\n    'renta_crear'\n  );\n\n  renta_crear_body = {\n    telefono: String(telefono).replace(/\\D/g, ''),\n    cliente_nombre: session.cliente_nombre || session.nombre || extras.nombre || '',\n    calle_y_numero: session.direccion || session.calle_y_numero || extras.direccion || '',\n    colonia: session.colonia || extras.colonia || '',\n    ciudad_o_municipio: session.ciudad || session.ciudad_o_municipio || extras.ciudad || '',\n    mismo_domicilio: session.mismo_domicilio ?? extras.mismo_domicilio ?? true,\n    fecha_renta: horario.fecha_renta,\n    hora_inicio: horario.hora_inicio,\n    hora_fin: horario.hora_fin,\n    productos,\n    manteles_regalo: session.manteles_regalo || extras.manteles_regalo || [],\n    anticipo: session.anticipo ?? extras.anticipo ?? 0,\n    notas: session.notas || extras.notas || '',\n    accion: 'crear',\n  };\n}\n\n// Salida: shapes hermanos, no un mega-objeto ambiguo\nconst out = {\n  purpose: PURPOSE,\n  // GET only\n  disponibilidad_query,\n  disponibilidad_qs,\n  // POST cotizacion only (null si purpose=disponibilidad)\n  cotizacion_body,\n  // POST renta/crear only (null si purpose≠renta_crear)\n  renta_crear_body,\n  _map: {\n    'session.fecha_renta → GET': 'disponibilidad_query.fecha',\n    'session.fecha_renta → POST': 'cotizacion_body.fecha_renta | renta_crear_body.fecha_renta',\n  },\n};\n\nif (PURPOSE === 'disponibilidad') {\n  // No exponer bodies POST parcialmente construidos por accidente\n  out.cotizacion_body = null;\n  out.renta_crear_body = null;\n}\nif (PURPOSE === 'cotizacion') {\n  out.renta_crear_body = null;\n}\n\nreturn [{ json: out }];\n"
+      },
+      "id": "t1a-0004",
+      "name": "Session To CRM Query (T1a)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://app.trotacrm.com/v1/auth/token/",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"username\": \"{{ $env.CRM_BOT_USER || 'bot-whatsapp' }}\",\n  \"password\": \"{{ $env.CRM_BOT_PASSWORD }}\"\n}",
+        "options": {}
+      },
+      "id": "t1a-0005",
+      "name": "Obtener Token JWT",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.CRM_API_BASE }}/bot/disponibilidad/",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "tipo",
+              "value": "BR"
+            },
+            {
+              "name": "search",
+              "value": "={{ $('BR Rewrite').item.json.query_crm }}"
+            },
+            {
+              "name": "fecha",
+              "value": "={{ $('Session To CRM Query (T1a)').item.json.disponibilidad_query.fecha }}"
+            },
+            {
+              "name": "hora_inicio",
+              "value": "={{ $('Session To CRM Query (T1a)').item.json.disponibilidad_query.hora_inicio }}"
+            },
+            {
+              "name": "hora_fin",
+              "value": "={{ $('Session To CRM Query (T1a)').item.json.disponibilidad_query.hora_fin }}"
+            },
+            {
+              "name": "solo_disponibles",
+              "value": "true"
+            },
+            {
+              "name": "limit",
+              "value": "15"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Obtener Token JWT').item.json.access }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "t1a-0006",
+      "name": "BR HTTP Disponibilidad",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * Nodo Code n8n — nombre FIJO: \"BR Rerank\"\n *\n * Rutas de salida:\n *  A) CONTRATO ROTO  → throw (técnico)\n *     - falta nodo Rewrite/HTTP\n *     - HTTP no trae array \"resultados\" (undefined/null/no-array)\n *     - id fuera del set CRM\n *  B) NEGOCIO SIN MATCH → return conversacional (NO throw)\n *     - resultados: []  (array vacío válido)\n *\n * Tokens:\n *  - search_tokens_rewrite ← $('BR Rewrite').search_tokens  (scoring)\n *  - search_tokens_crm     ← $('BR HTTP Disponibilidad').search_tokens (audit)\n */\n\nconst REWRITE = 'BR Rewrite';\nconst HTTP = 'BR HTTP Disponibilidad';\n\nfunction nodeJson(name) {\n  try {\n    return $(name).first().json;\n  } catch (err) {\n    throw new Error(\n      `BR Rerank: CONTRATO — no encuentro el nodo \"${name}\". ` +\n      `Renómbralo exactamente así.`\n    );\n  }\n}\n\nconst rewrite = nodeJson(REWRITE);\nconst http = nodeJson(HTTP);\n\nconst userText = rewrite.user_text || '';\nconst search_tokens_rewrite = Array.isArray(rewrite.search_tokens)\n  ? rewrite.search_tokens.map((t) => String(t).toLowerCase())\n  : [];\nconst search_tokens_crm = Array.isArray(http.search_tokens)\n  ? http.search_tokens.map((t) => String(t).toLowerCase())\n  : [];\n\n// --- Fix 1: forma del campo vs vacío de negocio ---\n// null  = contrato roto (falta key o no es array) → THROW\n// []    = 0 matches reales → mensaje conversacional\nconst resultadosRaw = Object.prototype.hasOwnProperty.call(http, 'resultados')\n  ? http.resultados\n  : (Object.prototype.hasOwnProperty.call(http, 'candidatos') ? http.candidatos : undefined);\n\nif (!Array.isArray(resultadosRaw)) {\n  throw new Error(\n    `BR Rerank: CONTRATO — \"${HTTP}\" debe exponer array \"resultados\". ` +\n    `Recibido typeof=${typeof resultadosRaw}; keys=${Object.keys(http || {}).join(',') || '(vacío)'}`\n  );\n}\n\nconst resultados = resultadosRaw;\n\n// Scoring usa SOLO tokens del rewrite (sinónimos). CRM tokens son audit.\nconst tokens = search_tokens_rewrite;\n\nif (resultados.length === 0) {\n  const alts = Array.isArray(rewrite.alt_queries) ? rewrite.alt_queries : [];\n  const hint = alts.length ? `\\nPrueba: ${alts.join(', ')}` : '\\nPrueba otra palabra (tema, tamaño)';\n  return [{\n    json: {\n      preferred_order_ids: [],\n      top_n: 5,\n      needs_human: false, // negocio: reintentar búsqueda, no handoff técnico\n      reason: 'no_matches',\n      confidence: 0,\n      top: [],\n      menu_whatsapp:\n        `No encontré brincolines con \"${userText}\".${hint}\\n` +\n        '0. Buscar de nuevo\\n9. Hablar con un asesor',\n      search_tokens_rewrite,\n      search_tokens_crm,\n      _debug: {\n        query_crm: rewrite.query_crm || null,\n        http_count: http.count ?? 0,\n        exit: 'business_empty',\n      },\n    },\n  }];\n}\n\nfunction score(nombre) {\n  const n = String(nombre || '')\n    .toLowerCase()\n    .normalize('NFD')\n    .replace(/[\\u0300-\\u036f]/g, '');\n  let s = 0;\n  for (const t of tokens) {\n    if (n.includes(t)) s += 2;\n  }\n  return s;\n}\n\nconst crmIds = new Set(resultados.map((c) => c.id));\n\nconst ranked = [...resultados]\n  .filter((c) => c && c.id != null && c.disponible !== false)\n  .map((c) => ({ ...c, _score: score(c.nombre) }))\n  .sort((a, b) => b._score - a._score || String(a.nombre).localeCompare(String(b.nombre)));\n\nconst topN = 5;\nconst top = ranked.slice(0, topN).map(({ _score, ...rest }) => rest);\nconst ids = top.map((c) => c.id);\n\nfor (const id of ids) {\n  if (!crmIds.has(id)) {\n    throw new Error(`BR Rerank: CONTRATO — id ${id} no está en resultados CRM`);\n  }\n}\n\nconst lines = top.map((c, i) => {\n  const libres = c.unidades_libres ?? '?';\n  return `${i + 1}. ${c.nombre} — $${c.precio} (${libres} libres)`;\n});\n\nconst menu = [\n  'Encontré estas opciones:',\n  ...lines,\n  '',\n  '0. Buscar de nuevo',\n  '9. Hablar con un asesor',\n].join('\\n');\n\nreturn [{\n  json: {\n    preferred_order_ids: ids,\n    top_n: topN,\n    needs_human: false,\n    reason: null,\n    confidence: tokens.length ? Math.min(1, (ranked[0]?._score || 0) / (tokens.length * 2)) : 0.5,\n    top,\n    menu_whatsapp: menu,\n    search_tokens_rewrite,\n    search_tokens_crm,\n    _debug: {\n      user_text: userText,\n      http_count: http.count ?? resultados.length,\n      exit: 'ok',\n    },\n  },\n}];\n"
+      },
+      "id": "t1a-0007",
+      "name": "BR Rerank",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const rerank = $input.first().json;\nconst prep = $('T1a Preparar Input').item.json;\n\nconst staticData = $getWorkflowStaticData('global');\nif (!staticData.br_searches) staticData.br_searches = {};\n\nconst now = Date.now();\nconst TTL_MS = 15 * 60 * 1000;\nfor (const [id, entry] of Object.entries(staticData.br_searches)) {\n  if (now - entry.created_at > TTL_MS) delete staticData.br_searches[id];\n}\n\nconst hasTop = Array.isArray(rerank.top) && rerank.top.length > 0;\nconst searchId = hasTop ? `br_${prep.telefono}_${now}` : null;\n\nif (hasTop) {\n  staticData.br_searches[searchId] = {\n    created_at: now,\n    telefono: prep.telefono,\n    session: prep.session,\n    top: rerank.top,\n    query_crm: $('BR Rewrite').item.json.query_crm || null,\n  };\n}\n\nreturn [{\n  json: {\n    ok: hasTop,\n    search_id: searchId,\n    expires_in_sec: hasTop ? 900 : null,\n    menu_whatsapp: rerank.menu_whatsapp,\n    needs_human: rerank.needs_human,\n    reason: rerank.reason,\n    top: rerank.top || [],\n    preferred_order_ids: rerank.preferred_order_ids || [],\n    search_tokens_rewrite: rerank.search_tokens_rewrite,\n    search_tokens_crm: rerank.search_tokens_crm,\n    _debug: rerank._debug || null,\n  }\n}];"
+      },
+      "id": "t1a-0008",
+      "name": "Guardar Search State",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "t1a-0009",
+      "name": "T1a Responder",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1760,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "br-test-select",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "t1b-0001",
+      "name": "T1b Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        560
+      ],
+      "webhookId": "br-test-select"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body ?? $input.first().json;\n\nif (!body.search_id) throw new Error('T1b: falta search_id');\nif (body.choice === undefined || body.choice === null || body.choice === '') {\n  throw new Error('T1b: falta choice (número de opción, 0 = buscar de nuevo)');\n}\n\nconst choice = Number(body.choice);\nconst staticData = $getWorkflowStaticData('global');\nconst entry = staticData.br_searches && staticData.br_searches[body.search_id];\n\nif (!entry) {\n  throw new Error(\n    `T1b: search_id \"${body.search_id}\" no encontrado o expirado (TTL 15 min). Vuelve a correr T1a.`\n  );\n}\n\n// choice 0 = buscar de nuevo (turno conversacional, no llama motor)\nif (choice === 0) {\n  return [{\n    json: {\n      ok: false,\n      reason: 'search_again',\n      needs_human: false,\n      mensaje_whatsapp: 'Ok, escribe de nuevo qué brincolín buscas (tema, tamaño…).',\n      skip_motor: true,\n      telefono: entry.telefono,\n      session: entry.session,\n    }\n  }];\n}\n\nconst idx = choice - 1;\nconst item = entry.top[idx];\nif (!item) {\n  throw new Error(\n    `T1b: choice=${choice} fuera de rango. Opciones válidas: 1-${entry.top.length} (o 0 para buscar de nuevo)`\n  );\n}\n\nconst purpose = body.purpose === 'renta_crear' ? 'renta_crear' : 'cotizacion';\n\nreturn [{\n  json: {\n    skip_motor: false,\n    telefono: entry.telefono,\n    session: {\n      ...entry.session,\n      telefono: entry.telefono,\n      productos: [{ id: item.id, cantidad: 1 }],\n    },\n    productos: [{ id: item.id, cantidad: 1 }],\n    producto_elegido: item,\n    purpose,\n  }\n}];"
+      },
+      "id": "t1b-0002",
+      "name": "T1b Cargar Search State",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "skip",
+              "leftValue": "={{ $json.skip_motor }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "t1b-0002b",
+      "name": "Skip Motor?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        400,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * Nodo Code n8n — nombre FIJO: \"Session To CRM Query\"\n *\n * Único convertidor Session → payloads CRM.\n * Shapes SEPARADOS a propósito (no mezclar GET y POST):\n *\n *   disponibilidad_query / disponibilidad_qs\n *     → SOLO para GET /v1/bot/disponibilidad/\n *     → Nunca incluye productos, dirección ni cliente\n *\n *   cotizacion_body\n *     → SOLO para POST /v1/bot/cotizacion/\n *     → horario (fecha_renta) + productos + manteles_regalo?\n *\n *   renta_crear_body\n *     → SOLO para POST /v1/bot/renta/crear/\n *     → body completo (cliente, dirección, productos, horario, anticipo…)\n *\n * Input:\n *   $json.purpose = \"disponibilidad\" | \"cotizacion\" | \"renta_crear\"\n *   (default: \"disponibilidad\")\n *   + session en $json / $json.session / nodo \"Session\"\n *   + extras: tipo, search|query_crm, solo_disponibles, limit, accion…\n *\n * Si falta un campo requerido para el purpose → THROW ruidoso\n * (no dejar que el CRM conteste 400 genérico dos nodos después).\n */\n\nconst SESSION_NODE = 'Session';\nconst PURPOSE = String(($input.first().json || {}).purpose || 'disponibilidad').toLowerCase();\n\nfunction loadSession() {\n  const direct = $input.first().json || {};\n  if (direct.session && typeof direct.session === 'object') {\n    return { ...direct.session };\n  }\n  try {\n    return { ...$(SESSION_NODE).first().json };\n  } catch (_) {\n    return { ...direct };\n  }\n}\n\nfunction requireFields(obj, fields, ctx) {\n  const missing = fields.filter((f) => {\n    const v = obj[f];\n    if (v === undefined || v === null) return true;\n    if (typeof v === 'string' && !v.trim()) return true;\n    if (Array.isArray(v) && v.length === 0) return true;\n    return false;\n  });\n  if (missing.length) {\n    throw new Error(\n      `session_to_crm_query: falta ${missing.join(', ')} en session ` +\n      `(purpose=${ctx}). No llames al CRM hasta completar el flujo conversacional.`\n    );\n  }\n}\n\nconst extras = $input.first().json || {};\nconst session = loadSession();\n\n// Horario: canónico en session es fecha_renta (no fecha)\nconst fecha_renta = session.fecha_renta || extras.fecha_renta;\nconst hora_inicio = session.hora_inicio || extras.hora_inicio;\nconst hora_fin = session.hora_fin || extras.hora_fin;\n\nconst horario = {\n  fecha_renta: fecha_renta ? String(fecha_renta) : '',\n  hora_inicio: hora_inicio ? String(hora_inicio) : '',\n  hora_fin: hora_fin ? String(hora_fin) : '',\n};\n\n// ─── GET /bot/disponibilidad/ ─────────────────────────────────────────\nrequireFields(horario, ['fecha_renta', 'hora_inicio', 'hora_fin'], PURPOSE === 'disponibilidad' ? 'disponibilidad' : `${PURPOSE}/horario`);\n\nconst tipo = extras.tipo || session.tipo_busqueda || '';\nconst search = extras.search ?? extras.query_crm ?? session.query_crm ?? '';\nconst solo_disponibles = extras.solo_disponibles ?? true;\nconst limit = extras.limit ?? 15;\n\nconst disponibilidad_query = {\n  fecha: horario.fecha_renta, // RENAME session.fecha_renta → ?fecha=\n  hora_inicio: horario.hora_inicio,\n  hora_fin: horario.hora_fin,\n  solo_disponibles: solo_disponibles ? 'true' : 'false',\n  limit: String(limit),\n};\nif (tipo) disponibilidad_query.tipo = String(tipo);\nif (search) disponibilidad_query.search = String(search);\n\nconst disponibilidad_qs = Object.entries(disponibilidad_query)\n  .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)\n  .join('&');\n\n// ─── POST /bot/cotizacion/ ────────────────────────────────────────────\nlet cotizacion_body = null;\nif (PURPOSE === 'cotizacion' || PURPOSE === 'renta_crear') {\n  const productos = session.productos || extras.productos;\n  requireFields({ ...horario, productos }, ['fecha_renta', 'hora_inicio', 'hora_fin', 'productos'], 'cotizacion');\n  cotizacion_body = {\n    fecha_renta: horario.fecha_renta,\n    hora_inicio: horario.hora_inicio,\n    hora_fin: horario.hora_fin,\n    productos,\n    manteles_regalo: session.manteles_regalo || extras.manteles_regalo || [],\n  };\n}\n\n// ─── POST /bot/renta/crear/ ───────────────────────────────────────────\nlet renta_crear_body = null;\nif (PURPOSE === 'renta_crear') {\n  const telefono = session.telefono || extras.telefono;\n  const productos = session.productos || extras.productos;\n  requireFields(\n    { ...horario, telefono, productos },\n    ['fecha_renta', 'hora_inicio', 'hora_fin', 'telefono', 'productos'],\n    'renta_crear'\n  );\n\n  renta_crear_body = {\n    telefono: String(telefono).replace(/\\D/g, ''),\n    cliente_nombre: session.cliente_nombre || session.nombre || extras.nombre || '',\n    calle_y_numero: session.direccion || session.calle_y_numero || extras.direccion || '',\n    colonia: session.colonia || extras.colonia || '',\n    ciudad_o_municipio: session.ciudad || session.ciudad_o_municipio || extras.ciudad || '',\n    mismo_domicilio: session.mismo_domicilio ?? extras.mismo_domicilio ?? true,\n    fecha_renta: horario.fecha_renta,\n    hora_inicio: horario.hora_inicio,\n    hora_fin: horario.hora_fin,\n    productos,\n    manteles_regalo: session.manteles_regalo || extras.manteles_regalo || [],\n    anticipo: session.anticipo ?? extras.anticipo ?? 0,\n    notas: session.notas || extras.notas || '',\n    accion: 'crear',\n  };\n}\n\n// Salida: shapes hermanos, no un mega-objeto ambiguo\nconst out = {\n  purpose: PURPOSE,\n  // GET only\n  disponibilidad_query,\n  disponibilidad_qs,\n  // POST cotizacion only (null si purpose=disponibilidad)\n  cotizacion_body,\n  // POST renta/crear only (null si purpose≠renta_crear)\n  renta_crear_body,\n  _map: {\n    'session.fecha_renta → GET': 'disponibilidad_query.fecha',\n    'session.fecha_renta → POST': 'cotizacion_body.fecha_renta | renta_crear_body.fecha_renta',\n  },\n};\n\nif (PURPOSE === 'disponibilidad') {\n  // No exponer bodies POST parcialmente construidos por accidente\n  out.cotizacion_body = null;\n  out.renta_crear_body = null;\n}\nif (PURPOSE === 'cotizacion') {\n  out.renta_crear_body = null;\n}\n\nreturn [{ json: out }];\n"
+      },
+      "id": "t1b-0003",
+      "name": "Session To CRM Query (T1b)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        620,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const s = $input.first().json;\n\nif (s.skip_motor) {\n  return [{ json: s }];\n}\n\nconst mapped = $('Session To CRM Query (T1b)').item.json;\nconst purpose = mapped.purpose;\nlet payload;\n\nif (purpose === 'renta_crear') {\n  payload = mapped.renta_crear_body;\n} else {\n  payload = mapped.cotizacion_body;\n}\n\nif (!payload) {\n  throw new Error('Armar Payload Motor: body null para purpose=' + purpose);\n}\n\n// Motor trotacrm-crear-plan espera top-level accion + telefono + horario + productos\nconst motorBody = {\n  ...payload,\n  accion: purpose === 'renta_crear' ? 'crear' : 'cotizar',\n  telefono: s.telefono || payload.telefono,\n  nombre: payload.cliente_nombre || s.session?.cliente_nombre || '',\n  direccion: payload.calle_y_numero || s.session?.direccion || '',\n  colonia: payload.colonia || s.session?.colonia || '',\n  ciudad: payload.ciudad_o_municipio || s.session?.ciudad || '',\n};\n\nreturn [{\n  json: {\n    skip_motor: false,\n    purpose,\n    motor_body: motorBody,\n    producto_elegido: s.producto_elegido,\n  }\n}];"
+      },
+      "id": "t1b-0004",
+      "name": "Armar Payload Motor",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        840,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://bot.app.trotacrm.com/webhook/trotacrm-crear-plan",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.motor_body) }}",
+        "options": {}
+      },
+      "id": "t1b-0005",
+      "name": "Llamar Motor Crear-Plan",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1060,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const prev = $('Armar Payload Motor').item.json;\n\nif (prev.skip_motor) {\n  return [{\n    json: {\n      ok: false,\n      reason: prev.reason,\n      needs_human: false,\n      mensaje_whatsapp: prev.mensaje_whatsapp,\n    }\n  }];\n}\n\nconst motor = $input.first().json;\nreturn [{\n  json: {\n    ...motor,\n    purpose: prev.purpose,\n    producto_elegido: prev.producto_elegido,\n  }\n}];"
+      },
+      "id": "t1b-0006",
+      "name": "Formatear Respuesta T1b",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1280,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const s = $input.first().json;\nreturn [{\n  json: {\n    ok: false,\n    reason: s.reason || 'search_again',\n    needs_human: false,\n    mensaje_whatsapp: s.mensaje_whatsapp,\n  }\n}];"
+      },
+      "id": "t1b-0006b",
+      "name": "Respuesta Search Again",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        620,
+        680
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "t1b-0007",
+      "name": "T1b Responder",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1500,
+        560
+      ]
+    }
+  ],
+  "connections": {
+    "T1a Webhook": {
+      "main": [
+        [
+          {
+            "node": "T1a Preparar Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "T1a Preparar Input": {
+      "main": [
+        [
+          {
+            "node": "BR Rewrite",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "BR Rewrite": {
+      "main": [
+        [
+          {
+            "node": "Session To CRM Query (T1a)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Session To CRM Query (T1a)": {
+      "main": [
+        [
+          {
+            "node": "Obtener Token JWT",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Obtener Token JWT": {
+      "main": [
+        [
+          {
+            "node": "BR HTTP Disponibilidad",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "BR HTTP Disponibilidad": {
+      "main": [
+        [
+          {
+            "node": "BR Rerank",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "BR Rerank": {
+      "main": [
+        [
+          {
+            "node": "Guardar Search State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guardar Search State": {
+      "main": [
+        [
+          {
+            "node": "T1a Responder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "T1b Webhook": {
+      "main": [
+        [
+          {
+            "node": "T1b Cargar Search State",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "T1b Cargar Search State": {
+      "main": [
+        [
+          {
+            "node": "Skip Motor?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Skip Motor?": {
+      "main": [
+        [
+          {
+            "node": "Respuesta Search Again",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Session To CRM Query (T1b)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Session To CRM Query (T1b)": {
+      "main": [
+        [
+          {
+            "node": "Armar Payload Motor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Armar Payload Motor": {
+      "main": [
+        [
+          {
+            "node": "Llamar Motor Crear-Plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Llamar Motor Crear-Plan": {
+      "main": [
+        [
+          {
+            "node": "Formatear Respuesta T1b",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Formatear Respuesta T1b": {
+      "main": [
+        [
+          {
+            "node": "T1b Responder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respuesta Search Again": {
+      "main": [
+        [
+          {
+            "node": "T1b Responder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "TROTA"
+    },
+    {
+      "name": "BR"
+    },
+    {
+      "name": "TEST"
+    }
+  ],
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}
