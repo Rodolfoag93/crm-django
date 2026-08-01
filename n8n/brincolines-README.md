@@ -2,10 +2,26 @@
 
 ## Session → CRM query (centralizado)
 
-**Antes de cualquier** `GET /bot/disponibilidad/` (BR, ME, SI, LZ…), pasar por el nodo:
-
-**Nombre:** `Session To CRM Query`  
+**Nombre nodo:** `Session To CRM Query`  
 **Código:** `session-to-crm-query.js`
+
+### Purpose (input)
+
+```json
+{ "purpose": "disponibilidad" | "cotizacion" | "renta_crear" }
+```
+
+Default: `disponibilidad`.
+
+### Outputs (shapes hermanos, no mezclados)
+
+| Key | Usar en | Contiene |
+|-----|---------|----------|
+| `disponibilidad_query` / `disponibilidad_qs` | **GET** `/bot/disponibilidad/` | Solo `fecha`, horas, tipo, search, limit… **sin** productos/dirección |
+| `cotizacion_body` | **POST** `/bot/cotizacion/` | `fecha_renta` + productos (+ manteles). `null` si purpose=disponibilidad |
+| `renta_crear_body` | **POST** `/bot/renta/crear/` | Body completo (teléfono, dirección, productos, horario…). `null` si purpose≠renta_crear |
+
+### Rename horario
 
 | Session | GET disponibilidad | POST cotizacion/renta |
 |---------|--------------------|------------------------|
@@ -13,17 +29,26 @@
 | `hora_inicio` | `hora_inicio` | `hora_inicio` |
 | `hora_fin` | `hora_fin` | `hora_fin` |
 
-HTTP BR queda así:
+### Fail-loud
+
+Si falta un campo requerido para el `purpose`, el nodo hace **throw**:
+
+```
+session_to_crm_query: falta fecha_renta en session (purpose=disponibilidad)...
+```
+
+No deja pasar `undefined` al CRM.
+
+### Ejemplo HTTP BR
 
 ```
 GET .../bot/disponibilidad/?{{ $('Session To CRM Query').item.json.disponibilidad_qs }}
-  &tipo=BR
   &search={{ $('BR Rewrite').item.json.query_crm }}
 ```
 
-O arma query desde `disponibilidad_query` + merge de `search`/`tipo`.
+(o incluye `search`/`tipo` en el input del mapper antes de llamar).
 
-No reimplementes el rename `fecha_renta→fecha` dentro de cada handler.
+No reimplementes el rename en cada handler.
 
 
 | Nodo | Nombre exacto en n8n |
