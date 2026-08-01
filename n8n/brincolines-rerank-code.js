@@ -1,35 +1,71 @@
 /**
- * Nodo Code n8n — Rerank candidatos CRM (sin LLM).
- * Preferencia simple por cobertura de tokens en el nombre.
- * Con LLM: mismo I/O, el modelo solo reordena ids existentes.
+ * Nodo Code n8n — nombre FIJO: "BR Rerank"
  *
- * Input:
- *  - $json.search_tokens
- *  - $json.candidatos  (desde /bot/disponibilidad/ → resultados)
- *    o $('HTTP Disponibilidad').item.json.resultados
+ * NO lee candidatos del $json actual a ciegas.
+ * Toma campos por referencia de nodo (contrato v1):
+ *   search_tokens ← $('BR Rewrite')
+ *   resultados    ← $('BR HTTP Disponibilidad')
+ *
+ * Output: step_3_rerank.output (incluye top[] + menu_whatsapp)
  */
 
-const base = $input.first().json;
-const tokens = (base.search_tokens || []).map((t) => String(t).toLowerCase());
-let candidatos = base.candidatos || base.resultados || [];
+const REWRITE = 'BR Rewrite';
+const HTTP = 'BR HTTP Disponibilidad';
 
-if (!candidatos.length) {
+function nodeJson(name) {
   try {
-    candidatos = $('HTTP Disponibilidad').first().json.resultados || [];
-  } catch (_) {
-    candidatos = [];
+    return $(name).first().json;
+  } catch (err) {
+    throw new Error(
+      `BR Rerank: no encuentro el nodo "${name}". ` +
+      `Renómbralo exactamente así o el flujo falla en silencio.`
+    );
   }
 }
 
-if (!candidatos.length) {
+const rewrite = nodeJson(REWRITE);
+const http = nodeJson(HTTP);
+
+const userText = rewrite.user_text || '';
+const tokens = Array.isArray(rewrite.search_tokens)
+  ? rewrite.search_tokens.map((t) => String(t).toLowerCase())
+  : [];
+
+// CANÓNICO: resultados (CRM). Alias candidatos solo si alguien lo renombró a mano.
+const resultados = Array.isArray(http.resultados)
+  ? http.resultados
+  : (Array.isArray(http.candidatos) ? http.candidatos : null);
+
+if (resultados === null) {
+  throw new Error(
+    `BR Rerank: "${HTTP}" no trae array "resultados". ` +
+    `Keys recibidas: ${Object.keys(http || {}).join(', ') || '(vacío)'}`
+  );
+}
+
+if (typeof http.count === 'number' && http.count !== resultados.length) {
+  // No aborta: aviso en reason si hace falta; count es informativo.
+}
+
+if (!resultados.length) {
+  const alts = Array.isArray(rewrite.alt_queries) ? rewrite.alt_queries : [];
+  const hint = alts.length ? `\nPrueba: ${alts.join(', ')}` : '\nPrueba otra palabra (tema, tamaño)';
   return [{
     json: {
       preferred_order_ids: [],
       top_n: 5,
       needs_human: true,
       reason: 'Sin resultados en CRM',
+      confidence: 0,
       top: [],
-      menu_whatsapp: 'No encontré brincolines con eso.\nPrueba otra palabra (tema, tamaño) o responde *9* para un asesor.',
+      menu_whatsapp:
+        `No encontré brincolines con "${userText}".${hint}\n` +
+        '0. Buscar de nuevo\n9. Hablar con un asesor',
+      _debug: {
+        query_crm: rewrite.query_crm || null,
+        search_tokens: tokens,
+        http_count: http.count ?? 0,
+      },
     },
   }];
 }
@@ -46,14 +82,23 @@ function score(nombre) {
   return s;
 }
 
-const ranked = [...candidatos]
-  .filter((c) => c.disponible !== false)
+const crmIds = new Set(resultados.map((c) => c.id));
+
+const ranked = [...resultados]
+  .filter((c) => c && c.id != null && c.disponible !== false)
   .map((c) => ({ ...c, _score: score(c.nombre) }))
   .sort((a, b) => b._score - a._score || String(a.nombre).localeCompare(String(b.nombre)));
 
 const topN = 5;
-const top = ranked.slice(0, topN);
+const top = ranked.slice(0, topN).map(({ _score, ...rest }) => rest);
 const ids = top.map((c) => c.id);
+
+// Guardrail: nunca devolver id fuera del CRM
+for (const id of ids) {
+  if (!crmIds.has(id)) {
+    throw new Error(`BR Rerank: id ${id} no está en resultados CRM`);
+  }
+}
 
 const lines = top.map((c, i) => {
   const libres = c.unidades_libres ?? '?';
@@ -74,8 +119,14 @@ return [{
     top_n: topN,
     needs_human: false,
     reason: null,
-    confidence: tokens.length ? Math.min(1, (top[0]?._score || 0) / (tokens.length * 2)) : 0.5,
-    top: top.map(({ _score, ...rest }) => rest),
+    confidence: tokens.length ? Math.min(1, (ranked[0]?._score || 0) / (tokens.length * 2)) : 0.5,
+    top,
     menu_whatsapp: menu,
+    _debug: {
+      user_text: userText,
+      search_tokens_used: tokens,
+      http_search_tokens: http.search_tokens || [],
+      http_count: http.count ?? resultados.length,
+    },
   },
 }];

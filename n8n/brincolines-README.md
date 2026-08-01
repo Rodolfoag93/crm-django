@@ -1,19 +1,38 @@
-# Brincolines — búsqueda bot (Fase B + IA opcional)
+# Brincolines — búsqueda bot (contrato v1)
 
-## Backend (ya implementado)
+## Nombres de nodos (obligatorios)
 
-`GET /v1/bot/disponibilidad/`
+| Nodo | Nombre exacto en n8n |
+|------|----------------------|
+| Rewrite | `BR Rewrite` |
+| HTTP CRM | `BR HTTP Disponibilidad` |
+| Rerank | `BR Rerank` |
 
-| Param | Ejemplo | Efecto |
-|-------|---------|--------|
-| `tipo` | `BR` | Solo brincolines |
-| `search` | `spiderman chico` | AND multi-token, case/accent-insensitive |
-| `fecha` | `2026-08-15` | Obligatorio |
-| `hora_inicio` / `hora_fin` | `14:00` / `22:00` | Obligatorio |
-| `solo_disponibles` | `true` | Omite stock 0 |
-| `limit` | `15` | Tope de filas (máx 50) |
+Si cambias el nombre, Rerank **lanza error explícito** (ya no falla en silencio).
 
-Respuesta:
+## Cableado
+
+```
+[user_text] → BR Rewrite → BR HTTP Disponibilidad → BR Rerank → Twilio
+```
+
+### HTTP query (copiar tal cual)
+
+```
+GET {{ $env.CRM_API_BASE }}/bot/disponibilidad/
+  tipo=BR
+  search={{ $('BR Rewrite').item.json.query_crm }}
+  fecha={{ $('Session').item.json.fecha_renta }}
+  hora_inicio={{ $('Session').item.json.hora_inicio }}
+  hora_fin={{ $('Session').item.json.hora_fin }}
+  solo_disponibles=true
+  limit=15
+Authorization: Bearer {{ token }}
+```
+
+> `fecha` (query) ← `fecha_renta` (sesión). No mandes `fecha_renta` como nombre del query param.
+
+### CRM response (canónico)
 
 ```json
 {
@@ -22,37 +41,39 @@ Respuesta:
   "resultados": [
     {
       "id": 101,
-      "nombre": "Brincolín Spiderman chico c/tobogán",
+      "nombre": "...",
       "tipo": "BR",
+      "tipo_display": "Brincolín",
       "precio": "1800.00",
       "disponible": true,
-      "unidades_libres": 2
+      "unidades_libres": 2,
+      "familia_mesa": null
     }
   ]
 }
 ```
 
-También: `GET /v1/productos-buscar/?q=&tipo=BR` usa el mismo motor multi-token (sigue devolviendo **lista** para no romper la PWA).
+Campo canónico del array: **`resultados`** (no `candidatos`).
 
-## n8n — orden de nodos
+### Rerank lee por referencia
 
-1. **Rewrite** — pegar `brincolines-rewrite-code.js` (o LLM con mismo JSON)
-2. **HTTP Request** CRM:
-   ```
-   GET {{ $env.CRM_API_BASE }}/bot/disponibilidad/
-     ?tipo=BR
-     &search={{ $json.query_crm }}
-     &fecha={{ session.fecha_renta }}
-     &hora_inicio={{ session.hora_inicio }}
-     &hora_fin={{ session.hora_fin }}
-     &solo_disponibles=true
-     &limit=15
-   Authorization: Bearer {{ token }}
-   ```
-3. **Rerank** — pegar `brincolines-rerank-code.js` (o LLM)
-4. Enviar `menu_whatsapp` por Twilio
-5. Usuario responde `1`–`5` → mapear a `top[i-1].id` → `productos[]`
+- `search_tokens` ← `$('BR Rewrite')` (sinónimos)
+- `resultados` ← `$('BR HTTP Disponibilidad')`
 
-## Contrato formal
+No uses el `$json` post-HTTP para tokens del rewrite: se pierden.
 
-Ver `brincolines-ai-contract.json`.
+### Selección menú → motor crear-plan
+
+```
+usuario responde N (1..5)
+producto = top[N-1]
+session.productos.push({ id: producto.id, cantidad: 1 })
+```
+
+Usar **`id`**, no `producto_id`.
+
+## Archivos
+
+- `brincolines-ai-contract.json` — contrato + matriz de alineación
+- `brincolines-rewrite-code.js` — pegar en BR Rewrite
+- `brincolines-rerank-code.js` — pegar en BR Rerank

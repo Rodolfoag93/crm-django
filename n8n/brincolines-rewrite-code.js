@@ -1,15 +1,12 @@
 /**
- * Nodo Code n8n — Rewrite query BR (sin LLM).
- * Usa esto como fallback o Fase 0. Con LLM, reemplaza el cuerpo
- * por la llamada al modelo y parsea el mismo JSON de salida.
- *
- * Input esperado: $json.user_text
- * Output: rewrite_output (ver brincolines-ai-contract.json)
+ * Nodo Code n8n — nombre FIJO: "BR Rewrite"
+ * Input:  { user_text: string }  (también acepta body)
+ * Output: ver brincolines-ai-contract.json → step_1_rewrite.output
  */
 
 const text = String($input.first().json.user_text || $input.first().json.body || '').trim();
 if (!text) {
-  throw new Error('Falta user_text');
+  throw new Error('BR Rewrite: falta user_text');
 }
 
 const raw = text
@@ -20,17 +17,15 @@ const raw = text
 const synonyms = {
   chiquito: 'chico',
   chiquita: 'chico',
-  pequeño: 'chico',
   pequeno: 'chico',
   grande: 'grande',
   tobogan: 'tobogan',
   'hombre arana': 'spiderman',
-  'hombre araña': 'spiderman',
 };
 
 let normalized = raw;
 for (const [from, to] of Object.entries(synonyms)) {
-  normalized = normalized.replace(new RegExp(from, 'g'), to);
+  normalized = normalized.replace(new RegExp(from.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), to);
 }
 
 const stop = new Set(['con', 'de', 'el', 'la', 'los', 'las', 'un', 'una', 'para', 'brincolin', 'brincolines']);
@@ -42,13 +37,26 @@ const tokens = normalized
 
 const unique = [...new Set(tokens)];
 
+if (!unique.length) {
+  return [{
+    json: {
+      user_text: text,
+      search_tokens: [],
+      query_crm: '',
+      alt_queries: [],
+      needs_human: true,
+      reason: 'No se pudo extraer tokens de búsqueda',
+    },
+  }];
+}
+
 return [{
   json: {
+    user_text: text,
     search_tokens: unique,
     query_crm: unique.join(' '),
     alt_queries: unique.length > 1 ? [unique[0]] : [],
     needs_human: false,
     reason: null,
-    user_text: text,
   },
 }];

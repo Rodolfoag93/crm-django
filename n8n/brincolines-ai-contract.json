@@ -1,60 +1,123 @@
 {
-  "description": "Contrato del nodo IA para búsqueda de brincolines (rewrite + rerank). La IA NUNCA inventa producto_id.",
-  "endpoint_crm": "GET /v1/bot/disponibilidad/?tipo=BR&search={q}&fecha=&hora_inicio=&hora_fin=&solo_disponibles=true&limit=15",
-  "flow": [
-    "1. Usuario escribe texto libre",
-    "2. Nodo IA rewrite → search_tokens + query_crm",
-    "3. HTTP CRM disponibilidad con query_crm (o join tokens)",
-    "4. Nodo IA rerank con candidatos CRM → preferred_order_ids",
-    "5. Bot muestra top 5 del orden IA (fallback: orden CRM)",
-    "6. Usuario elige 1-5; id sale SOLO de candidatos"
-  ],
-  "rewrite_input": {
-    "user_text": "spiderman chiquito con tobogan",
-    "tipo": "BR",
-    "fecha_renta": "2026-08-15",
-    "hora_inicio": "14:00",
-    "hora_fin": "22:00"
+  "version": "1.0.0",
+  "description": "Contrato canónico Rewrite → HTTP CRM → Rerank. Campos con nombre EXACTO. La IA nunca inventa id.",
+  "critical_wiring": {
+    "note": "En n8n el HTTP Request REEMPLAZA $json. No asumas que search_tokens del Rewrite siguen en $input. Usa referencias a nodos por nombre fijo.",
+    "node_names_required": {
+      "rewrite": "BR Rewrite",
+      "http": "BR HTTP Disponibilidad",
+      "rerank": "BR Rerank"
+    }
   },
-  "rewrite_output": {
-    "search_tokens": ["spiderman", "chico", "tobogan"],
-    "query_crm": "spiderman chico tobogan",
-    "alt_queries": ["spiderman", "hombre araña"],
-    "needs_human": false,
-    "reason": null
+
+  "step_1_rewrite": {
+    "input": {
+      "user_text": { "type": "string", "required": true, "example": "spiderman chiquito con tobogan" }
+    },
+    "output": {
+      "user_text": { "type": "string", "required": true },
+      "search_tokens": { "type": "string[]", "required": true, "example": ["spiderman", "chico", "tobogan"] },
+      "query_crm": { "type": "string", "required": true, "example": "spiderman chico tobogan", "maps_to_http_param": "search" },
+      "alt_queries": { "type": "string[]", "required": true },
+      "needs_human": { "type": "boolean", "required": true },
+      "reason": { "type": "string|null", "required": true }
+    },
+    "does_not_output": ["fecha", "fecha_renta", "hora_inicio", "hora_fin", "candidatos", "resultados"]
   },
-  "rerank_input": {
-    "user_text": "spiderman chiquito con tobogan",
-    "search_tokens": ["spiderman", "chico", "tobogan"],
-    "candidatos": [
-      {
-        "id": 101,
-        "nombre": "Brincolín Spiderman chico c/tobogán",
-        "precio": "1800.00",
-        "unidades_libres": 2,
-        "disponible": true
-      },
-      {
-        "id": 88,
-        "nombre": "Brincolín Spiderman grande",
-        "precio": "2500.00",
-        "unidades_libres": 1,
-        "disponible": true
+
+  "step_2_http_crm": {
+    "method": "GET",
+    "path": "/v1/bot/disponibilidad/",
+    "query_params": {
+      "tipo": { "value": "BR", "source": "literal" },
+      "search": { "source": "BR Rewrite.query_crm", "n8n": "={{ $('BR Rewrite').item.json.query_crm }}" },
+      "fecha": { "source": "session.fecha_renta", "n8n": "={{ $('Session').item.json.fecha_renta }}", "crm_accepts": ["fecha", "fecha_renta"], "prefer": "fecha" },
+      "hora_inicio": { "source": "session.hora_inicio" },
+      "hora_fin": { "source": "session.hora_fin" },
+      "solo_disponibles": { "value": "true", "source": "literal" },
+      "limit": { "value": "15", "source": "literal" }
+    },
+    "response": {
+      "count": { "type": "number", "required": true },
+      "search_tokens": { "type": "string[]", "required": true, "note": "Tokens del CRM (re-tokeniza search). NO reemplazan a BR Rewrite.search_tokens para scoring de sinónimos." },
+      "resultados": {
+        "type": "array",
+        "required": true,
+        "item_fields": {
+          "id": { "type": "number", "required": true },
+          "nombre": { "type": "string", "required": true },
+          "tipo": { "type": "string", "required": true, "example": "BR" },
+          "tipo_display": { "type": "string", "required": true },
+          "precio": { "type": "string", "required": true },
+          "disponible": { "type": "boolean", "required": true },
+          "unidades_libres": { "type": "number", "required": true },
+          "familia_mesa": { "type": "string|null", "required": true }
+        }
       }
-    ]
+    },
+    "forbidden_field_names": {
+      "do_not_use_in_code": ["candidatos", "products", "items", "data", "producto_id"],
+      "reason": "El CRM devuelve resultados[].id — no candidatos ni producto_id"
+    }
   },
-  "rerank_output": {
-    "preferred_order_ids": [101, 88],
-    "top_n": 5,
-    "needs_human": false,
-    "reason": null,
-    "confidence": 0.82
+
+  "step_3_rerank": {
+    "input_sources": {
+      "user_text": "={{ $('BR Rewrite').item.json.user_text }}",
+      "search_tokens": "={{ $('BR Rewrite').item.json.search_tokens }}",
+      "resultados": "={{ $('BR HTTP Disponibilidad').item.json.resultados }}",
+      "count": "={{ $('BR HTTP Disponibilidad').item.json.count }}"
+    },
+    "input_alias_policy": {
+      "resultados": "CANÓNICO (CRM)",
+      "candidatos": "ALIAS opcional solo si un Set node renombra; el code acepta ambos, preferir resultados"
+    },
+    "output": {
+      "preferred_order_ids": { "type": "number[]", "required": true, "constraint": "subset of resultados[].id" },
+      "top_n": { "type": "number", "required": true, "value": 5 },
+      "needs_human": { "type": "boolean", "required": true },
+      "reason": { "type": "string|null", "required": true },
+      "confidence": { "type": "number", "required": true },
+      "top": {
+        "type": "array",
+        "required": true,
+        "note": "Misma shape que resultados[] del CRM, ordenados. Usar top[i].id al elegir menú.",
+        "item_fields": ["id", "nombre", "tipo", "tipo_display", "precio", "disponible", "unidades_libres", "familia_mesa"]
+      },
+      "menu_whatsapp": { "type": "string", "required": true }
+    },
+    "selection_mapping": {
+      "user_replies_1_to_5": "producto_id = top[reply - 1].id",
+      "push_to_session_productos": { "id": "<top[i].id>", "cantidad": 1 },
+      "do_not_use": "producto_id como nombre de campo en productos[] del motor crear-plan (ahí es id)"
+    }
   },
-  "rules": [
-    "preferred_order_ids ⊆ candidatos[].id",
-    "Si CRM count=0 → needs_human puede ser false y alt_queries sugeridas; no inventar productos",
-    "Timeout IA >1500ms → usar orden CRM tal cual",
-    "Nunca devolver id que no esté en candidatos"
+
+  "field_alignment_matrix": [
+    { "from": "BR Rewrite.query_crm", "to": "HTTP ?search=", "status": "OK", "exact_name": true },
+    { "from": "HTTP.response.resultados", "to": "BR Rerank.resultados|candidatos", "status": "OK_WITH_ALIAS", "canonical": "resultados" },
+    { "from": "BR Rewrite.search_tokens", "to": "BR Rerank.search_tokens", "status": "MUST_REF_NODE", "risk": "Si lees solo $json post-HTTP pierdes sinónimos del rewrite" },
+    { "from": "session.fecha_renta", "to": "HTTP ?fecha=", "status": "RENAME", "risk": "CRM query param es fecha (también acepta fecha_renta en body POST, no en GET típico)" },
+    { "from": "resultados[].id", "to": "top[].id / preferred_order_ids", "status": "OK", "exact_name": true },
+    { "from": "resultados[].unidades_libres", "to": "menu_whatsapp", "status": "OK", "exact_name": true },
+    { "from": "candidatos (contract v0)", "to": "resultados (CRM)", "status": "FIXED", "was_bug": true }
   ],
-  "whatsapp_menu_template": "Encontré estas opciones:\n{{#each top}}\n{{index}}. {{nombre}} — ${{precio}} ({{unidades_libres}} libres)\n{{/each}}\n0. Buscar de nuevo\n9. Hablar con un asesor"
+
+  "silent_failure_modes": [
+    {
+      "symptom": "Siempre 'Sin resultados' aunque CRM tenga stock",
+      "cause": "Nodo HTTP nombrado distinto a 'BR HTTP Disponibilidad' y $json sin resultados/candidatos",
+      "fix": "Nombres fijos + validar count y typeof resultados === 'array'"
+    },
+    {
+      "symptom": "Menú con orden raro / sinónimos ignorados",
+      "cause": "Rerank usa search_tokens del CRM ($json) en vez de BR Rewrite",
+      "fix": "Tomar tokens solo de $('BR Rewrite')"
+    },
+    {
+      "symptom": "CONFIRMAR crea producto equivocado",
+      "cause": "Mapear índice del menú a preferred_order_ids mal o usar producto_id",
+      "fix": "Usar top[n-1].id exclusivamente"
+    }
+  ]
 }
