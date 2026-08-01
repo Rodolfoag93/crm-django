@@ -1,0 +1,372 @@
+{
+  "name": "TROTA CRM - Crear Plan WhatsApp",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "trotacrm-crear-plan",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0001-4000-8000-000000000001",
+      "name": "Webhook Recibir Pedido",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 300],
+      "webhookId": "trotacrm-crear-plan"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body ?? $input.first().json;\n\nconst telefono = String(body.telefono || body.from || '').replace(/\\D/g, '');\nconst accion = String(body.accion || 'cotizar').toLowerCase();\n\nif (!telefono) throw new Error('Falta telefono');\nif (!body.fecha_renta) throw new Error('Falta fecha_renta (YYYY-MM-DD)');\nif (!body.hora_inicio) throw new Error('Falta hora_inicio (HH:MM)');\nif (!body.hora_fin) throw new Error('Falta hora_fin (HH:MM)');\nif (!Array.isArray(body.productos) || body.productos.length === 0) {\n  throw new Error('Falta arreglo productos con al menos un item {id, cantidad}');\n}\n\nreturn [{\n  json: {\n    accion,\n    telefono,\n    cliente_nombre: body.nombre || body.cliente_nombre || '',\n    cliente_direccion: body.direccion || body.calle_y_numero || '',\n    cliente_colonia: body.colonia || '',\n    cliente_ciudad: body.ciudad || body.ciudad_o_municipio || '',\n    fecha_renta: body.fecha_renta,\n    hora_inicio: body.hora_inicio,\n    hora_fin: body.hora_fin,\n    productos: body.productos,\n    manteles_regalo: body.manteles_regalo || null,\n    anticipo: body.anticipo || 0,\n    notas: body.notas || body.comentarios || '',\n    mismo_domicilio: body.mismo_domicilio ?? true,\n    crm_base: 'https://app.trotacrm.com/v1'\n  }\n}];"
+      },
+      "id": "a1b2c3d4-0002-4000-8000-000000000002",
+      "name": "Normalizar Datos",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://app.trotacrm.com/v1/auth/token/",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"username\": \"{{ $env.CRM_BOT_USER || 'bot-whatsapp' }}\",\n  \"password\": \"{{ $env.CRM_BOT_PASSWORD }}\"\n}",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0003-4000-8000-000000000003",
+      "name": "Obtener Token JWT",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $('Normalizar Datos').item.json.crm_base }}/bot/cliente/",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "telefono",
+              "value": "={{ $('Normalizar Datos').item.json.telefono }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Obtener Token JWT').item.json.access }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0004-4000-8000-000000000004",
+      "name": "Buscar Cliente",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [720, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Normalizar Datos').item.json.crm_base }}/bot/promo-mantel/preview/",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"productos\": {{ JSON.stringify($('Normalizar Datos').item.json.productos) }},\n  \"fecha_renta\": \"{{ $('Normalizar Datos').item.json.fecha_renta }}\",\n  \"hora_inicio\": \"{{ $('Normalizar Datos').item.json.hora_inicio }}\",\n  \"hora_fin\": \"{{ $('Normalizar Datos').item.json.hora_fin }}\"\n}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Obtener Token JWT').item.json.access }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0005-4000-8000-000000000005",
+      "name": "Preview Promo Mantel",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [960, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const pedido = $('Normalizar Datos').first().json;\nconst promo = $input.first().json;\n\nlet manteles = pedido.manteles_regalo;\n\nif (!manteles || !manteles.length) {\n  manteles = [];\n  const opciones = promo.opciones || {};\n\n  for (const [familia, data] of Object.entries(opciones)) {\n    const cantidad = data.cantidad_regalo || 0;\n    const colores = (data.colores_disponibles || [])\n      .filter((c) => (c.unidades_libres ?? 0) > 0)\n      .sort((a, b) => (b.unidades_libres || 0) - (a.unidades_libres || 0));\n\n    let restante = cantidad;\n    for (const color of colores) {\n      if (restante <= 0) break;\n      const tomar = Math.min(restante, color.unidades_libres || 0);\n      if (tomar <= 0) continue;\n      manteles.push({ producto_id: color.id, cantidad: tomar });\n      restante -= tomar;\n    }\n\n    if (restante > 0) {\n      throw new Error(`No hay stock suficiente de manteles ${familia} para el regalo (${restante} faltante).`);\n    }\n  }\n}\n\nreturn [{\n  json: {\n    ...pedido,\n    manteles_regalo: manteles,\n    promo\n  }\n}];"
+      },
+      "id": "a1b2c3d4-0006-4000-8000-000000000006",
+      "name": "Elegir Manteles Regalo",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1200, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.crm_base }}/bot/cotizacion/",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"fecha_renta\": \"{{ $json.fecha_renta }}\",\n  \"hora_inicio\": \"{{ $json.hora_inicio }}\",\n  \"hora_fin\": \"{{ $json.hora_fin }}\",\n  \"productos\": {{ JSON.stringify($json.productos) }},\n  \"manteles_regalo\": {{ JSON.stringify($json.manteles_regalo || []) }}\n}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Obtener Token JWT').item.json.access }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0007-4000-8000-000000000007",
+      "name": "Cotizar Plan",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1440, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "cond-crear",
+              "leftValue": "={{ $('Elegir Manteles Regalo').item.json.accion }}",
+              "rightValue": "crear",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "cond-disponible",
+              "leftValue": "={{ $json.disponible }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0008-4000-8000-000000000008",
+      "name": "Crear renta?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1680, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Elegir Manteles Regalo').item.json.crm_base }}/bot/renta/crear/",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"telefono\": \"{{ $('Elegir Manteles Regalo').item.json.telefono }}\",\n  \"cliente_nombre\": \"{{ $('Elegir Manteles Regalo').item.json.cliente_nombre }}\",\n  \"calle_y_numero\": \"{{ $('Elegir Manteles Regalo').item.json.cliente_direccion }}\",\n  \"colonia\": \"{{ $('Elegir Manteles Regalo').item.json.cliente_colonia }}\",\n  \"ciudad_o_municipio\": \"{{ $('Elegir Manteles Regalo').item.json.cliente_ciudad }}\",\n  \"mismo_domicilio\": {{ $('Elegir Manteles Regalo').item.json.mismo_domicilio }},\n  \"fecha_renta\": \"{{ $('Elegir Manteles Regalo').item.json.fecha_renta }}\",\n  \"hora_inicio\": \"{{ $('Elegir Manteles Regalo').item.json.hora_inicio }}\",\n  \"hora_fin\": \"{{ $('Elegir Manteles Regalo').item.json.hora_fin }}\",\n  \"productos\": {{ JSON.stringify($('Elegir Manteles Regalo').item.json.productos) }},\n  \"manteles_regalo\": {{ JSON.stringify($('Elegir Manteles Regalo').item.json.manteles_regalo || []) }},\n  \"anticipo\": {{ $('Elegir Manteles Regalo').item.json.anticipo || 0 }},\n  \"notas\": \"{{ $('Elegir Manteles Regalo').item.json.notas }}\"\n}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Obtener Token JWT').item.json.access }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1b2c3d4-0009-4000-8000-000000000009",
+      "name": "Crear Renta",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1920, 180]
+    },
+    {
+      "parameters": {
+        "jsCode": "const pedido = $('Elegir Manteles Regalo').first().json;\nconst cotizacion = $('Cotizar Plan').first().json;\nconst renta = $input.first().json;\n\nconst lineas = (cotizacion.lineas || []).map((l) => {\n  const regalo = l.es_regalo ? ' (REGALO)' : '';\n  return `- ${l.cantidad}x ${l.nombre}${regalo}: $${l.subtotal}`;\n}).join('\\n');\n\nconst mensaje = [\n  '✅ *Plan confirmado en TROTA CRM*',\n  '',\n  `Folio: *${renta.folio}*`,\n  `Cliente: ${renta.cliente?.nombre || pedido.cliente_nombre}`,\n  `Fecha: ${pedido.fecha_renta} ${pedido.hora_inicio}-${pedido.hora_fin}`,\n  '',\n  '*Detalle:*',\n  lineas,\n  '',\n  `Total: *$${renta.total}*`,\n  `Anticipo: $${renta.anticipo}`,\n  `Saldo: *$${renta.saldo_pendiente}*`,\n].join('\\n');\n\nreturn [{\n  json: {\n    ok: true,\n    tipo: 'renta_creada',\n    mensaje_whatsapp: mensaje,\n    folio: renta.folio,\n    renta_id: renta.renta_id,\n    total: renta.total,\n    saldo_pendiente: renta.saldo_pendiente,\n    cotizacion,\n    renta\n  }\n}];"
+      },
+      "id": "a1b2c3d4-0010-4000-8000-000000000010",
+      "name": "Respuesta Renta Creada",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2160, 180]
+    },
+    {
+      "parameters": {
+        "jsCode": "const pedido = $('Elegir Manteles Regalo').first().json;\nconst cotizacion = $('Cotizar Plan').first().json;\n\nconst lineas = (cotizacion.lineas || []).map((l) => {\n  const regalo = l.es_regalo ? ' (REGALO)' : '';\n  return `- ${l.cantidad}x ${l.nombre}${regalo}: $${l.subtotal}`;\n}).join('\\n');\n\nlet titulo = '📋 *Cotización TROTA*';\nlet extra = '';\n\nif (!cotizacion.disponible) {\n  titulo = '⚠️ *Cotización con faltantes de stock*';\n  extra = (cotizacion.productos_no_disponibles || [])\n    .map((p) => `- ${p.nombre}: solo ${p.unidades_libres} libre(s)`)\n    .join('\\n');\n}\n\nif (pedido.accion === 'crear' && !cotizacion.disponible) {\n  extra += '\\n\\nNo se creó la renta porque falta inventario.';\n}\n\nconst promo = cotizacion.promo_mantel || {};\nconst regalos = promo.total_regalos || 0;\n\nconst mensaje = [\n  titulo,\n  '',\n  `Fecha evento: ${pedido.fecha_renta} ${pedido.hora_inicio}-${pedido.hora_fin}`,\n  regalos > 0 ? `Manteles regalo incluidos: ${regalos}` : 'Sin promo de mantel',\n  '',\n  '*Detalle:*',\n  lineas,\n  '',\n  `Total: *$${cotizacion.total}*`,\n  extra ? ['', extra].join('\\n') : '',\n  pedido.accion === 'cotizar' ? '\\nResponde *CONFIRMAR* para crear el pedido.' : ''\n].filter(Boolean).join('\\n');\n\nreturn [{\n  json: {\n    ok: cotizacion.disponible,\n    tipo: pedido.accion === 'crear' ? 'renta_no_creada' : 'cotizacion',\n    mensaje_whatsapp: mensaje,\n    disponible: cotizacion.disponible,\n    total: cotizacion.total,\n    cotizacion\n  }\n}];"
+      },
+      "id": "a1b2c3d4-0011-4000-8000-000000000011",
+      "name": "Respuesta Cotizacion",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1920, 420]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "a1b2c3d4-0012-4000-8000-000000000012",
+      "name": "Responder Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [2400, 300]
+    }
+  ],
+  "connections": {
+    "Webhook Recibir Pedido": {
+      "main": [
+        [
+          {
+            "node": "Normalizar Datos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalizar Datos": {
+      "main": [
+        [
+          {
+            "node": "Obtener Token JWT",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Obtener Token JWT": {
+      "main": [
+        [
+          {
+            "node": "Buscar Cliente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar Cliente": {
+      "main": [
+        [
+          {
+            "node": "Preview Promo Mantel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preview Promo Mantel": {
+      "main": [
+        [
+          {
+            "node": "Elegir Manteles Regalo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Elegir Manteles Regalo": {
+      "main": [
+        [
+          {
+            "node": "Cotizar Plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cotizar Plan": {
+      "main": [
+        [
+          {
+            "node": "Crear renta?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Crear renta?": {
+      "main": [
+        [
+          {
+            "node": "Crear Renta",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respuesta Cotizacion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Crear Renta": {
+      "main": [
+        [
+          {
+            "node": "Respuesta Renta Creada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respuesta Renta Creada": {
+      "main": [
+        [
+          {
+            "node": "Responder Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respuesta Cotizacion": {
+      "main": [
+        [
+          {
+            "node": "Responder Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "TROTA"
+    },
+    {
+      "name": "WhatsApp"
+    }
+  ],
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}

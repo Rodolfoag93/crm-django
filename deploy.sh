@@ -27,7 +27,7 @@ echo "==> Compilando PWA localmente..."
 echo "==> Subiendo PWA a produccion..."
 ssh $SERVER "rm -rf $APP_DIR/pwa && mkdir -p $APP_DIR/pwa"
 scp -r "$FRONTEND/dist/"* $SERVER:$APP_DIR/pwa/
-ssh $SERVER "chown -R trota:www-data $APP_DIR/pwa"
+ssh $SERVER "chown -R trota:www-data $APP_DIR/pwa && chmod -R u=rwX,g=rX,o=rX $APP_DIR/pwa"
 
 echo "==> Aplicando migraciones..."
 ssh $SERVER "sudo -u trota $PYTHON $APP_DIR/manage.py migrate --noinput"

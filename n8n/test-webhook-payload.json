@@ -1,0 +1,13 @@
+{
+  "telefono": "5512345678",
+  "nombre": "María López",
+  "direccion": "Calle A 10",
+  "colonia": "Jardines",
+  "ciudad": "Colima",
+  "fecha_renta": "2026-08-15",
+  "hora_inicio": "14:00",
+  "hora_fin": "22:00",
+  "productos": [{"id": 1, "cantidad": 2}],
+  "anticipo": 0,
+  "accion": "cotizar"
+}

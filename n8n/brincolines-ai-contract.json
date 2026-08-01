@@ -1,0 +1,60 @@
+{
+  "description": "Contrato del nodo IA para búsqueda de brincolines (rewrite + rerank). La IA NUNCA inventa producto_id.",
+  "endpoint_crm": "GET /v1/bot/disponibilidad/?tipo=BR&search={q}&fecha=&hora_inicio=&hora_fin=&solo_disponibles=true&limit=15",
+  "flow": [
+    "1. Usuario escribe texto libre",
+    "2. Nodo IA rewrite → search_tokens + query_crm",
+    "3. HTTP CRM disponibilidad con query_crm (o join tokens)",
+    "4. Nodo IA rerank con candidatos CRM → preferred_order_ids",
+    "5. Bot muestra top 5 del orden IA (fallback: orden CRM)",
+    "6. Usuario elige 1-5; id sale SOLO de candidatos"
+  ],
+  "rewrite_input": {
+    "user_text": "spiderman chiquito con tobogan",
+    "tipo": "BR",
+    "fecha_renta": "2026-08-15",
+    "hora_inicio": "14:00",
+    "hora_fin": "22:00"
+  },
+  "rewrite_output": {
+    "search_tokens": ["spiderman", "chico", "tobogan"],
+    "query_crm": "spiderman chico tobogan",
+    "alt_queries": ["spiderman", "hombre araña"],
+    "needs_human": false,
+    "reason": null
+  },
+  "rerank_input": {
+    "user_text": "spiderman chiquito con tobogan",
+    "search_tokens": ["spiderman", "chico", "tobogan"],
+    "candidatos": [
+      {
+        "id": 101,
+        "nombre": "Brincolín Spiderman chico c/tobogán",
+        "precio": "1800.00",
+        "unidades_libres": 2,
+        "disponible": true
+      },
+      {
+        "id": 88,
+        "nombre": "Brincolín Spiderman grande",
+        "precio": "2500.00",
+        "unidades_libres": 1,
+        "disponible": true
+      }
+    ]
+  },
+  "rerank_output": {
+    "preferred_order_ids": [101, 88],
+    "top_n": 5,
+    "needs_human": false,
+    "reason": null,
+    "confidence": 0.82
+  },
+  "rules": [
+    "preferred_order_ids ⊆ candidatos[].id",
+    "Si CRM count=0 → needs_human puede ser false y alt_queries sugeridas; no inventar productos",
+    "Timeout IA >1500ms → usar orden CRM tal cual",
+    "Nunca devolver id que no esté en candidatos"
+  ],
+  "whatsapp_menu_template": "Encontré estas opciones:\n{{#each top}}\n{{index}}. {{nombre}} — ${{precio}} ({{unidades_libres}} libres)\n{{/each}}\n0. Buscar de nuevo\n9. Hablar con un asesor"
+}

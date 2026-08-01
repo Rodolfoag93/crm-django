@@ -1,6 +1,11 @@
 """Utilidades para detectar familias de mesa/mantel desde el nombre del producto."""
 
+from __future__ import annotations
+
+import re
 from collections import defaultdict
+
+from django.db.models import QuerySet
 
 from core.models import Producto
 
@@ -8,10 +13,56 @@ FAMILIAS_MANTEL = ('TABLON', 'INFANTIL', 'REDONDO', 'IMPERIAL')
 FAMILIA_ORDEN = FAMILIAS_MANTEL
 SILLAS_MINIMAS_POR_MESA = 10
 
+# Variantes para match accent-insensitive vía iregex (Postgres/SQLite).
+_ACCENT_ALTS = {
+    'a': 'aáàäâ',
+    'e': 'eéèëê',
+    'i': 'iíìïî',
+    'o': 'oóòöô',
+    'u': 'uúùüû',
+    'n': 'nñ',
+}
+
 
 def _normalizar(nombre: str) -> str:
     n = (nombre or '').lower().strip()
     return n.replace('ó', 'o').replace('á', 'a').replace('é', 'e').replace('í', 'i').replace('ú', 'u')
+
+
+def tokenizar_busqueda(search: str, max_tokens: int = 6) -> list[str]:
+    """
+    Parte la query en tokens (>=2 chars), sin acentos.
+    Ej: "Spiderman chico tobogán" -> ["spiderman", "chico", "tobogan"]
+    """
+    raw = _normalizar(search or '')
+    tokens = [t for t in re.split(r'[^a-z0-9]+', raw) if len(t) >= 2]
+    return tokens[:max_tokens]
+
+
+def _patron_iregex_token(token: str) -> str:
+    """Convierte 'tobogan' en patrón que también matchea 'tobogán'."""
+    partes = []
+    for ch in token.lower():
+        if ch in _ACCENT_ALTS:
+            partes.append(f'[{_ACCENT_ALTS[ch]}]')
+        else:
+            partes.append(re.escape(ch))
+    return ''.join(partes)
+
+
+def aplicar_busqueda_nombre(qs: QuerySet, search: str) -> QuerySet:
+    """
+    Filtra por nombre con AND de tokens, case/accent-insensitive.
+    "spiderman chico" exige ambos tokens en el nombre (no la frase completa).
+    """
+    tokens = tokenizar_busqueda(search)
+    if not tokens:
+        return qs
+
+    for token in tokens:
+        patron = _patron_iregex_token(token)
+        qs = qs.filter(nombre__iregex=patron)
+    return qs
 
 
 def detectar_familia_mesa(nombre: str) -> str | None:
@@ -75,19 +126,35 @@ def listar_manteles_por_familia(familia: str, fecha=None, hora_inicio=None, hora
     return opciones
 
 
-def productos_disponibles(fecha, hora_inicio, hora_fin, tipos=None, search=''):
+def productos_disponibles(
+    fecha,
+    hora_inicio,
+    hora_fin,
+    tipos=None,
+    search='',
+    limit=None,
+    solo_disponibles=False,
+):
+    """
+    Lista productos activos con stock en horario.
+    search: multi-token AND, case/accent-insensitive.
+    limit: tope de resultados (útil para menús WhatsApp).
+    solo_disponibles: si True, omite unidades_libres == 0.
+    """
     qs = Producto.objects.filter(activo=True)
     if tipos:
         tipo_list = [t.strip().upper() for t in tipos.split(',') if t.strip()]
         if tipo_list:
             qs = qs.filter(tipo__in=tipo_list)
     if search:
-        qs = qs.filter(nombre__icontains=search)
+        qs = aplicar_busqueda_nombre(qs, search)
     qs = qs.order_by('tipo', 'nombre')
 
     resultados = []
     for producto in qs:
         libres = producto.stock_disponible_en_horario(fecha, hora_inicio, hora_fin)
+        if solo_disponibles and libres <= 0:
+            continue
         resultados.append({
             'id': producto.id,
             'nombre': producto.nombre,
@@ -98,6 +165,8 @@ def productos_disponibles(fecha, hora_inicio, hora_fin, tipos=None, search=''):
             'unidades_libres': libres,
             'familia_mesa': detectar_familia_mesa(producto.nombre) if producto.tipo == 'ME' else None,
         })
+        if limit is not None and len(resultados) >= int(limit):
+            break
     return resultados
 
 

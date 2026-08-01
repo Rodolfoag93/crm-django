@@ -1,0 +1,30 @@
+services:
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: n8n
+    restart: always
+    ports:
+      - "127.0.0.1:5678:5678"
+    environment:
+      - N8N_HOST=bot.app.trotacrm.com
+      - N8N_PROTOCOL=https
+      - WEBHOOK_URL=https://bot.app.trotacrm.com/
+      - N8N_EDITOR_BASE_URL=https://bot.app.trotacrm.com/
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=${N8N_BASIC_AUTH_USER:-admin}
+      - N8N_BASIC_AUTH_PASSWORD=${N8N_BASIC_AUTH_PASSWORD}
+      - GENERIC_TIMEZONE=America/Mexico_City
+      - TZ=America/Mexico_City
+      - CRM_API_BASE=https://app.trotacrm.com/v1
+      - CRM_BOT_USER=${CRM_BOT_USER:-bot-whatsapp}
+      - CRM_BOT_PASSWORD=${CRM_BOT_PASSWORD}
+      - TWILIO_ACCOUNT_SID=${TWILIO_ACCOUNT_SID}
+      - TWILIO_AUTH_TOKEN=${TWILIO_AUTH_TOKEN}
+      - TWILIO_WHATSAPP_NUMBER=${TWILIO_WHATSAPP_NUMBER}
+      - TWILIO_WEBHOOK_URL=${TWILIO_WEBHOOK_URL}
+      - N8N_BLOCK_ENV_ACCESS_IN_NODE=false
+    volumes:
+      - n8n_data:/home/node/.n8n
+
+volumes:
+  n8n_data:

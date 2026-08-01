@@ -1659,11 +1659,22 @@ def api_buscar_productos(request):
     if not request.user.is_staff:
         return Response({'error': 'No autorizado.'}, status=403)
 
-    q = request.GET.get('q', '')
-    productos = Producto.objects.filter(
-        nombre__icontains=q,
-        activo=True
-    ).values('id', 'nombre', 'precio', 'tipo')[:20]
+    from core.services.bot_productos import aplicar_busqueda_nombre
+
+    q = request.GET.get('q', '').strip()
+    tipo = request.GET.get('tipo', '').strip().upper()
+    try:
+        limit = max(1, min(int(request.GET.get('limit', 20)), 50))
+    except (TypeError, ValueError):
+        return Response({'error': 'limit debe ser un entero.'}, status=400)
+
+    qs = Producto.objects.filter(activo=True)
+    if tipo:
+        qs = qs.filter(tipo=tipo)
+    if q:
+        qs = aplicar_busqueda_nombre(qs, q)
+    productos = qs.order_by('tipo', 'nombre').values('id', 'nombre', 'precio', 'tipo')[:limit]
+    # Lista plana: contrato usado por PWA (NuevaRenta, Cotizador, etc.)
     return Response(list(productos))
 
 # ── Gastos Admin PWA ───────────────────────────────────────────────────────────

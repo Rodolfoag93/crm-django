@@ -8,7 +8,11 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from core.models import Cliente, Producto, Renta
-from core.services.bot_productos import listar_manteles_por_familia, productos_disponibles
+from core.services.bot_productos import (
+    listar_manteles_por_familia,
+    productos_disponibles,
+    tokenizar_busqueda,
+)
 from core.services.promociones_renta import (
     opciones_manteles_regalo,
     preview_promo_mantel,
@@ -72,8 +76,33 @@ def bot_disponibilidad(request):
 
     tipos = request.GET.get('tipo', '')
     search = request.GET.get('search', '').strip()
-    data = productos_disponibles(fecha, hora_inicio, hora_fin, tipos=tipos, search=search)
-    return Response(data)
+    solo_disponibles = str(request.GET.get('solo_disponibles', '')).lower() in (
+        '1', 'true', 'yes', 'si', 'sí',
+    )
+    limit_raw = request.GET.get('limit')
+    limit = None
+    if limit_raw not in (None, ''):
+        try:
+            limit = max(1, min(int(limit_raw), 50))
+        except (TypeError, ValueError):
+            return Response({'error': 'limit debe ser un entero.'}, status=400)
+
+    data = productos_disponibles(
+        fecha,
+        hora_inicio,
+        hora_fin,
+        tipos=tipos,
+        search=search,
+        limit=limit,
+        solo_disponibles=solo_disponibles,
+    )
+    for item in data:
+        item.pop('search_tokens', None)
+    return Response({
+        'count': len(data),
+        'search_tokens': tokenizar_busqueda(search) if search else [],
+        'resultados': data,
+    })
 
 
 @api_view(['GET'])
