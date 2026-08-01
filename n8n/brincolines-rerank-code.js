@@ -1,12 +1,17 @@
 /**
  * Nodo Code n8n — nombre FIJO: "BR Rerank"
  *
- * NO lee candidatos del $json actual a ciegas.
- * Toma campos por referencia de nodo (contrato v1):
- *   search_tokens ← $('BR Rewrite')
- *   resultados    ← $('BR HTTP Disponibilidad')
+ * Rutas de salida:
+ *  A) CONTRATO ROTO  → throw (técnico)
+ *     - falta nodo Rewrite/HTTP
+ *     - HTTP no trae array "resultados" (undefined/null/no-array)
+ *     - id fuera del set CRM
+ *  B) NEGOCIO SIN MATCH → return conversacional (NO throw)
+ *     - resultados: []  (array vacío válido)
  *
- * Output: step_3_rerank.output (incluye top[] + menu_whatsapp)
+ * Tokens:
+ *  - search_tokens_rewrite ← $('BR Rewrite').search_tokens  (scoring)
+ *  - search_tokens_crm     ← $('BR HTTP Disponibilidad').search_tokens (audit)
  */
 
 const REWRITE = 'BR Rewrite';
@@ -17,8 +22,8 @@ function nodeJson(name) {
     return $(name).first().json;
   } catch (err) {
     throw new Error(
-      `BR Rerank: no encuentro el nodo "${name}". ` +
-      `Renómbralo exactamente así o el flujo falla en silencio.`
+      `BR Rerank: CONTRATO — no encuentro el nodo "${name}". ` +
+      `Renómbralo exactamente así.`
     );
   }
 }
@@ -27,44 +32,52 @@ const rewrite = nodeJson(REWRITE);
 const http = nodeJson(HTTP);
 
 const userText = rewrite.user_text || '';
-const tokens = Array.isArray(rewrite.search_tokens)
+const search_tokens_rewrite = Array.isArray(rewrite.search_tokens)
   ? rewrite.search_tokens.map((t) => String(t).toLowerCase())
   : [];
+const search_tokens_crm = Array.isArray(http.search_tokens)
+  ? http.search_tokens.map((t) => String(t).toLowerCase())
+  : [];
 
-// CANÓNICO: resultados (CRM). Alias candidatos solo si alguien lo renombró a mano.
-const resultados = Array.isArray(http.resultados)
+// --- Fix 1: forma del campo vs vacío de negocio ---
+// null  = contrato roto (falta key o no es array) → THROW
+// []    = 0 matches reales → mensaje conversacional
+const resultadosRaw = Object.prototype.hasOwnProperty.call(http, 'resultados')
   ? http.resultados
-  : (Array.isArray(http.candidatos) ? http.candidatos : null);
+  : (Object.prototype.hasOwnProperty.call(http, 'candidatos') ? http.candidatos : undefined);
 
-if (resultados === null) {
+if (!Array.isArray(resultadosRaw)) {
   throw new Error(
-    `BR Rerank: "${HTTP}" no trae array "resultados". ` +
-    `Keys recibidas: ${Object.keys(http || {}).join(', ') || '(vacío)'}`
+    `BR Rerank: CONTRATO — "${HTTP}" debe exponer array "resultados". ` +
+    `Recibido typeof=${typeof resultadosRaw}; keys=${Object.keys(http || {}).join(',') || '(vacío)'}`
   );
 }
 
-if (typeof http.count === 'number' && http.count !== resultados.length) {
-  // No aborta: aviso en reason si hace falta; count es informativo.
-}
+const resultados = resultadosRaw;
 
-if (!resultados.length) {
+// Scoring usa SOLO tokens del rewrite (sinónimos). CRM tokens son audit.
+const tokens = search_tokens_rewrite;
+
+if (resultados.length === 0) {
   const alts = Array.isArray(rewrite.alt_queries) ? rewrite.alt_queries : [];
   const hint = alts.length ? `\nPrueba: ${alts.join(', ')}` : '\nPrueba otra palabra (tema, tamaño)';
   return [{
     json: {
       preferred_order_ids: [],
       top_n: 5,
-      needs_human: true,
-      reason: 'Sin resultados en CRM',
+      needs_human: false, // negocio: reintentar búsqueda, no handoff técnico
+      reason: 'no_matches',
       confidence: 0,
       top: [],
       menu_whatsapp:
         `No encontré brincolines con "${userText}".${hint}\n` +
         '0. Buscar de nuevo\n9. Hablar con un asesor',
+      search_tokens_rewrite,
+      search_tokens_crm,
       _debug: {
         query_crm: rewrite.query_crm || null,
-        search_tokens: tokens,
         http_count: http.count ?? 0,
+        exit: 'business_empty',
       },
     },
   }];
@@ -93,10 +106,9 @@ const topN = 5;
 const top = ranked.slice(0, topN).map(({ _score, ...rest }) => rest);
 const ids = top.map((c) => c.id);
 
-// Guardrail: nunca devolver id fuera del CRM
 for (const id of ids) {
   if (!crmIds.has(id)) {
-    throw new Error(`BR Rerank: id ${id} no está en resultados CRM`);
+    throw new Error(`BR Rerank: CONTRATO — id ${id} no está en resultados CRM`);
   }
 }
 
@@ -122,11 +134,12 @@ return [{
     confidence: tokens.length ? Math.min(1, (ranked[0]?._score || 0) / (tokens.length * 2)) : 0.5,
     top,
     menu_whatsapp: menu,
+    search_tokens_rewrite,
+    search_tokens_crm,
     _debug: {
       user_text: userText,
-      search_tokens_used: tokens,
-      http_search_tokens: http.search_tokens || [],
       http_count: http.count ?? resultados.length,
+      exit: 'ok',
     },
   },
 }];

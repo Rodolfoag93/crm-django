@@ -1,6 +1,30 @@
 # Brincolines — búsqueda bot (contrato v1)
 
-## Nombres de nodos (obligatorios)
+## Session → CRM query (centralizado)
+
+**Antes de cualquier** `GET /bot/disponibilidad/` (BR, ME, SI, LZ…), pasar por el nodo:
+
+**Nombre:** `Session To CRM Query`  
+**Código:** `session-to-crm-query.js`
+
+| Session | GET disponibilidad | POST cotizacion/renta |
+|---------|--------------------|------------------------|
+| `fecha_renta` | `fecha` | `fecha_renta` |
+| `hora_inicio` | `hora_inicio` | `hora_inicio` |
+| `hora_fin` | `hora_fin` | `hora_fin` |
+
+HTTP BR queda así:
+
+```
+GET .../bot/disponibilidad/?{{ $('Session To CRM Query').item.json.disponibilidad_qs }}
+  &tipo=BR
+  &search={{ $('BR Rewrite').item.json.query_crm }}
+```
+
+O arma query desde `disponibilidad_query` + merge de `search`/`tipo`.
+
+No reimplementes el rename `fecha_renta→fecha` dentro de cada handler.
+
 
 | Nodo | Nombre exacto en n8n |
 |------|----------------------|

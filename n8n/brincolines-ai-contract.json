@@ -107,17 +107,39 @@
     {
       "symptom": "Siempre 'Sin resultados' aunque CRM tenga stock",
       "cause": "Nodo HTTP nombrado distinto a 'BR HTTP Disponibilidad' y $json sin resultados/candidatos",
-      "fix": "Nombres fijos + validar count y typeof resultados === 'array'"
+      "fix": "Nombres fijos + throw si resultados no es array"
     },
     {
       "symptom": "Menú con orden raro / sinónimos ignorados",
       "cause": "Rerank usa search_tokens del CRM ($json) en vez de BR Rewrite",
-      "fix": "Tomar tokens solo de $('BR Rewrite')"
+      "fix": "search_tokens_rewrite desde BR Rewrite; search_tokens_crm solo audit"
     },
     {
       "symptom": "CONFIRMAR crea producto equivocado",
       "cause": "Mapear índice del menú a preferred_order_ids mal o usar producto_id",
       "fix": "Usar top[n-1].id exclusivamente"
+    },
+    {
+      "symptom": "400 en disponibilidad / 'no hay fecha'",
+      "cause": "Handler manda session.fecha_renta como query param fecha_renta",
+      "fix": "Nodo compartido Session To CRM Query (session-to-crm-query.js)"
     }
-  ]
+  ],
+
+  "exit_paths_rerank": {
+    "contrato_roto": "throw — resultados missing o no-array; nodo ausente; id inventado",
+    "negocio_sin_match": "return needs_human=false reason=no_matches menu conversacional — resultados:[]",
+    "ok": "return top[] + menu_whatsapp"
+  },
+
+  "token_fields_output": {
+    "search_tokens_rewrite": "desde BR Rewrite — usar para scoring",
+    "search_tokens_crm": "desde HTTP CRM — solo auditoría, no pisar el otro"
+  },
+
+  "session_mapping": {
+    "centralized_node": "Session To CRM Query",
+    "file": "session-to-crm-query.js",
+    "rule": "Ningún handler BR/ME/SI/LZ arma ?fecha= por su cuenta"
+  }
 }
