@@ -38,7 +38,7 @@ interface ClienteEncontrado {
   ciudad_o_municipio: string
 }
 
-interface ProductoOpt {
+interface ProductoEncontrado {
   id: number
   nombre: string
   precio: string
@@ -70,7 +70,6 @@ export default function CotizadorCRM() {
   const [error, setError] = useState('')
   const [detalle, setDetalle] = useState<any>(null)
 
-  const [productos, setProductos] = useState<ProductoOpt[]>([])
   const [clienteId, setClienteId] = useState<number | null>(null)
   const [clienteNuevo, setClienteNuevo] = useState(false)
   const [busquedaCliente, setBusquedaCliente] = useState('')
@@ -93,7 +92,9 @@ export default function CotizadorCRM() {
   const [aplicarIsr, setAplicarIsr] = useState(false)
   const [conceptos, setConceptos] = useState<ConceptoDraft[]>([])
   const [zonas, setZonas] = useState<ZonaDraft[]>([])
-  const [productoSel, setProductoSel] = useState('')
+  const [queryProducto, setQueryProducto] = useState('')
+  const [resultProductos, setResultProductos] = useState<ProductoEncontrado[]>([])
+  const [buscandoProducto, setBuscandoProducto] = useState(false)
   const [cantidadProd, setCantidadProd] = useState('1')
 
   const fetchList = useCallback(() => {
@@ -111,13 +112,6 @@ export default function CotizadorCRM() {
   useEffect(() => { fetchList() }, [fetchList])
 
   useEffect(() => {
-    api.get('/productos/', { params: { activo: true } }).then(r => {
-      const results = r.data.results || r.data || []
-      setProductos(results.filter((p: any) => p.nombre !== 'Proyecto recreativo'))
-    }).catch(console.error)
-  }, [])
-
-  useEffect(() => {
     if (clienteId || clienteNuevo) return
     const qCliente = busquedaCliente.trim()
     if (qCliente.length < 2) { setSugerencias([]); return }
@@ -133,6 +127,22 @@ export default function CotizadorCRM() {
       if (debounceCliente.current) clearTimeout(debounceCliente.current)
     }
   }, [busquedaCliente, clienteId, clienteNuevo])
+
+  useEffect(() => {
+    const qProd = queryProducto.trim()
+    if (qProd.length < 2) { setResultProductos([]); return }
+    const t = setTimeout(() => {
+      setBuscandoProducto(true)
+      api.get('/productos-buscar/', { params: { q: qProd, limit: 20 } })
+        .then(r => {
+          const lista = (r.data || []).filter((p: ProductoEncontrado) => p.nombre !== 'Proyecto recreativo')
+          setResultProductos(lista)
+        })
+        .catch(console.error)
+        .finally(() => setBuscandoProducto(false))
+    }, 300)
+    return () => clearTimeout(t)
+  }, [queryProducto])
 
   const seleccionarCliente = (c: ClienteEncontrado) => {
     setClienteId(c.id)
@@ -196,11 +206,12 @@ export default function CotizadorCRM() {
     setAplicarIsr(tipo === 'PROYECTO')
     setConceptos([])
     setZonas(tipo === 'PROYECTO' ? [{ titulo: 'Bienvenida', descripcion: '' }] : [])
+    setQueryProducto('')
+    setResultProductos([])
+    setCantidadProd('1')
   }
 
-  const addProducto = () => {
-    const p = productos.find(x => String(x.id) === productoSel)
-    if (!p) return
+  const addProducto = (p: ProductoEncontrado) => {
     const cant = Math.max(1, parseInt(cantidadProd || '1', 10))
     const unit = Number(p.precio) || 0
     setConceptos(prev => [...prev, {
@@ -210,6 +221,8 @@ export default function CotizadorCRM() {
       monto: String((unit * cant).toFixed(2)),
       producto_id: p.id,
     }])
+    setQueryProducto('')
+    setResultProductos([])
   }
 
   const addConceptoLibre = () => {
@@ -532,13 +545,52 @@ export default function CotizadorCRM() {
 
           <div>
             <h3 className="text-sm font-semibold mb-2">Conceptos</h3>
-            <div className="flex gap-2 flex-wrap mb-3">
-              <select value={productoSel} onChange={e => setProductoSel(e.target.value)} className="border rounded-lg px-3 py-2 text-sm min-w-[220px]" style={{ borderColor: '#ddeadd' }}>
-                <option value="">Producto del catálogo</option>
-                {productos.map(p => <option key={p.id} value={p.id}>{p.nombre} — {money(p.precio)}</option>)}
-              </select>
-              <input type="number" min={1} value={cantidadProd} onChange={e => setCantidadProd(e.target.value)} className="border rounded-lg px-3 py-2 text-sm w-20" style={{ borderColor: '#ddeadd' }} />
-              <button type="button" onClick={addProducto} className="px-3 py-2 rounded-lg text-sm border" style={{ borderColor: '#ddeadd' }}>+ Catálogo</button>
+            <div className="flex gap-2 flex-wrap items-start mb-3">
+              <div className="relative flex-1 min-w-[220px]">
+                <div className="flex items-center gap-2 border rounded-lg px-3 py-2" style={{ borderColor: '#ddeadd' }}>
+                  <svg width="13" height="13" fill="none" stroke="#8fa890" strokeWidth="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                  <input
+                    value={queryProducto}
+                    onChange={e => setQueryProducto(e.target.value)}
+                    placeholder="Buscar producto del catálogo…"
+                    className="flex-1 text-sm outline-none"
+                    style={{ color: '#162016' }}
+                  />
+                  {buscandoProducto && (
+                    <div className="w-3.5 h-3.5 rounded-full border-2 animate-spin flex-shrink-0" style={{ borderColor: '#ddeadd', borderTopColor: '#16a34a' }} />
+                  )}
+                </div>
+                {resultProductos.length > 0 && (
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-xl border shadow-lg z-10 overflow-hidden" style={{ borderColor: '#ddeadd' }}>
+                    {resultProductos.map(p => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => addProducto(p)}
+                        className="w-full flex items-center justify-between gap-3 px-4 py-2.5 text-left text-sm transition-colors"
+                        style={{ borderBottom: '1px solid #f5f8f5' }}
+                        onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#f8fbf8' }}
+                        onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent' }}
+                      >
+                        <span style={{ color: '#162016' }}>{p.nombre}</span>
+                        <span className="font-semibold tabular-nums flex-shrink-0" style={{ color: '#5a7060', fontSize: 12 }}>{money(p.precio)}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {!buscandoProducto && queryProducto.trim().length >= 2 && resultProductos.length === 0 && (
+                  <div className="mt-2 text-xs" style={{ color: '#8fa890' }}>Sin productos para “{queryProducto.trim()}”.</div>
+                )}
+              </div>
+              <input
+                type="number"
+                min={1}
+                value={cantidadProd}
+                onChange={e => setCantidadProd(e.target.value)}
+                title="Cantidad al agregar"
+                className="border rounded-lg px-3 py-2 text-sm w-20"
+                style={{ borderColor: '#ddeadd' }}
+              />
               <button type="button" onClick={addConceptoLibre} className="px-3 py-2 rounded-lg text-sm border" style={{ borderColor: '#ddeadd' }}>+ Libre</button>
             </div>
             <div className="flex flex-col gap-2">
