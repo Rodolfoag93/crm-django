@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import api from '../../lib/api'
 
 type Tipo = 'NORMAL' | 'PROYECTO'
@@ -29,10 +29,13 @@ interface ZonaDraft {
   descripcion: string
 }
 
-interface ClienteOpt {
+interface ClienteEncontrado {
   id: number
   nombre: string
-  telefono?: string
+  telefono: string
+  calle_y_numero: string
+  colonia: string
+  ciudad_o_municipio: string
 }
 
 interface ProductoOpt {
@@ -67,9 +70,18 @@ export default function CotizadorCRM() {
   const [error, setError] = useState('')
   const [detalle, setDetalle] = useState<any>(null)
 
-  const [clientes, setClientes] = useState<ClienteOpt[]>([])
   const [productos, setProductos] = useState<ProductoOpt[]>([])
-  const [clienteId, setClienteId] = useState('')
+  const [clienteId, setClienteId] = useState<number | null>(null)
+  const [clienteNuevo, setClienteNuevo] = useState(false)
+  const [busquedaCliente, setBusquedaCliente] = useState('')
+  const [sugerencias, setSugerencias] = useState<ClienteEncontrado[]>([])
+  const [buscandoCliente, setBuscandoCliente] = useState(false)
+  const [nombreCliente, setNombreCliente] = useState('')
+  const [telefonoCliente, setTelefonoCliente] = useState('')
+  const [calleCliente, setCalleCliente] = useState('')
+  const [coloniaCliente, setColoniaCliente] = useState('')
+  const [ciudadCliente, setCiudadCliente] = useState('')
+  const debounceCliente = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [destinatario, setDestinatario] = useState('')
   const [nombreEvento, setNombreEvento] = useState('')
   const [asistentes, setAsistentes] = useState('')
@@ -99,15 +111,68 @@ export default function CotizadorCRM() {
   useEffect(() => { fetchList() }, [fetchList])
 
   useEffect(() => {
-    api.get('/clientes/', { params: { page: 1 } }).then(r => {
-      const results = r.data.results || r.data || []
-      setClientes(results.map((c: any) => ({ id: c.id, nombre: c.nombre, telefono: c.telefono })))
-    }).catch(console.error)
     api.get('/productos/', { params: { activo: true } }).then(r => {
       const results = r.data.results || r.data || []
       setProductos(results.filter((p: any) => p.nombre !== 'Proyecto recreativo'))
     }).catch(console.error)
   }, [])
+
+  useEffect(() => {
+    if (clienteId || clienteNuevo) return
+    const qCliente = busquedaCliente.trim()
+    if (qCliente.length < 2) { setSugerencias([]); return }
+    if (debounceCliente.current) clearTimeout(debounceCliente.current)
+    debounceCliente.current = setTimeout(() => {
+      setBuscandoCliente(true)
+      api.get('/clientes-buscar/', { params: { q: qCliente } })
+        .then(r => setSugerencias(r.data || []))
+        .catch(console.error)
+        .finally(() => setBuscandoCliente(false))
+    }, 300)
+    return () => {
+      if (debounceCliente.current) clearTimeout(debounceCliente.current)
+    }
+  }, [busquedaCliente, clienteId, clienteNuevo])
+
+  const seleccionarCliente = (c: ClienteEncontrado) => {
+    setClienteId(c.id)
+    setClienteNuevo(false)
+    setNombreCliente(c.nombre)
+    setTelefonoCliente(c.telefono || '')
+    setCalleCliente(c.calle_y_numero || '')
+    setColoniaCliente(c.colonia || '')
+    setCiudadCliente(c.ciudad_o_municipio || '')
+    setBusquedaCliente('')
+    setSugerencias([])
+    if (!destinatario) setDestinatario(c.nombre)
+  }
+
+  const marcarClienteNuevo = () => {
+    setClienteId(null)
+    setClienteNuevo(true)
+    setSugerencias([])
+    setNombreCliente('')
+    setTelefonoCliente(busquedaCliente.replace(/[^\d+\s()-]/g, '') || '')
+    setCalleCliente('')
+    setColoniaCliente('')
+    setCiudadCliente('')
+  }
+
+  const limpiarCliente = () => {
+    setClienteId(null)
+    setClienteNuevo(false)
+    setNombreCliente('')
+    setTelefonoCliente('')
+    setCalleCliente('')
+    setColoniaCliente('')
+    setCiudadCliente('')
+    setBusquedaCliente('')
+    setSugerencias([])
+  }
+
+  const clienteListo = Boolean(
+    clienteId || (clienteNuevo && nombreCliente.trim() && telefonoCliente.trim()),
+  )
 
   const subtotalPreview = useMemo(
     () => conceptos.reduce((s, c) => s + (Number(c.monto) || 0), 0),
@@ -119,7 +184,7 @@ export default function CotizadorCRM() {
     setShowForm(true)
     setDetalle(null)
     setError('')
-    setClienteId('')
+    limpiarCliente()
     setDestinatario('')
     setNombreEvento('')
     setAsistentes('')
@@ -161,13 +226,29 @@ export default function CotizadorCRM() {
   }
 
   const guardar = async () => {
+    if (!clienteListo || !fecha) return
     setSaving(true)
     setError('')
     try {
+      let idCliente = clienteId
+      if (!idCliente && clienteNuevo) {
+        const creado = await api.post('/clientes/', {
+          nombre: nombreCliente.trim(),
+          telefono: telefonoCliente.trim(),
+          calle_y_numero: calleCliente.trim(),
+          colonia: coloniaCliente.trim(),
+          ciudad_o_municipio: ciudadCliente.trim(),
+        })
+        idCliente = creado.data.id
+      }
+      if (!idCliente) {
+        setError('Selecciona o registra un cliente.')
+        return
+      }
       const payload = {
         tipo: tipoNueva,
-        cliente_id: Number(clienteId),
-        destinatario,
+        cliente_id: idCliente,
+        destinatario: destinatario || nombreCliente,
         nombre_evento: nombreEvento,
         asistentes: asistentes ? Number(asistentes) : null,
         sede,
@@ -184,7 +265,8 @@ export default function CotizadorCRM() {
       setDetalle(data)
       fetchList()
     } catch (e: any) {
-      setError(e?.response?.data?.error || 'No se pudo guardar')
+      const data = e?.response?.data
+      setError(data?.error || data?.nombre?.[0] || data?.telefono?.[0] || data?.detail || 'No se pudo guardar')
     } finally {
       setSaving(false)
     }
@@ -264,50 +346,171 @@ export default function CotizadorCRM() {
           <h2 className="font-semibold" style={{ color: '#162016' }}>Nueva cotización {tipoNueva.toLowerCase()}</h2>
           {error && <div className="text-sm text-red-600">{error}</div>}
 
-          <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
-            <label className="text-sm flex flex-col gap-1">
-              Cliente
-              <select value={clienteId} onChange={e => {
-                setClienteId(e.target.value)
-                const c = clientes.find(x => String(x.id) === e.target.value)
-                if (c && !destinatario) setDestinatario(c.nombre)
-              }} className="border rounded-lg px-3 py-2" style={{ borderColor: '#ddeadd' }}>
-                <option value="">— Seleccionar —</option>
-                {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-              </select>
-            </label>
-            <label className="text-sm flex flex-col gap-1">
-              Destinatario
-              <input value={destinatario} onChange={e => setDestinatario(e.target.value)} className="border rounded-lg px-3 py-2" style={{ borderColor: '#ddeadd' }} />
-            </label>
-            <label className="text-sm flex flex-col gap-1">
-              Fecha
-              <input type="date" value={fecha} onChange={e => setFecha(e.target.value)} className="border rounded-lg px-3 py-2" style={{ borderColor: '#ddeadd' }} />
-            </label>
-            <label className="text-sm flex flex-col gap-1">
-              Inicio
-              <input type="time" value={horaInicio} onChange={e => setHoraInicio(e.target.value)} className="border rounded-lg px-3 py-2" style={{ borderColor: '#ddeadd' }} />
-            </label>
-            <label className="text-sm flex flex-col gap-1">
-              Fin
-              <input type="time" value={horaFin} onChange={e => setHoraFin(e.target.value)} className="border rounded-lg px-3 py-2" style={{ borderColor: '#ddeadd' }} />
-            </label>
-            {tipoNueva === 'PROYECTO' && (
-              <>
-                <label className="text-sm flex flex-col gap-1">
-                  Evento
-                  <input value={nombreEvento} onChange={e => setNombreEvento(e.target.value)} className="border rounded-lg px-3 py-2" style={{ borderColor: '#ddeadd' }} />
-                </label>
-                <label className="text-sm flex flex-col gap-1">
-                  Asistentes
-                  <input type="number" value={asistentes} onChange={e => setAsistentes(e.target.value)} className="border rounded-lg px-3 py-2" style={{ borderColor: '#ddeadd' }} />
-                </label>
-                <label className="text-sm flex flex-col gap-1">
-                  Sede
-                  <input value={sede} onChange={e => setSede(e.target.value)} className="border rounded-lg px-3 py-2" style={{ borderColor: '#ddeadd' }} />
-                </label>
-              </>
-            )}
+          <div className="flex flex-col gap-3">
+            <div>
+              <div className="text-sm font-medium mb-1" style={{ color: '#162016' }}>Cliente</div>
+              {!clienteId && !clienteNuevo && (
+                <>
+                  <div className="relative">
+                    <input
+                      value={busquedaCliente}
+                      onChange={e => setBusquedaCliente(e.target.value)}
+                      placeholder="Buscar por nombre o teléfono…"
+                      className="w-full border rounded-lg px-3 py-2 text-sm"
+                      style={{ borderColor: '#ddeadd' }}
+                    />
+                    {buscandoCliente && (
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                        <div className="w-4 h-4 rounded-full border-2 animate-spin" style={{ borderColor: '#ddeadd', borderTopColor: '#16a34a' }} />
+                      </div>
+                    )}
+                  </div>
+
+                  {sugerencias.length > 0 && (
+                    <div className="mt-2 rounded-xl border overflow-hidden" style={{ borderColor: '#ddeadd' }}>
+                      {sugerencias.map(c => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => seleccionarCliente(c)}
+                          className="w-full flex items-center gap-3 px-4 py-3 text-left transition-colors"
+                          style={{ borderBottom: '1px solid #f5f8f5' }}
+                          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#f8fbf8' }}
+                          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent' }}
+                        >
+                          <div className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-white text-xs flex-shrink-0" style={{ background: '#16a34a' }}>
+                            {(c.nombre[0] || '?').toUpperCase()}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium text-sm truncate" style={{ color: '#162016' }}>{c.nombre}</div>
+                            <div className="text-xs truncate" style={{ color: '#8fa890' }}>{c.telefono}{c.colonia ? ` · ${c.colonia}` : ''}</div>
+                          </div>
+                          <span className="text-xs px-2 py-0.5 rounded-full flex-shrink-0" style={{ background: '#dcfce7', color: '#15803d' }}>Seleccionar</span>
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={marcarClienteNuevo}
+                        className="w-full px-4 py-3 text-left text-sm transition-colors"
+                        style={{ color: '#5a7060' }}
+                        onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#f8fbf8' }}
+                        onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent' }}
+                      >
+                        + Registrar como cliente nuevo
+                      </button>
+                    </div>
+                  )}
+
+                  {!buscandoCliente && busquedaCliente.trim().length >= 2 && sugerencias.length === 0 && (
+                    <div className="mt-2 rounded-xl border p-4 flex items-center justify-between gap-3" style={{ borderColor: '#ddeadd', background: '#f8fbf8' }}>
+                      <span className="text-sm" style={{ color: '#5a7060' }}>No encontramos este cliente.</span>
+                      <button
+                        type="button"
+                        onClick={marcarClienteNuevo}
+                        className="text-sm font-semibold px-3 py-1.5 rounded-lg whitespace-nowrap"
+                        style={{ background: '#162016', color: 'white' }}
+                      >
+                        Cliente nuevo
+                      </button>
+                    </div>
+                  )}
+
+                  {busquedaCliente.trim().length < 2 && (
+                    <button
+                      type="button"
+                      onClick={marcarClienteNuevo}
+                      className="mt-2 text-sm font-medium"
+                      style={{ color: '#0f3d22' }}
+                    >
+                      + Cliente nuevo
+                    </button>
+                  )}
+                </>
+              )}
+
+              {clienteId && (
+                <div className="flex items-start gap-3 px-4 py-3.5 rounded-xl" style={{ background: '#f0fdf4', border: '1px solid #bbf7d0' }}>
+                  <svg width="16" height="16" fill="none" stroke="#16a34a" strokeWidth="2.5" viewBox="0 0 24 24" className="flex-shrink-0 mt-0.5"><path d="M20 6L9 17l-5-5"/></svg>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-semibold text-sm" style={{ color: '#15803d' }}>{nombreCliente}</div>
+                    <div className="text-xs mt-0.5" style={{ color: '#5a7060' }}>
+                      {telefonoCliente}
+                      {coloniaCliente ? ` · ${coloniaCliente}` : ''}
+                    </div>
+                  </div>
+                  <button type="button" onClick={limpiarCliente} className="text-xs" style={{ color: '#8fa890' }}>Cambiar</button>
+                </div>
+              )}
+
+              {clienteNuevo && (
+                <div className="mt-2 rounded-xl border p-4 flex flex-col gap-3" style={{ borderColor: '#ddeadd' }}>
+                  <div className="flex items-center justify-between">
+                    <div className="text-xs font-semibold uppercase tracking-wide" style={{ color: '#8fa890' }}>Nuevo cliente</div>
+                    <button type="button" onClick={limpiarCliente} className="text-xs" style={{ color: '#8fa890' }}>Cancelar</button>
+                  </div>
+                  <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
+                    <label className="text-sm flex flex-col gap-1">
+                      Nombre *
+                      <input value={nombreCliente} onChange={e => {
+                        setNombreCliente(e.target.value)
+                        if (!destinatario || destinatario === nombreCliente) setDestinatario(e.target.value)
+                      }} className="border rounded-lg px-3 py-2" style={{ borderColor: '#ddeadd' }} placeholder="Nombre completo" />
+                    </label>
+                    <label className="text-sm flex flex-col gap-1">
+                      Teléfono *
+                      <input value={telefonoCliente} onChange={e => setTelefonoCliente(e.target.value.replace(/[^\d+\s()-]/g, ''))} className="border rounded-lg px-3 py-2" style={{ borderColor: '#ddeadd', fontFamily: 'monospace' }} placeholder="Ej. 6671234567" />
+                    </label>
+                    <label className="text-sm flex flex-col gap-1">
+                      Calle y número
+                      <input value={calleCliente} onChange={e => setCalleCliente(e.target.value)} className="border rounded-lg px-3 py-2" style={{ borderColor: '#ddeadd' }} />
+                    </label>
+                    <label className="text-sm flex flex-col gap-1">
+                      Colonia
+                      <input value={coloniaCliente} onChange={e => setColoniaCliente(e.target.value)} className="border rounded-lg px-3 py-2" style={{ borderColor: '#ddeadd' }} />
+                    </label>
+                    <label className="text-sm flex flex-col gap-1">
+                      Ciudad
+                      <input value={ciudadCliente} onChange={e => setCiudadCliente(e.target.value)} className="border rounded-lg px-3 py-2" style={{ borderColor: '#ddeadd' }} />
+                    </label>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
+              <label className="text-sm flex flex-col gap-1">
+                Destinatario
+                <input value={destinatario} onChange={e => setDestinatario(e.target.value)} className="border rounded-lg px-3 py-2" style={{ borderColor: '#ddeadd' }} />
+              </label>
+              <label className="text-sm flex flex-col gap-1">
+                Fecha
+                <input type="date" value={fecha} onChange={e => setFecha(e.target.value)} className="border rounded-lg px-3 py-2" style={{ borderColor: '#ddeadd' }} />
+              </label>
+              <label className="text-sm flex flex-col gap-1">
+                Inicio
+                <input type="time" value={horaInicio} onChange={e => setHoraInicio(e.target.value)} className="border rounded-lg px-3 py-2" style={{ borderColor: '#ddeadd' }} />
+              </label>
+              <label className="text-sm flex flex-col gap-1">
+                Fin
+                <input type="time" value={horaFin} onChange={e => setHoraFin(e.target.value)} className="border rounded-lg px-3 py-2" style={{ borderColor: '#ddeadd' }} />
+              </label>
+              {tipoNueva === 'PROYECTO' && (
+                <>
+                  <label className="text-sm flex flex-col gap-1">
+                    Evento
+                    <input value={nombreEvento} onChange={e => setNombreEvento(e.target.value)} className="border rounded-lg px-3 py-2" style={{ borderColor: '#ddeadd' }} />
+                  </label>
+                  <label className="text-sm flex flex-col gap-1">
+                    Asistentes
+                    <input type="number" value={asistentes} onChange={e => setAsistentes(e.target.value)} className="border rounded-lg px-3 py-2" style={{ borderColor: '#ddeadd' }} />
+                  </label>
+                  <label className="text-sm flex flex-col gap-1">
+                    Sede
+                    <input value={sede} onChange={e => setSede(e.target.value)} className="border rounded-lg px-3 py-2" style={{ borderColor: '#ddeadd' }} />
+                  </label>
+                </>
+              )}
+            </div>
           </div>
 
           {tipoNueva === 'PROYECTO' && (
@@ -358,7 +561,7 @@ export default function CotizadorCRM() {
           </div>
 
           <div className="flex gap-2">
-            <button disabled={saving || !clienteId || !fecha} onClick={guardar} className="px-4 py-2 rounded-lg text-white text-sm font-semibold disabled:opacity-50" style={{ background: '#16a34a' }}>
+            <button disabled={saving || !clienteListo || !fecha} onClick={guardar} className="px-4 py-2 rounded-lg text-white text-sm font-semibold disabled:opacity-50" style={{ background: '#16a34a' }}>
               {saving ? 'Guardando...' : 'Guardar'}
             </button>
             <button onClick={() => setShowForm(false)} className="px-4 py-2 rounded-lg text-sm border" style={{ borderColor: '#ddeadd' }}>Cancelar</button>
