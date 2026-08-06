@@ -9,7 +9,6 @@ from django.utils import timezone
 from core.models import Gasto, MovimientoContable, Cuenta, PresupuestoCategoria
 from core.utils import saldo_efectivo
 
-MONTO_COMPROBANTE_OBLIGATORIO = Decimal('500')
 MAX_COMPROBANTE_BYTES = 5 * 1024 * 1024
 COMPROBANTE_TIPOS = {'application/pdf', 'image/jpeg', 'image/png', 'image/jpg'}
 
@@ -23,27 +22,44 @@ def lunes_de(fecha: date | None = None) -> date:
     return ref - timedelta(days=ref.weekday())
 
 
+def _unwrap(val):
+    """Normaliza valores de MultiValueDict/FormData (listas de un elemento)."""
+    if isinstance(val, (list, tuple)):
+        return val[0] if val else None
+    return val
+
+
 def _decimal(val) -> Decimal:
+    val = _unwrap(val)
+    if val is None or val == '':
+        raise ValueError('Monto inválido.')
     try:
-        d = Decimal(str(val)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
-    except (InvalidOperation, TypeError):
+        # Acepta "1000", "1000.00", "$ 1,000.00"
+        cleaned = (
+            str(val)
+            .strip()
+            .replace('$', '')
+            .replace(',', '')
+            .replace(' ', '')
+        )
+        d = Decimal(cleaned).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+    except (InvalidOperation, TypeError, ValueError):
         raise ValueError('Monto inválido.')
     if d <= 0:
         raise ValueError('Monto debe ser mayor a 0.')
     return d
 
 
-def validar_comprobante(comprobante, monto: Decimal, requerido_sin_archivo: bool = True):
-    if monto <= MONTO_COMPROBANTE_OBLIGATORIO:
+def validar_comprobante(comprobante, monto: Decimal = None, requerido_sin_archivo: bool = False):
+    """Valida formato/tamaño si hay archivo. El comprobante es opcional."""
+    if not comprobante:
         return
-    if comprobante:
-        if comprobante.size > MAX_COMPROBANTE_BYTES:
-            raise ValueError('El comprobante no puede superar 5 MB.')
-        content_type = getattr(comprobante, 'content_type', '') or ''
-        if content_type and content_type not in COMPROBANTE_TIPOS:
-            raise ValueError('Comprobante debe ser PDF, JPG o PNG.')
-    elif requerido_sin_archivo:
-        raise ValueError('Gastos mayores a $500 requieren comprobante.')
+    size = getattr(comprobante, 'size', None)
+    if size is not None and size > MAX_COMPROBANTE_BYTES:
+        raise ValueError('El comprobante no puede superar 5 MB.')
+    content_type = getattr(comprobante, 'content_type', '') or ''
+    if content_type and content_type not in COMPROBANTE_TIPOS:
+        raise ValueError('Comprobante debe ser PDF, JPG o PNG.')
 
 
 def gasto_mes_categoria(categoria: str, excluir_id: int | None = None) -> Decimal:
@@ -210,12 +226,12 @@ def crear_gasto(data: dict, comprobante=None) -> Gasto:
     if not descripcion:
         raise ValueError('Completa el campo: descripción.')
 
-    cuenta_id = data.get('cuenta') or data.get('cuenta_id')
+    cuenta_id = _unwrap(data.get('cuenta') or data.get('cuenta_id'))
     cuenta = None
     if cuenta_id:
         try:
             cuenta = Cuenta.objects.get(id=cuenta_id, activa=True)
-        except Cuenta.DoesNotExist:
+        except (Cuenta.DoesNotExist, TypeError, ValueError):
             raise ValueError('Cuenta no válida o inactiva.')
 
     validar_comprobante(comprobante, monto)
@@ -255,8 +271,11 @@ def actualizar_gasto(gasto: Gasto, data: dict, comprobante=None) -> Gasto:
     else:
         cuenta = None
 
-    archivo = comprobante if comprobante is not None else gasto.comprobante
-    validar_comprobante(archivo, monto, requerido_sin_archivo=not gasto.comprobante)
+    if comprobante is not None:
+        validar_comprobante(comprobante)
+    elif gasto.comprobante:
+        # Archivo existente en disco: solo validar si se reemplaza
+        pass
     validar_presupuesto(categoria, monto, excluir_id=gasto.id)
     validar_saldo(cuenta, monto, excluir_gasto=gasto)
 

@@ -1,6 +1,5 @@
 import type { GastoPayload, PresupuestoInfo } from '../finanzas/gastos.service'
 
-const MONTO_COMPROBANTE = 500
 const MAX_FILE_BYTES = 5 * 1024 * 1024
 const ALLOWED_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg']
 
@@ -65,10 +64,6 @@ export function validateGastoForm(
     errors.presupuesto =
       `El gasto de ${formatMonto(monto)} excede el presupuesto de '${form.categoria}' ` +
       `(${formatMonto(presupuesto.disponible!)} disponibles de ${formatMonto(presupuesto.presupuesto!)}).`
-  }
-
-  if (monto > MONTO_COMPROBANTE && !form.comprobante) {
-    errors.comprobante = 'Gastos mayores a $500 requieren comprobante.'
   }
 
   if (form.comprobante) {

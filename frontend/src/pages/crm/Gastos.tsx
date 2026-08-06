@@ -607,18 +607,13 @@ export default function Gastos() {
                 />
               </Field>
 
-              <Field label="Comprobante (PDF/JPG/PNG, máx. 5 MB)">
+              <Field label="Comprobante (opcional · PDF/JPG/PNG, máx. 5 MB)">
                 <input
                   type="file"
                   accept=".pdf,.jpg,.jpeg,.png"
                   onChange={e => setForm(f => ({ ...f, comprobante: e.target.files?.[0] ?? null }))}
                   className="w-full text-sm"
                 />
-                {parseFloat(form.monto) > 500 && !form.comprobante && !editando?.comprobante_url && (
-                  <p className="text-xs mt-1" style={{ color: '#dc2626' }}>
-                    Gastos mayores a $500 requieren comprobante.
-                  </p>
-                )}
                 {editando?.comprobante_url && !form.comprobante && (
                   <a
                     href={editando.comprobante_url}

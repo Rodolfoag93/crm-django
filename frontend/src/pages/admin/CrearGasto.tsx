@@ -24,7 +24,6 @@ const CATEGORIAS = [
 ]
 
 const MAX_FILE_BYTES = 5 * 1024 * 1024
-const MONTO_COMPROBANTE = 500
 
 export default function CrearGasto() {
   const navigate = useNavigate()
@@ -97,9 +96,6 @@ export default function CrearGasto() {
     if (!form.monto || Number(form.monto) <= 0) return setError('El monto debe ser mayor a 0.')
 
     const monto = Number(form.monto)
-    if (monto > MONTO_COMPROBANTE && !comprobante) {
-      return setError('Gastos mayores a $500 requieren comprobante.')
-    }
 
     setGuardando(true)
     try {
@@ -125,8 +121,6 @@ export default function CrearGasto() {
       setGuardando(false)
     }
   }
-
-  const requiereComprobante = Number(form.monto) > MONTO_COMPROBANTE
 
   return (
     <div className="min-h-screen bg-gray-50 pb-24">
@@ -208,11 +202,10 @@ export default function CrearGasto() {
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 flex flex-col gap-3">
           <div>
             <label className="text-xs text-gray-500 font-medium">
-              Comprobante {requiereComprobante && <span className="text-red-400">*</span>}
+              Comprobante <span className="text-gray-300">(opcional)</span>
             </label>
             <p className="text-xs text-gray-400 mt-0.5">
               PDF, JPG o PNG · máx. 5 MB
-              {requiereComprobante && ' · obligatorio si el monto supera $500'}
             </p>
           </div>
 
