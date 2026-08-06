@@ -40,6 +40,7 @@ import Clientes from './pages/crm/Clientes'
 import Rankings from './pages/crm/Rankings'
 import Placeholder from './pages/crm/Placeholder'
 import Gastos from './pages/crm/Gastos'
+import Cuentas from './pages/crm/Cuentas'
 import Animacion from './pages/crm/Animacion'
 import Productos from './pages/crm/Productos'
 import Rutas from './pages/crm/Rutas'
@@ -47,6 +48,7 @@ import Empleados from './pages/crm/Empleados'
 import NominaCRM from './pages/crm/Nomina'
 import NuevaRentaCRM from './pages/crm/NuevaRenta'
 import EditarRentaCRM from './pages/crm/EditarRenta'
+import CotizadorCRM from './pages/crm/Cotizador'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
@@ -169,6 +171,7 @@ export default function App() {
           <Route path="rentas" element={<Rentas />} />
           <Route path="rentas/nueva" element={<NuevaRentaCRM />} />
           <Route path="rentas/:id/editar" element={<EditarRentaCRM />} />
+          <Route path="cotizador" element={<CotizadorCRM />} />
           <Route path="clientes" element={<Clientes />} />
           <Route path="rankings" element={<Rankings />} />
           <Route path="productos" element={<Productos />} />
@@ -178,7 +181,7 @@ export default function App() {
           <Route path="animacion" element={<Animacion />} />
           <Route path="contabilidad" element={<Placeholder />} />
           <Route path="gastos" element={<Gastos />} />
-          <Route path="cuentas" element={<Placeholder />} />
+          <Route path="cuentas" element={<Cuentas />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/login" />} />

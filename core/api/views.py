@@ -19,7 +19,7 @@ from core.models import (
     Ruta, RutaEmpleado, RutaRenta,
     BitacoraMantenimiento, TurnoAsistencia,
     Cuenta, PedidoFinanzas, TemporadaAlta,
-    CoordinadorApoyo, SolicitudCambioMaterial,
+    CoordinadorApoyo, SolicitudCambioMaterial, Cotizacion,
 )
 from core.services.coordinacion import (
     CoordinacionError,
@@ -3245,4 +3245,240 @@ def api_calificar_coordinador_encargado(request, lista_id):
     )
     return Response({'ok': True, 'promedio': str(cal.promedio)})
 
-    return Response({'ok': True})
+
+# ── Cotizador CRM ─────────────────────────────────────────────────────────────
+
+def _cotizacion_to_dict(c, detalle=False):
+    data = {
+        'id': c.id,
+        'folio': c.folio,
+        'tipo': c.tipo,
+        'status': c.status,
+        'cliente_id': c.cliente_id,
+        'cliente_nombre': c.cliente.nombre if c.cliente_id else '',
+        'destinatario': c.destinatario,
+        'nombre_evento': c.nombre_evento,
+        'asistentes': c.asistentes,
+        'sede': c.sede,
+        'fecha_evento': str(c.fecha_evento) if c.fecha_evento else None,
+        'hora_inicio': str(c.hora_inicio)[:5] if c.hora_inicio else None,
+        'hora_fin': str(c.hora_fin)[:5] if c.hora_fin else None,
+        'intro': c.intro,
+        'aplicar_iva': c.aplicar_iva,
+        'aplicar_isr': c.aplicar_isr,
+        'condiciones_pago': c.condiciones_pago,
+        'subtotal': str(c.subtotal),
+        'monto_iva': str(c.monto_iva),
+        'monto_isr': str(c.monto_isr),
+        'total': str(c.total),
+        'notas': c.notas,
+        'renta_id': c.renta_id,
+        'renta_folio': c.renta.folio if c.renta_id else None,
+        'created_at': c.created_at.isoformat() if c.created_at else None,
+    }
+    if detalle:
+        data['zonas'] = [
+            {'id': z.id, 'orden': z.orden, 'titulo': z.titulo, 'descripcion': z.descripcion}
+            for z in c.zonas.all()
+        ]
+        data['conceptos'] = [
+            {
+                'id': x.id,
+                'orden': x.orden,
+                'nombre': x.nombre,
+                'descripcion': x.descripcion,
+                'cantidad': x.cantidad,
+                'monto': str(x.monto),
+                'producto_id': x.producto_id,
+                'producto_nombre': x.producto.nombre if x.producto_id else None,
+            }
+            for x in c.conceptos.all()
+        ]
+    return data
+
+
+@api_view(['GET', 'POST'])
+@permission_classes([IsAuthenticated])
+def api_crm_cotizaciones(request):
+    if not request.user.is_staff:
+        return Response({'error': 'No autorizado.'}, status=403)
+
+    if request.method == 'GET':
+        qs = Cotizacion.objects.select_related('cliente', 'renta').all()
+        q = (request.GET.get('q') or '').strip()
+        tipo = (request.GET.get('tipo') or '').strip()
+        status_f = (request.GET.get('status') or '').strip()
+        if q:
+            qs = qs.filter(
+                Q(folio__icontains=q)
+                | Q(cliente__nombre__icontains=q)
+                | Q(nombre_evento__icontains=q)
+                | Q(destinatario__icontains=q)
+            )
+        if tipo in ('NORMAL', 'PROYECTO'):
+            qs = qs.filter(tipo=tipo)
+        if status_f:
+            qs = qs.filter(status=status_f)
+        data = [_cotizacion_to_dict(c) for c in qs[:100]]
+        return Response({'results': data, 'count': len(data)})
+
+    from core.services.cotizaciones import (
+        CotizacionServiceError,
+        generar_intro,
+        sincronizar_conceptos,
+        sincronizar_zonas,
+    )
+    tipo = (request.data.get('tipo') or 'NORMAL').upper()
+    if tipo not in ('NORMAL', 'PROYECTO'):
+        return Response({'error': 'tipo inválido'}, status=400)
+    cliente_id = request.data.get('cliente_id')
+    if not cliente_id:
+        return Response({'error': 'cliente_id requerido'}, status=400)
+    cliente = get_object_or_404(Cliente, id=cliente_id)
+    try:
+        c = Cotizacion(
+            tipo=tipo,
+            status='BORRADOR',
+            cliente=cliente,
+            destinatario=(request.data.get('destinatario') or cliente.nombre or '').strip(),
+            nombre_evento=(request.data.get('nombre_evento') or '').strip(),
+            asistentes=request.data.get('asistentes') or None,
+            sede=(request.data.get('sede') or '').strip(),
+            fecha_evento=request.data.get('fecha_evento') or None,
+            hora_inicio=request.data.get('hora_inicio') or None,
+            hora_fin=request.data.get('hora_fin') or None,
+            intro=(request.data.get('intro') or '').strip(),
+            aplicar_iva=bool(request.data.get('aplicar_iva')),
+            aplicar_isr=bool(request.data.get('aplicar_isr')),
+            notas=(request.data.get('notas') or '').strip(),
+            creada_por=request.user,
+        )
+        if request.data.get('condiciones_pago'):
+            c.condiciones_pago = request.data.get('condiciones_pago')
+        c.save()
+        if not c.intro:
+            c.intro = generar_intro(c)
+            c.save(update_fields=['intro'])
+        sincronizar_conceptos(c, request.data.get('conceptos') or [])
+        if tipo == 'PROYECTO':
+            sincronizar_zonas(c, request.data.get('zonas') or [])
+        c.refresh_from_db()
+        return Response(_cotizacion_to_dict(c, detalle=True), status=201)
+    except CotizacionServiceError as exc:
+        return Response({'error': exc.message}, status=exc.status)
+    except Exception as exc:
+        return Response({'error': str(exc)}, status=400)
+
+
+@api_view(['GET', 'PUT'])
+@permission_classes([IsAuthenticated])
+def api_crm_cotizacion_detalle(request, cotizacion_id):
+    if not request.user.is_staff:
+        return Response({'error': 'No autorizado.'}, status=403)
+    c = get_object_or_404(
+        Cotizacion.objects.select_related('cliente', 'renta').prefetch_related('zonas', 'conceptos__producto'),
+        id=cotizacion_id,
+    )
+    if request.method == 'GET':
+        return Response(_cotizacion_to_dict(c, detalle=True))
+
+    if c.status == 'CONVERTIDA':
+        return Response({'error': 'La cotización ya fue convertida.'}, status=400)
+
+    from core.services.cotizaciones import (
+        CotizacionServiceError,
+        generar_intro,
+        sincronizar_conceptos,
+        sincronizar_zonas,
+    )
+    try:
+        if request.data.get('cliente_id'):
+            c.cliente = get_object_or_404(Cliente, id=request.data['cliente_id'])
+        for field in ('destinatario', 'nombre_evento', 'sede', 'intro', 'notas', 'condiciones_pago'):
+            if field in request.data:
+                setattr(c, field, (request.data.get(field) or '').strip())
+        if 'asistentes' in request.data:
+            c.asistentes = request.data.get('asistentes') or None
+        if 'fecha_evento' in request.data:
+            c.fecha_evento = request.data.get('fecha_evento') or None
+        if 'hora_inicio' in request.data:
+            c.hora_inicio = request.data.get('hora_inicio') or None
+        if 'hora_fin' in request.data:
+            c.hora_fin = request.data.get('hora_fin') or None
+        if 'aplicar_iva' in request.data:
+            c.aplicar_iva = bool(request.data.get('aplicar_iva'))
+        if 'aplicar_isr' in request.data:
+            c.aplicar_isr = bool(request.data.get('aplicar_isr'))
+        if not c.intro:
+            c.intro = generar_intro(c)
+        c.save()
+        if 'conceptos' in request.data:
+            sincronizar_conceptos(c, request.data.get('conceptos') or [])
+        if c.tipo == 'PROYECTO' and 'zonas' in request.data:
+            sincronizar_zonas(c, request.data.get('zonas') or [])
+        c.refresh_from_db()
+        return Response(_cotizacion_to_dict(c, detalle=True))
+    except CotizacionServiceError as exc:
+        return Response({'error': exc.message}, status=exc.status)
+    except Exception as exc:
+        return Response({'error': str(exc)}, status=400)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def api_crm_cotizacion_status(request, cotizacion_id):
+    if not request.user.is_staff:
+        return Response({'error': 'No autorizado.'}, status=403)
+    c = get_object_or_404(Cotizacion, id=cotizacion_id)
+    nuevo = request.data.get('status')
+    permitidos = {
+        'BORRADOR': {'ENVIADA', 'RECHAZADA'},
+        'ENVIADA': {'ACEPTADA', 'RECHAZADA', 'BORRADOR'},
+        'ACEPTADA': {'RECHAZADA', 'ENVIADA'},
+        'RECHAZADA': {'BORRADOR'},
+    }
+    if c.status == 'CONVERTIDA':
+        return Response({'error': 'Ya convertida'}, status=400)
+    if nuevo not in permitidos.get(c.status, set()):
+        return Response({'error': 'Transición no permitida'}, status=400)
+    c.status = nuevo
+    c.save(update_fields=['status', 'updated_at'])
+    return Response(_cotizacion_to_dict(c))
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def api_crm_cotizacion_convertir(request, cotizacion_id):
+    if not request.user.is_staff:
+        return Response({'error': 'No autorizado.'}, status=403)
+    c = get_object_or_404(Cotizacion, id=cotizacion_id)
+    from core.services.cotizaciones import CotizacionServiceError, convertir_a_renta
+    try:
+        apoyo_ids = request.data.get('apoyo_ids') or []
+        resultado = convertir_a_renta(
+            c,
+            lider_id=request.data.get('lider_id'),
+            apoyo_ids=apoyo_ids,
+            anticipo=request.data.get('anticipo') or 0,
+        )
+        return Response(resultado)
+    except CotizacionServiceError as exc:
+        return Response({'error': exc.message}, status=exc.status)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def api_crm_cotizacion_pdf(request, cotizacion_id):
+    if not request.user.is_staff:
+        return Response({'error': 'No autorizado.'}, status=403)
+    from django.http import HttpResponse
+    from core.services.cotizaciones import render_pdf_bytes
+    c = get_object_or_404(
+        Cotizacion.objects.select_related('cliente').prefetch_related('zonas', 'conceptos'),
+        id=cotizacion_id,
+    )
+    content = render_pdf_bytes(c)
+    is_pdf = content[:4] == b'%PDF'
+    response = HttpResponse(content, content_type='application/pdf' if is_pdf else 'text/html')
+    response['Content-Disposition'] = f'inline; filename="cotizacion_{c.folio}.{"pdf" if is_pdf else "html"}"'
+    return response

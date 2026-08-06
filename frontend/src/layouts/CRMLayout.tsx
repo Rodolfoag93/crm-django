@@ -16,6 +16,7 @@ const navSections: NavSection[] = [
     items: [
       { to: '/crm', label: 'Dashboard', exact: true, icon: <Icon d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" d2="M9 22V12h6v10" /> },
       { to: '/crm/rentas', label: 'Rentas', icon: <Icon d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4zM3 6h18M16 10a4 4 0 01-8 0" /> },
+      { to: '/crm/cotizador', label: 'Cotizador', icon: <Icon d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8zM14 2v6h6M16 13H8M16 17H8M10 9H8" /> },
       { to: '/crm/clientes', label: 'Clientes', icon: <Icon d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" /> },
       { to: '/crm/productos', label: 'Productos', icon: <Icon d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82zM7 7h.01" /> },
     ],
@@ -48,6 +49,7 @@ const navSections: NavSection[] = [
 const BREADCRUMB: Record<string, string> = {
   '/crm': 'Dashboard',
   '/crm/rentas': 'Rentas',
+  '/crm/cotizador': 'Cotizador',
   '/crm/clientes': 'Clientes',
   '/crm/productos': 'Productos',
   '/crm/rutas': 'Rutas',
