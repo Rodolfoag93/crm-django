@@ -5,12 +5,21 @@ interface Cliente {
   id: number
   nombre: string
   telefono: string
+  calle_y_numero?: string
   colonia: string
   ciudad_o_municipio: string
   rentas_count: number
   total_gastado: number
   ultima_renta: string | null
   colonia_frecuente: string | null
+}
+
+const FORM_VACIO = {
+  nombre: '',
+  telefono: '',
+  calle_y_numero: '',
+  colonia: '',
+  ciudad_o_municipio: '',
 }
 
 interface StatsClientes {
@@ -49,20 +58,34 @@ export default function Clientes() {
   const [stats, setStats] = useState<StatsClientes | null>(null)
   const [loading, setLoading] = useState(true)
   const [detalle, setDetalle] = useState<Cliente | null>(null)
+  const [panelNuevo, setPanelNuevo] = useState(false)
+  const [form, setForm] = useState(FORM_VACIO)
+  const [guardando, setGuardando] = useState(false)
+  const [errorForm, setErrorForm] = useState('')
 
-  useEffect(() => {
+  const refreshStats = () => {
     api.get('/clientes/stats/').then(r => setStats(r.data)).catch(console.error)
-  }, [])
+  }
+
+  useEffect(() => { refreshStats() }, [])
+
+  const abrirNuevo = () => {
+    setForm(FORM_VACIO)
+    setErrorForm('')
+    setDetalle(null)
+    setPanelNuevo(true)
+  }
 
   useEffect(() => {
     const t = setTimeout(() => { setBusqueda(searchInput); setPage(1) }, 350)
     return () => clearTimeout(t)
   }, [searchInput])
 
-  const fetchClientes = useCallback(() => {
+  const fetchClientes = useCallback((pageOverride?: number, searchOverride?: string) => {
     setLoading(true)
-    const params: Record<string, string> = { page: String(page) }
-    if (busqueda) params.search = busqueda
+    const params: Record<string, string> = { page: String(pageOverride ?? page) }
+    const q = searchOverride !== undefined ? searchOverride : busqueda
+    if (q) params.search = q
     api.get('/clientes/', { params })
       .then(r => setData(r.data))
       .catch(console.error)
@@ -71,14 +94,63 @@ export default function Clientes() {
 
   useEffect(() => { fetchClientes() }, [fetchClientes])
 
+  const guardarCliente = async () => {
+    if (!form.nombre.trim()) { setErrorForm('El nombre es obligatorio.'); return }
+    if (!form.telefono.trim()) { setErrorForm('El teléfono es obligatorio.'); return }
+    setGuardando(true)
+    setErrorForm('')
+    try {
+      const r = await api.post('/clientes/', {
+        nombre: form.nombre.trim(),
+        telefono: form.telefono.trim(),
+        calle_y_numero: form.calle_y_numero.trim(),
+        colonia: form.colonia.trim(),
+        ciudad_o_municipio: form.ciudad_o_municipio.trim(),
+      })
+      setPanelNuevo(false)
+      setSearchInput('')
+      setBusqueda('')
+      setPage(1)
+      fetchClientes(1, '')
+      refreshStats()
+      setDetalle({
+        ...r.data,
+        rentas_count: r.data.rentas_count ?? 0,
+        total_gastado: r.data.total_gastado ?? 0,
+        ultima_renta: r.data.ultima_renta ?? null,
+        colonia_frecuente: r.data.colonia_frecuente ?? r.data.colonia ?? null,
+      })
+    } catch (err: any) {
+      const data = err?.response?.data
+      const msg = typeof data === 'string'
+        ? data
+        : data?.nombre?.[0] || data?.telefono?.[0] || data?.detail || 'No se pudo guardar el cliente.'
+      setErrorForm(msg)
+    } finally {
+      setGuardando(false)
+    }
+  }
+
   const totalPages = data ? Math.ceil(data.count / PAGE_SIZE) : 1
   const clientes = data?.results ?? []
 
   return (
     <div className="p-6 flex flex-col gap-5">
-      <div>
-        <h1 className="font-bold" style={{ fontSize: 20, letterSpacing: '-0.4px', color: '#162016' }}>Clientes</h1>
-        <p className="text-sm mt-0.5" style={{ color: '#5a7060' }}>Base de datos de clientes registrados</p>
+      <div className="flex items-baseline justify-between">
+        <div>
+          <h1 className="font-bold" style={{ fontSize: 20, letterSpacing: '-0.4px', color: '#162016' }}>Clientes</h1>
+          <p className="text-sm mt-0.5" style={{ color: '#5a7060' }}>Base de datos de clientes registrados</p>
+        </div>
+        <button
+          onClick={abrirNuevo}
+          className="flex items-center gap-1.5 text-sm font-semibold px-4 py-1.5 rounded-lg"
+          style={{ background: '#16a34a', color: 'white' }}
+        >
+          <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+          Nuevo cliente
+        </button>
       </div>
 
       {/* Stat cards */}
@@ -250,8 +322,104 @@ export default function Clientes() {
         </div>
       </div>
 
+      {/* Panel nuevo cliente */}
+      {panelNuevo && (
+        <div
+          className="fixed inset-0 z-50 flex items-start justify-end"
+          style={{ background: 'rgba(0,0,0,0.25)' }}
+          onClick={e => { if (e.target === e.currentTarget && !guardando) setPanelNuevo(false) }}
+        >
+          <div className="flex flex-col h-full bg-white" style={{ width: 400, borderLeft: '1px solid #ddeadd' }}>
+            <div className="flex items-center gap-3 px-5 py-5" style={{ borderBottom: '1px solid #ddeadd' }}>
+              <div>
+                <div className="font-bold" style={{ fontSize: 16, color: '#162016' }}>Nuevo cliente</div>
+                <div className="text-xs mt-0.5" style={{ color: '#8fa890' }}>Registrar en el directorio</div>
+              </div>
+              <button
+                onClick={() => !guardando && setPanelNuevo(false)}
+                className="ml-auto w-7 h-7 flex items-center justify-center rounded-md border text-sm"
+                style={{ borderColor: '#ddeadd', color: '#5a7060' }}
+              >×</button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-4">
+              <Field label="Nombre completo *">
+                <input
+                  value={form.nombre}
+                  onChange={e => setForm(f => ({ ...f, nombre: e.target.value }))}
+                  placeholder="Nombre del cliente"
+                  autoFocus
+                  className="w-full border rounded-lg px-3 py-2.5 text-sm outline-none"
+                  style={{ borderColor: '#ddeadd', color: '#162016' }}
+                />
+              </Field>
+              <Field label="Teléfono *">
+                <input
+                  value={form.telefono}
+                  onChange={e => setForm(f => ({ ...f, telefono: e.target.value.replace(/[^\d+\s()-]/g, '') }))}
+                  placeholder="Ej. 6671234567"
+                  inputMode="tel"
+                  className="w-full border rounded-lg px-3 py-2.5 text-sm outline-none"
+                  style={{ borderColor: '#ddeadd', color: '#162016', fontFamily: 'monospace' }}
+                />
+              </Field>
+              <Field label="Calle y número">
+                <input
+                  value={form.calle_y_numero}
+                  onChange={e => setForm(f => ({ ...f, calle_y_numero: e.target.value }))}
+                  placeholder="Ej. Hidalgo 123"
+                  className="w-full border rounded-lg px-3 py-2.5 text-sm outline-none"
+                  style={{ borderColor: '#ddeadd', color: '#162016' }}
+                />
+              </Field>
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Colonia">
+                  <input
+                    value={form.colonia}
+                    onChange={e => setForm(f => ({ ...f, colonia: e.target.value }))}
+                    placeholder="Colonia"
+                    className="w-full border rounded-lg px-3 py-2.5 text-sm outline-none"
+                    style={{ borderColor: '#ddeadd', color: '#162016' }}
+                  />
+                </Field>
+                <Field label="Ciudad">
+                  <input
+                    value={form.ciudad_o_municipio}
+                    onChange={e => setForm(f => ({ ...f, ciudad_o_municipio: e.target.value }))}
+                    placeholder="Ciudad"
+                    className="w-full border rounded-lg px-3 py-2.5 text-sm outline-none"
+                    style={{ borderColor: '#ddeadd', color: '#162016' }}
+                  />
+                </Field>
+              </div>
+              {errorForm && (
+                <div className="rounded-lg px-4 py-3 text-sm" style={{ background: '#fee2e2', color: '#b91c1c' }}>{errorForm}</div>
+              )}
+            </div>
+
+            <div className="flex gap-2 p-4" style={{ borderTop: '1px solid #ddeadd' }}>
+              <button
+                onClick={() => !guardando && setPanelNuevo(false)}
+                className="flex-1 text-sm font-medium py-2 rounded-lg border"
+                style={{ borderColor: '#ddeadd', color: '#5a7060' }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={guardarCliente}
+                disabled={guardando}
+                className="flex-1 text-sm font-semibold py-2 rounded-lg transition-opacity disabled:opacity-60"
+                style={{ background: '#16a34a', color: 'white' }}
+              >
+                {guardando ? 'Guardando…' : 'Agregar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Panel detalle */}
-      {detalle && (
+      {detalle && !panelNuevo && (
         <div
           className="fixed inset-0 z-50 flex items-start justify-end"
           style={{ background: 'rgba(0,0,0,0.25)' }}
@@ -332,6 +500,15 @@ function DetailRow({ label, value, mono }: { label: string; value: string; mono?
     <div>
       <div className="text-xs mb-0.5" style={{ color: '#8fa890' }}>{label}</div>
       <div className="text-sm font-medium" style={{ color: '#162016', fontFamily: mono ? 'monospace' : undefined }}>{value}</div>
+    </div>
+  )
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <label className="text-xs font-semibold uppercase tracking-wide" style={{ color: '#5a7060', letterSpacing: '0.3px' }}>{label}</label>
+      {children}
     </div>
   )
 }
