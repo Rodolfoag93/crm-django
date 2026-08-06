@@ -164,6 +164,23 @@
     color: #8fa890;
     text-align: center;
   }
+  .powered-by {
+    margin-top: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    font-size: 10px;
+    font-weight: 700;
+    color: #5a7060;
+  }
+  .powered-by img {
+    width: 16px;
+    height: 16px;
+    object-fit: contain;
+    border-radius: 4px;
+  }
+  .powered-by span { color: #0b1f3a; }
 </style>
 </head>
 <body>
@@ -258,5 +275,9 @@
     <div class="lugar">{{ lugar_fecha }}</div>
   </div>
   <div class="footer-line">Trotamundos · Colima, Col. · Documento generado electrónicamente</div>
+  <div class="powered-by">
+    {% if nexoo_url %}<img src="{{ nexoo_url }}" alt="Nexoo">{% endif %}
+    <span>powered by nexoo</span>
+  </div>
 </body>
 </html>

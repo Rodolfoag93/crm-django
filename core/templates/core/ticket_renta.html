@@ -119,8 +119,8 @@
       padding: 3px 0;
       gap: 8px;
     }
-    .field-row .lbl { color: #666; flex-shrink: 0; }
-    .field-row .val { color: #111; font-weight: 500; text-align: right; }
+    .field-row .lbl { color: #666; flex-shrink: 0; font-weight: 600; }
+    .field-row .val { color: #111; font-weight: 700; text-align: right; }
 
     hr.div {
       border: none;
@@ -176,17 +176,42 @@
       color: #888;
       border-top: 1px solid #eee;
       line-height: 1.6;
+      font-weight: 600;
     }
+    .powered-by {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px dashed #ddd;
+      font-size: 10px;
+      font-weight: 700;
+      color: #666;
+      letter-spacing: 0.2px;
+    }
+    .powered-by img {
+      width: 16px;
+      height: 16px;
+      object-fit: contain;
+      border-radius: 4px;
+    }
+    .powered-by span { color: #0b1f3a; }
 
     /* ── Impresión (80 mm térmica B&N) ────────────────────── */
     @media print {
       body {
         background: white;
         padding: 0;
-        font-family: 'Courier New', Courier, monospace;
-        font-size: 13px;
+        /* Sans-serif gruesa: Courier se ve muy delgada en térmica */
+        font-family: Arial, Helvetica, sans-serif;
+        font-size: 14px;
+        font-weight: 700;
         color: black;
         width: 80mm;
+        -webkit-font-smoothing: none;
+        font-smooth: never;
       }
       .page-header { display: none; }
       .tickets-wrap { gap: 0; align-items: flex-start; }
@@ -211,13 +236,14 @@
         -webkit-print-color-adjust: exact;
         print-color-adjust: exact;
       }
-      .ticket-header .empresa { color: black; font-size: 17px; font-weight: 900; }
-      .ticket-header .telefono { color: black; font-size: 12.5px; }
-      .ticket-header .folio { color: black; font-size: 12px; margin-top: 5px; }
+      .ticket-header .empresa { color: black; font-size: 18px; font-weight: 900; }
+      .ticket-header .telefono { color: black; font-size: 13px; font-weight: 700; }
+      .ticket-header .folio { color: black; font-size: 13px; font-weight: 700; margin-top: 5px; font-family: Arial, Helvetica, sans-serif; }
       .ticket-header .copy-label {
         background: black !important;
         color: white !important;
         font-size: 11px;
+        font-weight: 900;
         border-radius: 0;
         padding: 2px 6px;
         letter-spacing: 1px;
@@ -227,32 +253,47 @@
 
       .ticket-body { padding: 5px 6px; }
       .section { margin-bottom: 8px; }
-      .section-title { font-size: 11px; color: black; margin-bottom: 3px; }
-      .field-row { font-size: 12.5px; padding: 2px 0; }
-      .field-row .lbl, .field-row .val { color: black; }
-      hr.div { border-top: 1px dashed black; margin: 8px 0; }
+      .section-title { font-size: 11px; color: black; margin-bottom: 3px; font-weight: 900; }
+      .field-row { font-size: 13.5px; padding: 2px 0; font-weight: 700; }
+      .field-row .lbl, .field-row .val { color: black; font-weight: 700; }
+      hr.div { border-top: 1.5px dashed black; margin: 8px 0; }
 
-      .products-table { font-size: 12px; }
-      .products-table th { font-size: 11px; color: black; border-bottom: 1px solid black; padding: 0 0 3px; }
-      .products-table td { border-bottom: 1px dotted #555; padding: 3px 0; color: black; }
+      .products-table { font-size: 13px; font-weight: 700; }
+      .products-table th { font-size: 11px; color: black; border-bottom: 2px solid black; padding: 0 0 3px; font-weight: 900; }
+      .products-table td { border-bottom: 1px dotted #333; padding: 3px 0; color: black; font-weight: 700; }
 
       .totals { margin-top: 6px; }
-      .total-row { font-size: 13px; padding: 2px 0; }
-      .total-row .t-lbl, .total-row .t-val { color: black; }
-      .total-row.big .t-lbl { font-size: 14px; font-weight: 800; }
-      .total-row.big .t-val { font-size: 16px; font-weight: 900; }
+      .total-row { font-size: 14px; padding: 2px 0; font-weight: 700; }
+      .total-row .t-lbl, .total-row .t-val { color: black; font-weight: 700; }
+      .total-row.big .t-lbl { font-size: 15px; font-weight: 900; }
+      .total-row.big .t-val { font-size: 17px; font-weight: 900; }
 
-      .sign-field { font-size: 12.5px; color: black; margin-top: 6px; }
-      .sign-field p { margin-bottom: 3px; }
-      .sign-line { border-bottom: 1px solid black; margin: 16px 0 6px; }
+      .sign-field { font-size: 13px; color: black; margin-top: 6px; font-weight: 700; }
+      .sign-field p { margin-bottom: 3px; font-weight: 700; }
+      .sign-line { border-bottom: 1.5px solid black; margin: 16px 0 6px; }
 
       .ticket-footer {
-        font-size: 11.5px;
+        font-size: 12px;
+        font-weight: 700;
         color: black;
-        border-top: 1px dashed black;
+        border-top: 1.5px dashed black;
         padding: 5px 6px;
         line-height: 1.5;
       }
+      .powered-by {
+        border-top: 1px dashed black;
+        color: black;
+        font-size: 10px;
+        font-weight: 800;
+      }
+      .powered-by img {
+        width: 14px;
+        height: 14px;
+        filter: grayscale(1) contrast(1.4);
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+      .powered-by span { color: black; }
     }
 
     @page { size: 80mm auto; margin: 2mm; }
@@ -288,6 +329,10 @@
     <div class="ticket-footer">
       ¡Gracias por tu preferencia!<br>
       Av. Josefa Ortiz de Domínguez 165-C, Villa de Álvarez, Colima
+      <div class="powered-by">
+        {% if nexoo_url %}<img src="{{ nexoo_url }}" alt="Nexoo">{% endif %}
+        <span>powered by nexoo</span>
+      </div>
     </div>
   </div>
 
@@ -316,6 +361,10 @@
     </div>
     <div class="ticket-footer">
       Copia interna – Administración · {{ renta.folio }}
+      <div class="powered-by">
+        {% if nexoo_url %}<img src="{{ nexoo_url }}" alt="Nexoo">{% endif %}
+        <span>powered by nexoo</span>
+      </div>
     </div>
   </div>
 

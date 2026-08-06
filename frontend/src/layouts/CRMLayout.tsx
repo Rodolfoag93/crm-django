@@ -1,5 +1,6 @@
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { useAuthStore } from '../stores/authStore'
+import PoweredByNexoo from '../components/PoweredByNexoo'
 
 type NavItem = { to: string; label: string; icon: React.ReactNode; exact?: boolean }
 type NavSection = { label: string; items: NavItem[] }
@@ -136,26 +137,30 @@ export default function CRMLayout() {
           ))}
         </nav>
 
-        {/* Footer */}
-        <div
-          className="flex items-center gap-2.5 px-4 py-3 cursor-pointer group"
-          style={{ borderTop: '1px solid rgba(255,255,255,0.07)' }}
-          onClick={handleLogout}
-          title="Cerrar sesión"
-        >
+        {/* User + Nexoo */}
+        <div style={{ borderTop: '1px solid rgba(255,255,255,0.07)' }}>
           <div
-            className="flex items-center justify-center rounded-full font-bold text-white flex-shrink-0"
-            style={{ width: 30, height: 30, background: '#1e6b3e', fontSize: 11 }}
+            className="flex items-center gap-2.5 px-4 py-3 cursor-pointer group"
+            onClick={handleLogout}
+            title="Cerrar sesión"
           >
-            {initials}
+            <div
+              className="flex items-center justify-center rounded-full font-bold text-white flex-shrink-0"
+              style={{ width: 30, height: 30, background: '#1e6b3e', fontSize: 11 }}
+            >
+              {initials}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="truncate" style={{ fontSize: 12.5, color: '#a8d5b8', fontWeight: 500 }}>{user?.nombre ?? 'Admin'}</div>
+              <div style={{ fontSize: 11, color: '#5a9470' }}>Administrador</div>
+            </div>
+            <svg width="13" height="13" fill="none" stroke="#5a9470" strokeWidth="2" viewBox="0 0 24 24" className="flex-shrink-0 group-hover:stroke-white transition-colors">
+              <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9" />
+            </svg>
           </div>
-          <div className="flex-1 min-w-0">
-            <div className="truncate" style={{ fontSize: 12.5, color: '#a8d5b8', fontWeight: 500 }}>{user?.nombre ?? 'Admin'}</div>
-            <div style={{ fontSize: 11, color: '#5a9470' }}>Administrador</div>
+          <div className="px-3 pb-3">
+            <PoweredByNexoo variant="dark" />
           </div>
-          <svg width="13" height="13" fill="none" stroke="#5a9470" strokeWidth="2" viewBox="0 0 24 24" className="flex-shrink-0 group-hover:stroke-white transition-colors">
-            <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9" />
-          </svg>
         </div>
       </aside>
 
@@ -185,8 +190,13 @@ export default function CRMLayout() {
         </header>
 
         {/* Content */}
-        <main className="flex-1 overflow-y-auto">
-          <Outlet />
+        <main className="flex-1 overflow-y-auto flex flex-col">
+          <div className="flex-1">
+            <Outlet />
+          </div>
+          <footer className="flex-shrink-0 py-3 px-6" style={{ borderTop: '1px solid #e8f0e8' }}>
+            <PoweredByNexoo variant="light" />
+          </footer>
         </main>
       </div>
     </div>

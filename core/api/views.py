@@ -523,6 +523,7 @@ class RentaViewSet(viewsets.ModelViewSet):
         total = float(renta.precio_total or 0)
         anticipo = float(renta.anticipo or 0)
         logo_url = request.build_absolute_uri(static('img/logo1.png'))
+        nexoo_url = request.build_absolute_uri(static('img/nexoo.png'))
         html = render_to_string('core/ticket_renta.html', {
             'renta': renta,
             'productos': productos,
@@ -530,6 +531,7 @@ class RentaViewSet(viewsets.ModelViewSet):
             'anticipo': anticipo,
             'restante': total - anticipo,
             'logo_url': logo_url,
+            'nexoo_url': nexoo_url,
         })
         return HttpResponse(html, content_type='text/html; charset=utf-8')
 

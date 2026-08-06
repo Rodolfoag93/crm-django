@@ -88,15 +88,23 @@ def _fmt_money(value):
     return f'{_money(value):,.2f}'
 
 
-def _logo_file_uri() -> str:
+def _static_img_uri(filename: str) -> str:
     candidates = [
-        Path(settings.BASE_DIR) / 'core' / 'static' / 'img' / 'logo1.png',
-        Path(settings.BASE_DIR) / 'staticfiles' / 'img' / 'logo1.png',
+        Path(settings.BASE_DIR) / 'core' / 'static' / 'img' / filename,
+        Path(settings.BASE_DIR) / 'staticfiles' / 'img' / filename,
     ]
     for path in candidates:
         if path.exists():
             return path.resolve().as_uri()
     return ''
+
+
+def _logo_file_uri() -> str:
+    return _static_img_uri('logo1.png')
+
+
+def _nexoo_file_uri() -> str:
+    return _static_img_uri('nexoo.png')
 
 
 def recalcular_totales(cotizacion: Cotizacion) -> Cotizacion:
@@ -403,6 +411,7 @@ def render_pdf_bytes(cotizacion: Cotizacion) -> bytes:
         'fecha': hoy,
         'lugar_fecha': f'Colima, Col., a {_fmt_fecha(hoy, "largo")}',
         'logo_url': _logo_file_uri(),
+        'nexoo_url': _nexoo_file_uri(),
         'subtotal_fmt': _fmt_money(cotizacion.subtotal),
         'iva_fmt': _fmt_money(cotizacion.monto_iva),
         'isr_fmt': _fmt_money(cotizacion.monto_isr),
