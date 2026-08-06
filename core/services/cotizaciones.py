@@ -226,7 +226,14 @@ def _comentarios_servicios_libres(cotizacion: Cotizacion) -> str:
     return 'Servicios de cotización (no inventariables):\n' + '\n'.join(libres)
 
 
-def convertir_a_renta(cotizacion: Cotizacion, lider_id=None, apoyo_ids=None, anticipo=0):
+def convertir_a_renta(
+    cotizacion: Cotizacion,
+    lider_id=None,
+    apoyo_ids=None,
+    anticipo=0,
+    metodo_pago='efectivo',
+    cuenta_anticipo_id=None,
+):
     if cotizacion.status == 'CONVERTIDA' and cotizacion.renta_id:
         raise CotizacionServiceError('La cotización ya fue convertida a renta.')
     if cotizacion.status == 'RECHAZADA':
@@ -236,7 +243,12 @@ def convertir_a_renta(cotizacion: Cotizacion, lider_id=None, apoyo_ids=None, ant
     if not cotizacion.conceptos.exists() and cotizacion.tipo == 'NORMAL':
         raise CotizacionServiceError('Agrega al menos un concepto/producto.')
 
+    anticipo_dec = _money(anticipo)
+    if anticipo_dec < 0:
+        raise CotizacionServiceError('El anticipo no puede ser negativo.')
     recalcular_totales(cotizacion)
+    if anticipo_dec > cotizacion.total:
+        raise CotizacionServiceError('El anticipo no puede ser mayor al total de la cotización.')
     productos = []
     comentarios_extra = []
 
@@ -285,7 +297,9 @@ def convertir_a_renta(cotizacion: Cotizacion, lider_id=None, apoyo_ids=None, ant
         'colonia': cotizacion.cliente.colonia,
         'ciudad_o_municipio': cotizacion.cliente.ciudad_o_municipio,
         'productos': productos,
-        'anticipo': anticipo or 0,
+        'anticipo': str(anticipo_dec),
+        'metodo_pago': (metodo_pago or 'efectivo').lower(),
+        'cuenta_anticipo_id': cuenta_anticipo_id,
         'comentarios': '\n\n'.join(
             x for x in [
                 f'Origen: cotización {cotizacion.folio}',

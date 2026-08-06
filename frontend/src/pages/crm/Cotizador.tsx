@@ -84,6 +84,13 @@ export default function CotizadorCRM() {
   const [servicioDesc, setServicioDesc] = useState('')
   const [servicioCant, setServicioCant] = useState('1')
   const [servicioMonto, setServicioMonto] = useState('')
+  const [modalConvertir, setModalConvertir] = useState(false)
+  const [anticipoConv, setAnticipoConv] = useState('')
+  const [metodoPagoConv, setMetodoPagoConv] = useState<'efectivo' | 'transferencia'>('efectivo')
+  const [cuentaAnticipoId, setCuentaAnticipoId] = useState<number | ''>('')
+  const [cuentas, setCuentas] = useState<{ id: number; nombre: string; banco?: string; tipo: string }[]>([])
+  const [convirtiendo, setConvirtiendo] = useState(false)
+  const [errorConvertir, setErrorConvertir] = useState('')
 
   const [clienteId, setClienteId] = useState<number | null>(null)
   const [clienteNuevo, setClienteNuevo] = useState(false)
@@ -425,16 +432,55 @@ export default function CotizadorCRM() {
     fetchList()
   }
 
-  const convertir = async () => {
+  const abrirConvertir = () => {
     if (!detalle) return
-    if (!window.confirm('¿Convertir esta cotización en renta?')) return
+    setAnticipoConv('')
+    setMetodoPagoConv('efectivo')
+    setCuentaAnticipoId('')
+    setErrorConvertir('')
+    setModalConvertir(true)
+  }
+
+  const confirmarConvertir = async () => {
+    if (!detalle) return
+    const anticipoNum = parseFloat(anticipoConv || '0') || 0
+    const totalNum = Number(detalle.total) || 0
+    if (anticipoNum < 0) {
+      setErrorConvertir('El anticipo no puede ser negativo.')
+      return
+    }
+    if (anticipoNum > totalNum) {
+      setErrorConvertir('El anticipo no puede ser mayor al total.')
+      return
+    }
+    if (anticipoNum > 0 && metodoPagoConv === 'transferencia' && !cuentaAnticipoId) {
+      setErrorConvertir('Selecciona la cuenta destino del anticipo.')
+      return
+    }
+    setConvirtiendo(true)
+    setErrorConvertir('')
     try {
-      const { data } = await api.post(`/crm/cotizaciones/${detalle.id}/convertir/`, { anticipo: 0 })
-      alert(`Convertida a renta ${data.folio}`)
+      const payload: Record<string, unknown> = {
+        anticipo: anticipoNum,
+        metodo_pago: anticipoNum > 0 ? metodoPagoConv : 'efectivo',
+      }
+      if (anticipoNum > 0 && metodoPagoConv === 'transferencia' && cuentaAnticipoId) {
+        payload.cuenta_anticipo_id = cuentaAnticipoId
+      }
+      const { data } = await api.post(`/crm/cotizaciones/${detalle.id}/convertir/`, payload)
+      setModalConvertir(false)
+      const saldo = Math.max(0, totalNum - anticipoNum)
+      alert(
+        anticipoNum > 0
+          ? `Convertida a renta ${data.folio}\nAnticipo: ${money(anticipoNum)}\nSaldo: ${money(saldo)}`
+          : `Convertida a renta ${data.folio}\nSin anticipo · Saldo: ${money(totalNum)}`,
+      )
       verDetalle(detalle.id)
       fetchList()
     } catch (e: any) {
-      alert(e?.response?.data?.error || 'Error al convertir')
+      setErrorConvertir(e?.response?.data?.error || 'Error al convertir')
+    } finally {
+      setConvirtiendo(false)
     }
   }
 
@@ -868,7 +914,7 @@ export default function CotizadorCRM() {
               )}
               <button onClick={abrirPdf} className="px-3 py-1.5 rounded-lg text-sm text-white" style={{ background: '#7c3aed' }}>PDF</button>
               {detalle.status !== 'CONVERTIDA' && (
-                <button onClick={convertir} className="px-3 py-1.5 rounded-lg text-sm text-white" style={{ background: '#ea580c' }}>Convertir a renta</button>
+                <button onClick={abrirConvertir} className="px-3 py-1.5 rounded-lg text-sm text-white" style={{ background: '#ea580c' }}>Convertir a renta</button>
               )}
               <button onClick={() => setDetalle(null)} className="px-3 py-1.5 rounded-lg text-sm border" style={{ borderColor: '#ddeadd' }}>Cerrar</button>
             </div>
@@ -889,6 +935,178 @@ export default function CotizadorCRM() {
               </li>
             ))}
           </ul>
+        </div>
+      )}
+
+      {modalConvertir && detalle && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: 'rgba(0,0,0,0.35)' }}
+          onClick={e => { if (e.target === e.currentTarget && !convirtiendo) setModalConvertir(false) }}
+        >
+          <div className="bg-white rounded-2xl border w-full max-w-md p-5 flex flex-col gap-4" style={{ borderColor: '#ddeadd' }}>
+            <div>
+              <h3 className="font-bold" style={{ fontSize: 16, color: '#162016' }}>Convertir a renta</h3>
+              <p className="text-sm mt-1" style={{ color: '#5a7060' }}>
+                {detalle.folio} · {detalle.cliente_nombre}
+              </p>
+            </div>
+
+            <div className="rounded-xl border p-3 flex flex-col gap-1" style={{ borderColor: '#ddeadd', background: '#f8fbf8' }}>
+              <div className="flex justify-between text-sm">
+                <span style={{ color: '#5a7060' }}>Total cotización</span>
+                <strong style={{ color: '#162016' }}>{money(detalle.total)}</strong>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span style={{ color: '#5a7060' }}>Saldo estimado</span>
+                <strong style={{ color: '#162016' }}>
+                  {money(Math.max(0, (Number(detalle.total) || 0) - (parseFloat(anticipoConv || '0') || 0)))}
+                </strong>
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-wide" style={{ color: '#5a7060' }}>
+                ¿Hubo anticipo?
+              </label>
+              <div className="flex gap-2 mt-2">
+                <button
+                  type="button"
+                  onClick={() => { setAnticipoConv(''); setMetodoPagoConv('efectivo'); setCuentaAnticipoId('') }}
+                  className="flex-1 py-2 rounded-lg text-sm font-medium border"
+                  style={{
+                    borderColor: !(parseFloat(anticipoConv || '0') > 0) ? '#16a34a' : '#ddeadd',
+                    borderWidth: !(parseFloat(anticipoConv || '0') > 0) ? 2 : 1,
+                    background: !(parseFloat(anticipoConv || '0') > 0) ? '#f0fdf4' : 'white',
+                    color: !(parseFloat(anticipoConv || '0') > 0) ? '#15803d' : '#5a7060',
+                  }}
+                >
+                  Sin anticipo
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!(parseFloat(anticipoConv || '0') > 0)) {
+                      const mitad = ((Number(detalle.total) || 0) / 2).toFixed(2)
+                      setAnticipoConv(mitad)
+                    }
+                  }}
+                  className="flex-1 py-2 rounded-lg text-sm font-medium border"
+                  style={{
+                    borderColor: parseFloat(anticipoConv || '0') > 0 ? '#16a34a' : '#ddeadd',
+                    borderWidth: parseFloat(anticipoConv || '0') > 0 ? 2 : 1,
+                    background: parseFloat(anticipoConv || '0') > 0 ? '#f0fdf4' : 'white',
+                    color: parseFloat(anticipoConv || '0') > 0 ? '#15803d' : '#5a7060',
+                  }}
+                >
+                  Sí, registrar
+                </button>
+              </div>
+            </div>
+
+            {parseFloat(anticipoConv || '0') > 0 && (
+              <>
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-wide" style={{ color: '#5a7060' }}>Monto del anticipo</label>
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={anticipoConv}
+                    onChange={e => setAnticipoConv(e.target.value)}
+                    className="mt-1.5 w-full border rounded-lg px-3 py-2.5 text-sm outline-none"
+                    style={{ borderColor: '#ddeadd', color: '#162016' }}
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    className="text-xs mt-1 font-medium"
+                    style={{ color: '#0f3d22' }}
+                    onClick={() => setAnticipoConv(((Number(detalle.total) || 0) / 2).toFixed(2))}
+                  >
+                    Usar 50% ({money((Number(detalle.total) || 0) / 2)})
+                  </button>
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-wide" style={{ color: '#5a7060' }}>Método de pago</label>
+                  <div className="flex gap-2 mt-1.5">
+                    {(['efectivo', 'transferencia'] as const).map(v => (
+                      <button
+                        key={v}
+                        type="button"
+                        onClick={() => {
+                          setMetodoPagoConv(v)
+                          if (v === 'transferencia' && cuentas.length === 0) {
+                            api.get('/cuentas/').then(r => setCuentas(r.data)).catch(console.error)
+                          }
+                        }}
+                        className="flex-1 py-2 rounded-lg text-sm font-medium border capitalize"
+                        style={{
+                          borderColor: metodoPagoConv === v ? '#16a34a' : '#ddeadd',
+                          borderWidth: metodoPagoConv === v ? 2 : 1,
+                          background: metodoPagoConv === v ? '#f0fdf4' : 'white',
+                          color: metodoPagoConv === v ? '#15803d' : '#5a7060',
+                        }}
+                      >
+                        {v}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {metodoPagoConv === 'transferencia' && (
+                  <div>
+                    <label className="text-xs font-semibold uppercase tracking-wide" style={{ color: '#5a7060' }}>Cuenta destino</label>
+                    <div className="flex flex-col gap-1.5 mt-1.5">
+                      {cuentas.filter(c => c.tipo.toLowerCase() !== 'efectivo').map(c => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => setCuentaAnticipoId(c.id)}
+                          className="text-left px-3 py-2 rounded-lg border text-sm"
+                          style={{
+                            borderColor: cuentaAnticipoId === c.id ? '#16a34a' : '#ddeadd',
+                            borderWidth: cuentaAnticipoId === c.id ? 2 : 1,
+                            background: cuentaAnticipoId === c.id ? '#f0fdf4' : 'white',
+                            color: '#162016',
+                          }}
+                        >
+                          {c.nombre}{c.banco ? ` · ${c.banco}` : ''}
+                        </button>
+                      ))}
+                      {cuentas.length === 0 && <div className="text-sm" style={{ color: '#8fa890' }}>Cargando cuentas…</div>}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+
+            {errorConvertir && (
+              <div className="rounded-lg px-3 py-2 text-sm" style={{ background: '#fee2e2', color: '#b91c1c' }}>{errorConvertir}</div>
+            )}
+
+            <div className="flex gap-2 pt-1">
+              <button
+                type="button"
+                disabled={convirtiendo}
+                onClick={() => setModalConvertir(false)}
+                className="flex-1 py-2.5 rounded-lg text-sm font-medium border"
+                style={{ borderColor: '#ddeadd', color: '#5a7060' }}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={convirtiendo}
+                onClick={confirmarConvertir}
+                className="flex-1 py-2.5 rounded-lg text-sm font-semibold text-white disabled:opacity-60"
+                style={{ background: '#ea580c' }}
+              >
+                {convirtiendo ? 'Convirtiendo…' : 'Crear renta'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

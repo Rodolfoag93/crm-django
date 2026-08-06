@@ -3533,6 +3533,8 @@ def api_crm_cotizacion_convertir(request, cotizacion_id):
             lider_id=request.data.get('lider_id'),
             apoyo_ids=apoyo_ids,
             anticipo=request.data.get('anticipo') or 0,
+            metodo_pago=request.data.get('metodo_pago') or 'efectivo',
+            cuenta_anticipo_id=request.data.get('cuenta_anticipo_id'),
         )
         return Response(resultado)
     except CotizacionServiceError as exc:
