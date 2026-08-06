@@ -1,5 +1,6 @@
 """Servicio de cotizaciones: totales, PDF y conversión a renta."""
 
+from datetime import date, datetime, time
 from decimal import Decimal, ROUND_HALF_UP
 from io import BytesIO
 
@@ -33,6 +34,46 @@ def _money(value):
     return Decimal(str(value or 0)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
 
 
+def parse_fecha(value):
+    """Acepta date, datetime o string ISO (YYYY-MM-DD)."""
+    if value in (None, ''):
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    raw = str(value).strip()[:10]
+    try:
+        return date.fromisoformat(raw)
+    except ValueError as exc:
+        raise CotizacionServiceError(f'Fecha inválida: {value}') from exc
+
+
+def parse_hora(value):
+    """Acepta time o string HH:MM / HH:MM:SS."""
+    if value in (None, ''):
+        return None
+    if isinstance(value, time):
+        return value
+    raw = str(value).strip()
+    for fmt in ('%H:%M:%S', '%H:%M'):
+        try:
+            return datetime.strptime(raw, fmt).time()
+        except ValueError:
+            continue
+    raise CotizacionServiceError(f'Hora inválida: {value}')
+
+
+def _fmt_fecha(value, fmt='%d/%m/%Y'):
+    d = parse_fecha(value)
+    return d.strftime(fmt) if d else ''
+
+
+def _fmt_hora(value, fmt='%H:%M'):
+    t = parse_hora(value)
+    return t.strftime(fmt) if t else ''
+
+
 def recalcular_totales(cotizacion: Cotizacion) -> Cotizacion:
     subtotal = sum((_money(c.monto) for c in cotizacion.conceptos.all()), Decimal('0.00'))
     monto_iva = _money(subtotal * IVA_RATE) if cotizacion.aplicar_iva else Decimal('0.00')
@@ -57,14 +98,17 @@ def generar_intro(cotizacion: Cotizacion) -> str:
         if cotizacion.asistentes:
             partes.append(f'para {cotizacion.asistentes} asistentes')
         if cotizacion.fecha_evento:
-            fecha = cotizacion.fecha_evento.strftime('%d de %B de %Y')
+            fecha = _fmt_fecha(cotizacion.fecha_evento, '%d de %B de %Y')
             horario = ''
             if cotizacion.hora_inicio and cotizacion.hora_fin:
-                horario = f' de {cotizacion.hora_inicio.strftime("%H:%M")} a {cotizacion.hora_fin.strftime("%H:%M")} horas'
+                horario = (
+                    f' de {_fmt_hora(cotizacion.hora_inicio)}'
+                    f' a {_fmt_hora(cotizacion.hora_fin)} horas'
+                )
             sede = f' en {cotizacion.sede}' if cotizacion.sede else ''
             partes.append(f'a realizarse{sede} el día {fecha}{horario}')
         return f'{dest}\nPRESENTE\n\n{", ".join(partes)}.'.replace('  ', ' ')
-    fecha = cotizacion.fecha_evento.strftime('%d/%m/%Y') if cotizacion.fecha_evento else ''
+    fecha = _fmt_fecha(cotizacion.fecha_evento)
     return (
         f'{dest}\nPRESENTE\n\n'
         f'Por medio del presente le presentamos la cotización de renta'

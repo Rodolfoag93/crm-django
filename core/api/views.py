@@ -3325,6 +3325,8 @@ def api_crm_cotizaciones(request):
     from core.services.cotizaciones import (
         CotizacionServiceError,
         generar_intro,
+        parse_fecha,
+        parse_hora,
         sincronizar_conceptos,
         sincronizar_zonas,
     )
@@ -3344,9 +3346,9 @@ def api_crm_cotizaciones(request):
             nombre_evento=(request.data.get('nombre_evento') or '').strip(),
             asistentes=request.data.get('asistentes') or None,
             sede=(request.data.get('sede') or '').strip(),
-            fecha_evento=request.data.get('fecha_evento') or None,
-            hora_inicio=request.data.get('hora_inicio') or None,
-            hora_fin=request.data.get('hora_fin') or None,
+            fecha_evento=parse_fecha(request.data.get('fecha_evento')),
+            hora_inicio=parse_hora(request.data.get('hora_inicio')),
+            hora_fin=parse_hora(request.data.get('hora_fin')),
             intro=(request.data.get('intro') or '').strip(),
             aplicar_iva=bool(request.data.get('aplicar_iva')),
             aplicar_isr=bool(request.data.get('aplicar_isr')),
@@ -3388,6 +3390,8 @@ def api_crm_cotizacion_detalle(request, cotizacion_id):
     from core.services.cotizaciones import (
         CotizacionServiceError,
         generar_intro,
+        parse_fecha,
+        parse_hora,
         sincronizar_conceptos,
         sincronizar_zonas,
     )
@@ -3400,11 +3404,11 @@ def api_crm_cotizacion_detalle(request, cotizacion_id):
         if 'asistentes' in request.data:
             c.asistentes = request.data.get('asistentes') or None
         if 'fecha_evento' in request.data:
-            c.fecha_evento = request.data.get('fecha_evento') or None
+            c.fecha_evento = parse_fecha(request.data.get('fecha_evento'))
         if 'hora_inicio' in request.data:
-            c.hora_inicio = request.data.get('hora_inicio') or None
+            c.hora_inicio = parse_hora(request.data.get('hora_inicio'))
         if 'hora_fin' in request.data:
-            c.hora_fin = request.data.get('hora_fin') or None
+            c.hora_fin = parse_hora(request.data.get('hora_fin'))
         if 'aplicar_iva' in request.data:
             c.aplicar_iva = bool(request.data.get('aplicar_iva'))
         if 'aplicar_isr' in request.data:
