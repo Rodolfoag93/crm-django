@@ -1,7 +1,8 @@
 from rest_framework import serializers
 from core.models import (
     Cliente, Producto, Renta, RentaProducto,
-    Empleado, Nomina, Gasto, MovimientoContable, Asistencia, SolicitudRegistro, HorasExtra, PagoExtraNomina, TipoPagoExtra
+    Empleado, Nomina, Gasto, MovimientoContable, Asistencia, SolicitudRegistro, HorasExtra, PagoExtraNomina, TipoPagoExtra,
+    TemporadaAlta,
 )
 from django.contrib.auth.hashers import make_password
 
@@ -14,8 +15,12 @@ class ClienteSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Cliente
-        fields = ['id', 'nombre', 'telefono', 'calle_y_numero', 'colonia', 'ciudad_o_municipio',
-                  'rentas_count', 'total_gastado', 'ultima_renta', 'colonia_frecuente']
+        fields = [
+            'id', 'nombre', 'telefono', 'calle_y_numero', 'colonia', 'ciudad_o_municipio',
+            'rfc', 'razon_social', 'regimen_fiscal', 'codigo_postal_fiscal',
+            'email_facturacion', 'uso_cfdi_default',
+            'rentas_count', 'total_gastado', 'ultima_renta', 'colonia_frecuente',
+        ]
 
     def get_rentas_count(self, obj):
         return getattr(obj, 'rentas_count', None) or 0
@@ -63,6 +68,8 @@ class RentaSerializer(serializers.ModelSerializer):
     cliente_nombre = serializers.CharField(source='cliente.nombre', read_only=True)
     cliente_telefono = serializers.CharField(source='cliente.telefono', read_only=True)
     productos = RentaProductoSerializer(source='rentaproductos', many=True, read_only=True)
+    factura = serializers.SerializerMethodField()
+    datos_fiscales_cliente = serializers.SerializerMethodField()
 
     class Meta:
         model = Renta
@@ -71,8 +78,27 @@ class RentaSerializer(serializers.ModelSerializer):
             'fecha_renta', 'hora_inicio', 'hora_fin',
             'calle_y_numero', 'colonia', 'ciudad_o_municipio',
             'precio_total', 'anticipo', 'pagado', 'status',
-            'estado_entrega', 'comentarios', 'productos'
+            'estado_entrega', 'comentarios', 'productos',
+            'validacion_logistica',
+            'factura', 'datos_fiscales_cliente',
         ]
+
+    def get_factura(self, obj):
+        from core.services.facturacion import factura_resumen, ultima_factura_renta
+        return factura_resumen(ultima_factura_renta(obj))
+
+    def get_datos_fiscales_cliente(self, obj):
+        c = obj.cliente
+        if not c:
+            return None
+        return {
+            'rfc': c.rfc or '',
+            'razon_social': c.razon_social or c.nombre or '',
+            'regimen_fiscal': c.regimen_fiscal or '',
+            'codigo_postal': c.codigo_postal_fiscal or '',
+            'email': c.email_facturacion or '',
+            'uso_cfdi': c.uso_cfdi_default or 'G03',
+        }
 
 
 class EmpleadoSerializer(serializers.ModelSerializer):
@@ -186,3 +212,18 @@ class HorasExtraSerializer(serializers.ModelSerializer):
             'semana_fin', 'horas_trabajadas', 'horas_descontadas',
             'horas_computables', 'horas_extra', 'total_pago'
         ]
+
+class TemporadaAltaSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TemporadaAlta
+        fields = ['id', 'nombre', 'fecha_inicio', 'fecha_fin', 'activo', 'notas']
+
+    def validate(self, attrs):
+        inicio = attrs.get('fecha_inicio', getattr(self.instance, 'fecha_inicio', None))
+        fin = attrs.get('fecha_fin', getattr(self.instance, 'fecha_fin', None))
+        if inicio and fin and fin < inicio:
+            raise serializers.ValidationError({
+                'fecha_fin': 'La fecha fin debe ser igual o posterior a la fecha inicio.',
+            })
+        return attrs
+

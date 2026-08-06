@@ -35,6 +35,7 @@ class ProductoForm(forms.ModelForm):
             'precio',
             'stock_total',
             'activo',
+            'afecta_stock',
         ]
 
 # ----------------------------

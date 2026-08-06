@@ -21,7 +21,43 @@
             <strong>Notas:</strong> {{ asignacion.notas }}
         </div>
     {% endif %}
+    <div style="margin-top:10px; font-size:13px;">
+        <strong>Líder:</strong> {{ asignacion.coordinador.get_full_name|default:asignacion.coordinador.username|default:"Sin asignar" }}
+        {% if apoyos %}
+        · <strong>Apoyo:</strong>
+        {% for a in apoyos %}{{ a.usuario.get_full_name|default:a.usuario.username }}{% if not forloop.last %}, {% endif %}{% endfor %}
+        {% endif %}
+        {% if es_lider %}
+        <span style="margin-left:8px; background:#e3f2fd; color:#1565c0; padding:2px 8px; border-radius:10px;">Tu rol: Líder</span>
+        {% else %}
+        <span style="margin-left:8px; background:#fff3e0; color:#e65100; padding:2px 8px; border-radius:10px;">Tu rol: Apoyo (cambios con autorización)</span>
+        {% endif %}
+    </div>
 </div>
+
+{% if es_lider and solicitudes %}
+<section style="margin-bottom:20px; border:1px solid #ffe0b2; background:#fff8e1; border-radius:8px; padding:12px;">
+    <h4>Solicitudes de material pendientes</h4>
+    {% for s in solicitudes %}
+    <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; border-bottom:1px solid #ffe0b2; padding:8px 0;">
+        <div style="flex:1;">
+            <strong>{{ s.get_tipo_display }}</strong> — {{ s.material.nombre }} × {{ s.cantidad }}
+            <br><small>Por {{ s.solicitado_por.get_full_name|default:s.solicitado_por.username }}</small>
+        </div>
+        <form method="post" action="{% url 'revisar_solicitud_material' s.id %}">
+            {% csrf_token %}
+            <input type="hidden" name="accion" value="aprobar">
+            <button type="submit" class="btn btn-sm btn-success">Aprobar</button>
+        </form>
+        <form method="post" action="{% url 'revisar_solicitud_material' s.id %}">
+            {% csrf_token %}
+            <input type="hidden" name="accion" value="rechazar">
+            <button type="submit" class="btn btn-sm btn-danger">Rechazar</button>
+        </form>
+    </div>
+    {% endfor %}
+</section>
+{% endif %}
 
 <div style="display:grid; grid-template-columns:1fr 1fr; gap:24px;">
 
@@ -58,9 +94,9 @@
                     <td style="padding:8px; text-align:center;">{{ me.cantidad }}</td>
                     <td style="padding:8px; text-align:center;">
                         <form method="post" action="{% url 'eliminar_material_evento' me.id %}"
-                              onsubmit="return confirm('¿Quitar este material?')">
+                              onsubmit="return confirm('{% if es_lider %}¿Quitar este material?{% else %}¿Solicitar quitar este material al líder?{% endif %}')">
                             {% csrf_token %}
-                            <button type="submit" style="background:none; border:none; color:#e53935; cursor:pointer; font-size:16px;">✕</button>
+                            <button type="submit" style="background:none; border:none; color:#e53935; cursor:pointer; font-size:16px;" title="{% if es_lider %}Quitar{% else %}Solicitar quitar{% endif %}">✕</button>
                         </form>
                     </td>
                 </tr>
@@ -133,8 +169,9 @@
                            max="{{ material.stock_disponible }}"
                            style="width:52px; padding:4px; border:1px solid #ddd; border-radius:4px; text-align:center;">
                     <button type="submit" class="btn btn-sm btn-primary"
-                            {% if material.stock_disponible == 0 %}disabled{% endif %}>
-                        +
+                            {% if material.stock_disponible == 0 %}disabled{% endif %}
+                            title="{% if es_lider %}Agregar{% else %}Solicitar al líder{% endif %}">
+                        {% if es_lider %}+{% else %}Pedir{% endif %}
                     </button>
                 </form>
             </div>

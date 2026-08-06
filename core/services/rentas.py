@@ -86,15 +86,135 @@ def _construir_lineas_producto(data):
     return lineas
 
 
-def _validar_stock(lineas, fecha, hora_inicio, hora_fin):
+def _validar_stock(lineas, fecha, hora_inicio, hora_fin, excluir_renta_id=None):
     for linea in lineas:
         producto = linea['producto']
+        if not getattr(producto, 'afecta_stock', True):
+            continue
         cantidad = linea['cantidad']
-        if not producto.hay_stock(cantidad, fecha, hora_inicio, hora_fin):
-            libres = producto.stock_disponible_en_horario(fecha, hora_inicio, hora_fin)
+        libres = _stock_libre(producto, fecha, hora_inicio, hora_fin, excluir_renta_id=excluir_renta_id)
+        if libres < cantidad:
             raise RentaServiceError(
                 f"Solo hay {libres} disponible(s) de '{producto.nombre}' en ese horario."
             )
+
+
+def _stock_libre(producto, fecha, hora_inicio, hora_fin, excluir_renta_id=None):
+    if not getattr(producto, 'afecta_stock', True):
+        return 999999
+    from django.db.models import Sum
+    qs = RentaProducto.objects.filter(
+        producto=producto,
+        renta__fecha_renta=fecha,
+        renta__hora_inicio__lt=hora_fin,
+        renta__hora_fin__gt=hora_inicio,
+        renta__status='ACTIVO',
+    )
+    if excluir_renta_id:
+        qs = qs.exclude(renta_id=excluir_renta_id)
+    rentados = qs.aggregate(total=Sum('cantidad'))['total'] or 0
+    return max(int(producto.stock_total or 0) - int(rentados), 0)
+
+
+def cancelar_renta(renta, motivo: str):
+    motivo = (motivo or '').strip()
+    if not motivo:
+        raise RentaServiceError('El motivo de cancelación es requerido.')
+    if renta.status == 'CANCELADO':
+        raise RentaServiceError('La renta ya está cancelada.')
+    with transaction.atomic():
+        renta.status = 'CANCELADO'
+        renta.estado_entrega = 'CANCELADO'
+        renta.comentarios = motivo
+        renta.save(update_fields=['status', 'estado_entrega', 'comentarios'])
+    return {
+        'ok': True,
+        'folio': renta.folio,
+        'status': renta.status,
+        'estado_entrega': renta.estado_entrega,
+    }
+
+
+def editar_renta(renta, data: dict):
+    """
+    Actualiza fecha/horario y/o productos de una renta ACTIVA.
+    Valida stock excluyendo la propia renta.
+    """
+    if renta.status == 'CANCELADO':
+        raise RentaServiceError('No se puede editar una renta cancelada.')
+
+    fecha = data.get('fecha_renta') or renta.fecha_renta
+    hora_inicio = data.get('hora_inicio') or renta.hora_inicio
+    hora_fin = data.get('hora_fin') or renta.hora_fin
+
+    productos_raw = data.get('productos')
+    with transaction.atomic():
+        if productos_raw is not None:
+            lineas = _construir_lineas_producto({'productos': productos_raw})
+            _validar_stock(lineas, fecha, hora_inicio, hora_fin, excluir_renta_id=renta.id)
+            renta.rentaproductos.all().delete()
+            total = Decimal('0')
+            for linea in lineas:
+                producto = linea['producto']
+                cantidad = linea['cantidad']
+                precio_unitario = Decimal(str(linea['precio_unitario']))
+                precio_lista = Decimal(str(linea.get('precio_lista', producto.precio)))
+                nota = linea.get('nota') or (NOTA_REGALO if linea.get('es_regalo') else '')
+                rp = RentaProducto.objects.create(
+                    renta=renta,
+                    producto=producto,
+                    cantidad=cantidad,
+                    precio_lista=precio_lista,
+                    precio_unitario=precio_unitario,
+                    nota=nota,
+                )
+                total += rp.subtotal
+            if data.get('precio_total') not in (None, '', 0, '0'):
+                renta.precio_total = Decimal(str(data['precio_total']))
+            else:
+                renta.precio_total = total
+        else:
+            # Solo cambio de horario: validar stock de productos actuales
+            lineas = []
+            for rp in renta.rentaproductos.select_related('producto').all():
+                lineas.append({
+                    'producto': rp.producto,
+                    'cantidad': rp.cantidad,
+                })
+            _validar_stock(lineas, fecha, hora_inicio, hora_fin, excluir_renta_id=renta.id)
+
+        renta.fecha_renta = fecha
+        renta.hora_inicio = hora_inicio
+        renta.hora_fin = hora_fin
+        for campo in ('calle_y_numero', 'colonia', 'ciudad_o_municipio', 'comentarios'):
+            if campo in data and data[campo] is not None:
+                setattr(renta, campo, data[campo])
+        renta.save()
+
+        finanza = PedidoFinanzas.objects.filter(renta=renta).first()
+        if finanza:
+            finanza.total = Decimal(str(renta.precio_total or 0)) - Decimal(str(renta.anticipo or 0))
+            finanza.save(update_fields=['total'])
+
+    try:
+        from core.google_calendar import crear_evento_renta
+        evento_id = crear_evento_renta(renta)
+        if evento_id:
+            renta.evento_google_id = evento_id
+            renta.save(update_fields=['evento_google_id'])
+    except Exception:
+        pass
+
+    return {
+        'ok': True,
+        'folio': renta.folio,
+        'renta_id': renta.id,
+        'fecha_renta': str(renta.fecha_renta),
+        'hora_inicio': str(renta.hora_inicio) if renta.hora_inicio else None,
+        'hora_fin': str(renta.hora_fin) if renta.hora_fin else None,
+        'total': str(renta.precio_total or 0),
+        'anticipo': str(renta.anticipo or 0),
+    }
 
 
 def _registrar_anticipo(renta, data):
@@ -138,6 +258,7 @@ def crear_renta(data, generar_folio=True):
         lineas = _construir_lineas_producto(data)
         _validar_stock(lineas, fecha, hora_inicio, hora_fin)
 
+        temporada = None
         with transaction.atomic():
             folio = data.get('folio')
             if generar_folio and not folio:
@@ -184,6 +305,9 @@ def crear_renta(data, generar_folio=True):
                 renta.precio_total = total
             renta.save()
 
+            from core.services.temporada_alta import aplicar_temporada_alta_a_renta
+            temporada = aplicar_temporada_alta_a_renta(renta)
+
             _registrar_anticipo(renta, data)
             PedidoFinanzas.objects.get_or_create(
                 renta=renta,
@@ -199,6 +323,7 @@ def crear_renta(data, generar_folio=True):
         except Exception:
             pass
 
+        renta.refresh_from_db()
         saldo = float(renta.precio_total) - float(renta.anticipo or 0)
         return {
             'ok': True,
@@ -207,11 +332,18 @@ def crear_renta(data, generar_folio=True):
             'total': str(renta.precio_total),
             'anticipo': str(renta.anticipo),
             'saldo_pendiente': str(max(Decimal('0'), renta.precio_total - renta.anticipo)),
+            'validacion_logistica': renta.validacion_logistica,
+            'requiere_validacion_logistica': renta.validacion_logistica == 'PENDIENTE',
+            'temporada_alta': temporada.nombre if temporada else None,
             'cliente': {
                 'id': cliente.id,
                 'nombre': cliente.nombre,
                 'telefono': cliente.telefono,
             },
+            'fecha_renta': str(renta.fecha_renta),
+            'hora_inicio': str(renta.hora_inicio) if renta.hora_inicio else None,
+            'hora_fin': str(renta.hora_fin) if renta.hora_fin else None,
+            'direccion': f"{renta.calle_y_numero}, {renta.colonia}, {renta.ciudad_o_municipio}".strip(', '),
         }
     except Producto.DoesNotExist:
         raise RentaServiceError('Producto no encontrado.')

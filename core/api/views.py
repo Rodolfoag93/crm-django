@@ -18,14 +18,25 @@ from core.models import (
     EvidenciaMaterial, TipoPagoExtra, PagoExtraNomina, AnimadorEvento,
     Ruta, RutaEmpleado, RutaRenta,
     BitacoraMantenimiento, TurnoAsistencia,
-    Cuenta, PedidoFinanzas,
+    Cuenta, PedidoFinanzas, TemporadaAlta,
+    CoordinadorApoyo, SolicitudCambioMaterial,
+)
+from core.services.coordinacion import (
+    CoordinacionError,
+    crear_solicitud_cambio,
+    es_lider,
+    get_asignacion_equipo,
+    qs_asignaciones_usuario,
+    revisar_solicitud,
 )
 from core.utils import saldo_efectivo
 from core.services import gastos as gastos_service
+from core.services import cuentas as cuentas_service
 from core.api.serializers import (
     ClienteSerializer, ProductoSerializer, RentaSerializer,
     EmpleadoSerializer, NominaSerializer, GastoSerializer,
-    MovimientoContableSerializer, AsistenciaSerializer, SolicitudRegistroSerializer, HorasExtraSerializer
+    MovimientoContableSerializer, AsistenciaSerializer, SolicitudRegistroSerializer, HorasExtraSerializer,
+    TemporadaAltaSerializer,
 )
 
 
@@ -34,6 +45,16 @@ class EsAdmin(BasePermission):
     def has_permission(self, request, view):
         return bool(request.user and request.user.is_authenticated
                     and (request.user.is_staff or request.user.is_superuser))
+
+
+class TemporadaAltaViewSet(viewsets.ModelViewSet):
+    """CRUD de rangos de temporada alta (solo administradores)."""
+    queryset = TemporadaAlta.objects.all().order_by('-fecha_inicio')
+    serializer_class = TemporadaAltaSerializer
+    permission_classes = [EsAdmin]
+    pagination_class = None
+    filter_backends = [filters.OrderingFilter]
+    ordering_fields = ['fecha_inicio', 'fecha_fin', 'nombre']
 
 
 class EsAdminOSoloLectura(BasePermission):
@@ -163,7 +184,7 @@ class ProductoViewSet(viewsets.ModelViewSet):
 
 class RentaViewSet(viewsets.ModelViewSet):
     queryset = Renta.objects.select_related('cliente').prefetch_related(
-        'rentaproductos__producto'
+        'rentaproductos__producto', 'facturas'
     ).order_by('-fecha_renta')
     serializer_class = RentaSerializer
     permission_classes = [EsAdminOSoloLectura]
@@ -173,7 +194,7 @@ class RentaViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         qs = Renta.objects.select_related('cliente').prefetch_related(
-            'rentaproductos__producto'
+            'rentaproductos__producto', 'facturas'
         ).filter(status='ACTIVO')
         params = self.request.query_params
         fecha_inicio = params.get('fecha_inicio')
@@ -192,46 +213,26 @@ class RentaViewSet(viewsets.ModelViewSet):
 
     def _resolver_cuenta(self, metodo, cuenta_id):
         """Retorna (cuenta, error_str). efectivo → caja automática."""
-        from core.models import Cuenta
-        if metodo == 'efectivo':
-            try:
-                return Cuenta.objects.get(tipo__iexact='efectivo'), None
-            except Cuenta.DoesNotExist:
-                return None, 'No hay caja de efectivo configurada.'
-            except Cuenta.MultipleObjectsReturned:
-                return Cuenta.objects.filter(tipo__iexact='efectivo').first(), None
-        else:
-            if not cuenta_id:
-                return None, 'Debes seleccionar una cuenta destino.'
-            try:
-                return Cuenta.objects.get(id=cuenta_id), None
-            except Cuenta.DoesNotExist:
-                return None, 'Cuenta no encontrada.'
+        from core.services.pagos_renta import PagoRentaError, resolver_cuenta
+        try:
+            return resolver_cuenta(metodo, cuenta_id), None
+        except PagoRentaError as exc:
+            return None, exc.message
 
     def _saldo_pendiente(self, renta):
         """Saldo = precio_total - anticipo - pagos parciales ya registrados."""
-        from core.models import PedidoFinanzas
-        from django.db.models import Sum
-        anticipo = float(renta.anticipo or 0)
-        pagos = 0.0
-        pedido = PedidoFinanzas.objects.filter(renta=renta).first()
-        if pedido:
-            pagos = float(pedido.movimientos.filter(tipo='INGRESO').aggregate(t=Sum('monto'))['t'] or 0)
-        return round(float(renta.precio_total) - anticipo - pagos, 2)
+        from core.services.pagos_renta import saldo_pendiente
+        return float(saldo_pendiente(renta))
 
     @action(detail=True, methods=['get'])
     def saldo(self, request, pk=None):
-        from core.models import PedidoFinanzas
-        from django.db.models import Sum
+        from core.services.pagos_renta import pagos_registrados, saldo_pendiente
         if not request.user.is_staff:
             return Response({'error': 'No autorizado.'}, status=403)
         renta = self.get_object()
         anticipo = float(renta.anticipo or 0)
-        pagos = 0.0
-        pedido = PedidoFinanzas.objects.filter(renta=renta).first()
-        if pedido:
-            pagos = float(pedido.movimientos.filter(tipo='INGRESO').aggregate(t=Sum('monto'))['t'] or 0)
-        saldo = round(float(renta.precio_total) - anticipo - pagos, 2)
+        pagos = float(pagos_registrados(renta))
+        saldo = float(saldo_pendiente(renta))
         return Response({
             'precio_total': float(renta.precio_total),
             'anticipo': anticipo,
@@ -242,54 +243,30 @@ class RentaViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def registrar_pago(self, request, pk=None):
-        from core.models import PedidoFinanzas, MovimientoContable
-        from django.utils import timezone as tz
-        from django.db import transaction as db_transaction
-        from decimal import Decimal
+        from core.services.pagos_renta import PagoRentaError, registrar_pago_renta
         if not request.user.is_staff:
             return Response({'error': 'No autorizado.'}, status=403)
         renta = self.get_object()
-        if renta.pagado:
-            return Response({'error': 'Esta renta ya está completamente pagada.'}, status=400)
         metodo = request.data.get('metodo_pago')
-        cuenta_id = request.data.get('cuenta_id')
-        monto_raw = request.data.get('monto')
         if metodo not in ('efectivo', 'transferencia'):
             return Response({'error': 'metodo_pago inválido.'}, status=400)
+        # PWA exige cuenta_id en transferencia (no auto-elige banco)
+        if metodo == 'transferencia' and not request.data.get('cuenta_id'):
+            return Response({'error': 'Debes seleccionar una cuenta destino.'}, status=400)
         try:
-            monto = Decimal(str(monto_raw))
-            if monto <= 0:
-                raise ValueError
-        except Exception:
-            return Response({'error': 'Monto inválido.'}, status=400)
-        cuenta, err = self._resolver_cuenta(metodo, cuenta_id)
-        if err:
-            return Response({'error': err}, status=400)
-        saldo = Decimal(str(self._saldo_pendiente(renta)))
-        if monto > saldo:
-            return Response({'error': f'El monto supera el saldo pendiente (${saldo:,.2f}).'}, status=400)
-        liquidacion = monto >= saldo
-        with db_transaction.atomic():
-            finanza, _ = PedidoFinanzas.objects.get_or_create(
-                renta=renta, defaults={'total': saldo}
+            result = registrar_pago_renta(
+                renta,
+                monto=request.data.get('monto'),
+                metodo_pago=metodo,
+                cuenta_id=request.data.get('cuenta_id'),
             )
-            now = tz.now()
-            desc = f"Liquidación renta #{renta.folio or renta.id}" if liquidacion else f"Pago parcial renta #{renta.folio or renta.id}"
-            MovimientoContable.objects.create(
-                pedido=finanza, tipo='INGRESO', monto=monto,
-                metodo_pago=metodo, cuenta=cuenta, fecha=now, descripcion=desc,
-            )
-            if liquidacion:
-                renta.pagado = True
-                renta.save(update_fields=['pagado'])
-                finanza.pagado = True
-                finanza.metodo_pago = metodo
-                finanza.cuenta_destino = cuenta
-                finanza.fecha_pago = now
-                finanza.total = saldo
-                finanza.save()
-        nuevo_saldo = max(0.0, float(saldo) - float(monto))
-        return Response({'ok': True, 'liquidado': liquidacion, 'saldo_pendiente': nuevo_saldo})
+            return Response({
+                'ok': True,
+                'liquidado': result['liquidado'],
+                'saldo_pendiente': float(result['saldo_pendiente']),
+            })
+        except PagoRentaError as exc:
+            return Response({'error': exc.message}, status=exc.status)
 
     # Kept for backwards compat — delegates to registrar_pago logic
     @action(detail=True, methods=['post'])
@@ -319,6 +296,105 @@ class RentaViewSet(viewsets.ModelViewSet):
             renta.comentarios = motivo
             renta.save(update_fields=['status', 'estado_entrega', 'comentarios'])
         return Response({'ok': True})
+
+    @action(detail=True, methods=['post'])
+    def validacion_logistica(self, request, pk=None):
+        """Aprobar o rechazar logística (temporada alta). Rechazo cancela y libera stock."""
+        from core.services.temporada_alta import (
+            aprobar_validacion_logistica,
+            rechazar_validacion_logistica,
+        )
+        from core.services.rentas import RentaServiceError
+        if not request.user.is_staff:
+            return Response({'error': 'No autorizado.'}, status=403)
+        renta = self.get_object()
+        accion = (request.data.get('accion') or '').lower().strip()
+        motivo = (request.data.get('motivo') or '').strip()
+        actor = request.user.get_username()
+        try:
+            if accion in ('aprobar', 'ok'):
+                return Response(aprobar_validacion_logistica(renta, actor=actor))
+            if accion in ('rechazar', 'no'):
+                return Response(rechazar_validacion_logistica(renta, motivo=motivo, actor=actor))
+            return Response({'error': 'accion debe ser aprobar o rechazar.'}, status=400)
+        except RentaServiceError as exc:
+            return Response({'error': exc.message}, status=exc.status)
+
+    @action(detail=True, methods=['get', 'post'])
+    def facturar(self, request, pk=None):
+        """GET: última factura / datos fiscales. POST: emitir CFDI vía FiscalAPI."""
+        from core.services.facturacion import (
+            FacturacionError,
+            calcular_desglose_factura,
+            facturar_renta,
+            factura_resumen,
+            ultima_factura_renta,
+        )
+        if not request.user.is_staff:
+            return Response({'error': 'No autorizado.'}, status=403)
+        renta = self.get_object()
+        if request.method == 'GET':
+            factura = ultima_factura_renta(renta)
+            c = renta.cliente
+
+            def _qbool(key, default=True):
+                raw = request.query_params.get(key)
+                if raw is None:
+                    return default
+                return str(raw).strip().lower() in ('1', 'true', 'yes', 'si', 'sí', 'on')
+
+            return Response({
+                'factura': factura_resumen(factura),
+                'datos_fiscales_cliente': {
+                    'rfc': c.rfc or '',
+                    'razon_social': c.razon_social or c.nombre or '',
+                    'regimen_fiscal': c.regimen_fiscal or '',
+                    'codigo_postal': c.codigo_postal_fiscal or '',
+                    'email': c.email_facturacion or '',
+                    'uso_cfdi': c.uso_cfdi_default or 'G03',
+                },
+                'desglose': calcular_desglose_factura(
+                    renta,
+                    cobrar_iva=_qbool('cobrar_iva', True),
+                    retener_isr=_qbool('retener_isr', True),
+                ),
+            })
+        try:
+            factura = facturar_renta(renta, request.data, user=request.user)
+            return Response({'ok': True, 'factura': factura_resumen(factura)}, status=201)
+        except FacturacionError as exc:
+            return Response({'error': exc.message}, status=exc.status)
+
+    @action(detail=True, methods=['post'], url_path='cancelar-factura')
+    def cancelar_factura(self, request, pk=None):
+        """Cancela el CFDI timbrado de la renta ante el SAT vía FiscalAPI."""
+        from core.services.facturacion import (
+            FacturacionError,
+            MOTIVOS_CANCELACION,
+            cancelar_factura as cancelar_cfdi,
+            factura_resumen,
+            ultima_factura_renta,
+        )
+        if not request.user.is_staff:
+            return Response({'error': 'No autorizado.'}, status=403)
+        renta = self.get_object()
+        factura = ultima_factura_renta(renta)
+        if not factura or factura.estatus != 'TIMBRADA':
+            return Response(
+                {'error': 'No hay una factura timbrada para cancelar en esta renta.'},
+                status=400,
+            )
+        try:
+            factura = cancelar_cfdi(factura, request.data)
+            return Response({
+                'ok': True,
+                'factura': factura_resumen(factura),
+                'motivos': [
+                    {'value': k, 'label': f'{k} — {v}'} for k, v in MOTIVOS_CANCELACION.items()
+                ],
+            })
+        except FacturacionError as exc:
+            return Response({'error': exc.message}, status=exc.status)
 
     @action(detail=True, methods=['post'])
     def cambiar_estado(self, request, pk=None):
@@ -720,6 +796,81 @@ class MovimientoContableViewSet(viewsets.ModelViewSet):
     queryset = MovimientoContable.objects.all().order_by('-fecha')
     serializer_class = MovimientoContableSerializer
     permission_classes = [EsAdmin]
+
+
+class CuentaViewSet(viewsets.ViewSet):
+    """CRUD de cuentas + movimientos, transferencias y traspasos (staff)."""
+    permission_classes = [EsAdmin]
+    lookup_value_regex = r'\d+'
+
+    def list(self, request):
+        incluir = request.query_params.get('incluir_inactivas', '').lower() in ('1', 'true', 'yes')
+        data = cuentas_service.listar_cuentas(
+            activas_only=not incluir,
+            incluir_inactivas=incluir,
+        )
+        return Response(data)
+
+    def create(self, request):
+        try:
+            return Response(cuentas_service.crear_cuenta(request.data), status=status.HTTP_201_CREATED)
+        except cuentas_service.CuentasError as e:
+            return Response({'error': e.message}, status=e.status)
+
+    def partial_update(self, request, pk=None):
+        try:
+            return Response(cuentas_service.actualizar_cuenta(int(pk), request.data))
+        except cuentas_service.CuentasError as e:
+            return Response({'error': e.message}, status=e.status)
+        except (TypeError, ValueError):
+            return Response({'error': 'ID inválido.'}, status=400)
+
+    def retrieve(self, request, pk=None):
+        try:
+            cuenta = get_object_or_404(Cuenta, pk=int(pk))
+            return Response(cuentas_service._serialize_cuenta(cuenta))
+        except (TypeError, ValueError):
+            return Response({'error': 'ID inválido.'}, status=400)
+
+    @action(detail=False, methods=['get'])
+    def resumen(self, request):
+        return Response(cuentas_service.resumen_balances())
+
+    @action(detail=True, methods=['get'])
+    def movimientos(self, request, pk=None):
+        try:
+            limit = int(request.query_params.get('limit') or 100)
+        except (TypeError, ValueError):
+            limit = 100
+        try:
+            return Response(cuentas_service.movimientos_cuenta(int(pk), limit=limit))
+        except (TypeError, ValueError):
+            return Response({'error': 'ID inválido.'}, status=400)
+
+    @action(detail=False, methods=['post'])
+    def movimiento(self, request):
+        try:
+            return Response(cuentas_service.registrar_movimiento(request.data), status=status.HTTP_201_CREATED)
+        except cuentas_service.CuentasError as e:
+            return Response({'error': e.message}, status=e.status)
+
+    @action(detail=False, methods=['post'])
+    def transferir(self, request):
+        try:
+            return Response(cuentas_service.transferir(request.data), status=status.HTTP_201_CREATED)
+        except cuentas_service.CuentasError as e:
+            return Response({'error': e.message}, status=e.status)
+
+    @action(detail=False, methods=['post'])
+    def traspasar(self, request):
+        try:
+            return Response(
+                cuentas_service.traspasar_efectivo_banco(request.data),
+                status=status.HTTP_201_CREATED,
+            )
+        except cuentas_service.CuentasError as e:
+            return Response({'error': e.message}, status=e.status)
+
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -1679,34 +1830,23 @@ def api_buscar_productos(request):
 
 # ── Gastos Admin PWA ───────────────────────────────────────────────────────────
 
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def api_cuentas(request):
-    if not request.user.is_staff:
-        return Response({'error': 'No autorizado.'}, status=403)
-    cuentas = Cuenta.objects.filter(activa=True).order_by('nombre')
-    data = [
-        {
-            'id': c.id,
-            'nombre': c.nombre,
-            'tipo': c.tipo,
-            'banco': c.banco,
-            'saldo': str(c.saldo_actual()),
-        }
-        for c in cuentas
-    ]
-    return Response(data)
-
-
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def api_crear_gasto(request):
     if not request.user.is_staff:
         return Response({'error': 'No autorizado.'}, status=403)
     try:
-        data = dict(request.data)
-        if 'cuenta_id' in data and 'cuenta' not in data:
-            data['cuenta'] = data['cuenta_id']
+        # multipart/FormData → MultiValueDict; dict() deja listas (['1000']).
+        # Usar .get() para obtener el valor escalar.
+        data = {
+            'tipo': request.data.get('tipo'),
+            'categoria': request.data.get('categoria'),
+            'descripcion': request.data.get('descripcion'),
+            'monto': request.data.get('monto'),
+            'fecha': request.data.get('fecha'),
+            'referencia': request.data.get('referencia') or '',
+            'cuenta': request.data.get('cuenta') or request.data.get('cuenta_id'),
+        }
         comprobante = request.FILES.get('comprobante')
         gasto = gastos_service.crear_gasto(data, comprobante=comprobante)
         return Response({'ok': True, 'gasto_id': gasto.id})
@@ -1785,14 +1925,12 @@ def api_eliminar_pago_extra(request, pago_id):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def api_mis_eventos(request):
-    """Eventos asignados al coordinador logueado."""
-    
-    asignaciones = AsignacionCoordinador.objects.filter(
-        coordinador=request.user
-    ).select_related(
-        'renta', 'renta__cliente'
+    """Eventos del coordinador (líder o apoyo)."""
+
+    asignaciones = qs_asignaciones_usuario(request.user).select_related(
+        'renta', 'renta__cliente', 'coordinador'
     ).prefetch_related(
-        'renta__rentaproductos__producto'
+        'renta__rentaproductos__producto', 'apoyos'
     ).order_by('-renta__fecha_renta')
 
     data = []
@@ -1815,6 +1953,8 @@ def api_mis_eventos(request):
             'servicios': productos_animacion,
             'notas': a.notas or '',
             'tiene_lista': ListaMaterialEvento.objects.filter(asignacion=a).exists(),
+            'es_lider': a.coordinador_id == request.user.id,
+            'rol': 'LIDER' if a.coordinador_id == request.user.id else 'APOYO',
         })
 
     return Response(data)
@@ -1823,13 +1963,13 @@ def api_mis_eventos(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def api_evento_detalle(request, asignacion_id):
-    """Detalle completo de un evento asignado al coordinador."""
+    """Detalle completo de un evento (líder o apoyo)."""
 
-    asignacion = get_object_or_404(
-        AsignacionCoordinador,
-        id=asignacion_id,
-        coordinador=request.user
-    )
+    try:
+        asignacion = get_asignacion_equipo(asignacion_id, request.user)
+    except CoordinacionError as exc:
+        return Response({'error': exc.message}, status=exc.status)
+
     r = asignacion.renta
     productos = [
         {
@@ -1839,6 +1979,13 @@ def api_evento_detalle(request, asignacion_id):
             'precio_unitario': str(rp.precio_unitario),
         }
         for rp in r.rentaproductos.select_related('producto').all()
+    ]
+    apoyos = [
+        {
+            'id': ap.usuario_id,
+            'nombre': ap.usuario.get_full_name() or ap.usuario.username,
+        }
+        for ap in asignacion.apoyos.select_related('usuario')
     ]
 
     return Response({
@@ -1857,26 +2004,32 @@ def api_evento_detalle(request, asignacion_id):
         'comentarios': r.comentarios or '',
         'productos': productos,
         'notas_coordinador': asignacion.notas or '',
+        'es_lider': es_lider(asignacion, request.user),
+        'lider': (
+            asignacion.coordinador.get_full_name() or asignacion.coordinador.username
+        ) if asignacion.coordinador else None,
+        'apoyos': apoyos,
     })
 
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def api_lista_material_evento(request, asignacion_id):
-    """Obtiene la lista de material de un evento."""
+    """Lista de material visible para todo el equipo."""
 
-    asignacion = get_object_or_404(
-        AsignacionCoordinador,
-        id=asignacion_id,
-        coordinador=request.user
-    )
+    try:
+        asignacion = get_asignacion_equipo(asignacion_id, request.user)
+    except CoordinacionError as exc:
+        return Response({'error': exc.message}, status=exc.status)
 
     try:
         lista = ListaMaterialEvento.objects.get(asignacion=asignacion)
     except ListaMaterialEvento.DoesNotExist:
         return Response({
             'existe': False,
-            'items': []
+            'items': [],
+            'es_lider': es_lider(asignacion, request.user),
+            'solicitudes_pendientes': [],
         })
 
     items = MaterialEvento.objects.filter(
@@ -1896,72 +2049,123 @@ def api_lista_material_evento(request, asignacion_id):
         }
         for item in items
     ]
+    solicitudes = [
+        {
+            'id': s.id,
+            'tipo': s.tipo,
+            'material_id': s.material_id,
+            'material_nombre': s.material.nombre,
+            'cantidad': s.cantidad,
+            'solicitado_por': s.solicitado_por.get_full_name() or s.solicitado_por.username,
+            'estado': s.estado,
+        }
+        for s in lista.solicitudes_cambio.filter(estado='PENDIENTE').select_related('material', 'solicitado_por')
+    ]
 
     return Response({
         'existe': True,
         'lista_id': lista.id,
         'estado': lista.estado,
         'items': data,
+        'es_lider': es_lider(asignacion, request.user),
+        'solicitudes_pendientes': solicitudes,
     })
 
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def api_agregar_material_evento(request, asignacion_id):
-    """Agrega un material a la lista de un evento."""
+    """Líder agrega directo; apoyo crea solicitud."""
 
-    asignacion = get_object_or_404(
-        AsignacionCoordinador,
-        id=asignacion_id,
-        coordinador=request.user
-    )
-
-    # Crear lista si no existe
-    lista, _ = ListaMaterialEvento.objects.get_or_create(
-        asignacion=asignacion,
-        defaults={'estado': 'BORRADOR'}
-    )
+    try:
+        asignacion = get_asignacion_equipo(asignacion_id, request.user)
+    except CoordinacionError as exc:
+        return Response({'error': exc.message}, status=exc.status)
 
     material_id = request.data.get('material_id')
     cantidad = request.data.get('cantidad', 1)
     nota = request.data.get('nota', '')
 
-    material = get_object_or_404(MaterialAnimacion, id=material_id)
+    if es_lider(asignacion, request.user):
+        lista, _ = ListaMaterialEvento.objects.get_or_create(
+            asignacion=asignacion,
+            defaults={'estado': 'BORRADOR'}
+        )
+        material = get_object_or_404(MaterialAnimacion, id=material_id)
+        item, created = MaterialEvento.objects.get_or_create(
+            asignacion=asignacion,
+            material=material,
+            defaults={'cantidad': cantidad, 'nota': nota}
+        )
+        if not created:
+            item.cantidad = cantidad
+            item.nota = nota
+            item.save()
+        return Response({
+            'ok': True,
+            'item_id': item.id,
+            'created': created,
+            'via': 'directo',
+            'lista_id': lista.id,
+        }, status=201 if created else 200)
 
-    # Si ya existe ese material en la lista, actualizar cantidad
-    item, created = MaterialEvento.objects.get_or_create(
-        asignacion=asignacion,
-        material=material,
-        defaults={'cantidad': cantidad, 'nota': nota}
-    )
-    if not created:
-        item.cantidad = cantidad
-        item.nota = nota
-        item.save()
-
-    return Response({
-        'ok': True,
-        'item_id': item.id,
-        'created': created,
-    }, status=201 if created else 200)
+    try:
+        solicitud = crear_solicitud_cambio(
+            asignacion, request.user, 'AGREGAR', material_id, cantidad, nota
+        )
+        return Response({
+            'ok': True,
+            'via': 'solicitud',
+            'solicitud_id': solicitud.id,
+            'estado': solicitud.estado,
+        }, status=201)
+    except CoordinacionError as exc:
+        return Response({'error': exc.message}, status=exc.status)
 
 
 @api_view(['DELETE'])
 @permission_classes([IsAuthenticated])
 def api_quitar_material_evento(request, item_id):
-    """Elimina un material de la lista del evento."""
+    """Líder quita directo; apoyo solicita quitar."""
 
-    item = get_object_or_404(MaterialEvento, id=item_id)
+    item = get_object_or_404(MaterialEvento.objects.select_related('asignacion', 'material'), id=item_id)
+    try:
+        asignacion = get_asignacion_equipo(item.asignacion_id, request.user)
+    except CoordinacionError as exc:
+        return Response({'error': exc.message}, status=exc.status)
 
-    # Verificar que la asignación pertenece al coordinador
-    asignacion = get_object_or_404(
-        AsignacionCoordinador,
-        id=item.asignacion_id,
-        coordinador=request.user
-    )
+    if es_lider(asignacion, request.user):
+        item.delete()
+        return Response({'ok': True, 'via': 'directo'})
 
-    item.delete()
-    return Response({'ok': True})
+    try:
+        solicitud = crear_solicitud_cambio(
+            asignacion, request.user, 'QUITAR', item.material_id, item.cantidad
+        )
+        return Response({
+            'ok': True,
+            'via': 'solicitud',
+            'solicitud_id': solicitud.id,
+        }, status=201)
+    except CoordinacionError as exc:
+        return Response({'error': exc.message}, status=exc.status)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def api_revisar_solicitud_material(request, solicitud_id):
+    """Líder aprueba o rechaza una solicitud de cambio de material."""
+    aprobar = str(request.data.get('aprobar', 'true')).lower() in ('1', 'true', 'si', 'yes')
+    comentario = request.data.get('comentario', '')
+    try:
+        solicitud = revisar_solicitud(solicitud_id, request.user, aprobar=aprobar, comentario=comentario)
+        return Response({
+            'ok': True,
+            'solicitud_id': solicitud.id,
+            'estado': solicitud.estado,
+        })
+    except CoordinacionError as exc:
+        return Response({'error': exc.message}, status=exc.status)
 
 
 @api_view(['GET'])
@@ -2919,20 +3123,42 @@ def api_asignar_coordinador_crm(request):
 
     renta_id = request.data.get('renta_id')
     coordinador_id = request.data.get('coordinador_id')
+    apoyo_ids = request.data.get('apoyo_ids') or []
 
     if not renta_id:
         return Response({'error': 'renta_id requerido.'}, status=400)
 
     renta = get_object_or_404(Renta, id=renta_id)
+    asignacion, _ = AsignacionCoordinador.objects.get_or_create(renta=renta)
 
     if coordinador_id:
         from django.contrib.auth.models import User as DjangoUser
         coordinador = get_object_or_404(DjangoUser, id=coordinador_id)
-        asignacion, _ = AsignacionCoordinador.objects.get_or_create(renta=renta)
         asignacion.coordinador = coordinador
-        asignacion.save()
+        asignacion.save(update_fields=['coordinador'])
     else:
-        AsignacionCoordinador.objects.filter(renta=renta).update(coordinador=None)
+        asignacion.coordinador = None
+        asignacion.save(update_fields=['coordinador'])
+
+    if isinstance(apoyo_ids, list):
+        keep = []
+        for apoyo_id in apoyo_ids:
+            if not apoyo_id or (coordinador_id and int(apoyo_id) == int(coordinador_id)):
+                continue
+            from django.contrib.auth.models import User as DjangoUser
+            apoyo = DjangoUser.objects.filter(id=apoyo_id).first()
+            if not apoyo:
+                continue
+            CoordinadorApoyo.objects.get_or_create(asignacion=asignacion, usuario=apoyo)
+            keep.append(apoyo.id)
+        CoordinadorApoyo.objects.filter(asignacion=asignacion).exclude(usuario_id__in=keep).delete()
+
+    return Response({
+        'ok': True,
+        'asignacion_id': asignacion.id,
+        'coordinador_id': asignacion.coordinador_id,
+        'apoyo_ids': list(asignacion.apoyos.values_list('usuario_id', flat=True)),
+    })
 
 
 # ── Calificaciones Encargado ↔ Coordinador ────────────────────────────────────

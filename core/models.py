@@ -17,6 +17,13 @@ class Cliente(models.Model):
     calle_y_numero = models.CharField(max_length=100, blank=True)
     colonia = models.CharField(max_length=100, blank=True)
     ciudad_o_municipio = models.CharField(max_length=100, blank=True)
+    # Datos fiscales (reutilizables al facturar)
+    rfc = models.CharField(max_length=13, blank=True, default='')
+    razon_social = models.CharField(max_length=255, blank=True, default='')
+    regimen_fiscal = models.CharField(max_length=3, blank=True, default='')
+    codigo_postal_fiscal = models.CharField(max_length=5, blank=True, default='')
+    email_facturacion = models.EmailField(blank=True, null=True)
+    uso_cfdi_default = models.CharField(max_length=5, blank=True, default='G03')
 
     def __str__(self):
         return self.nombre
@@ -28,10 +35,10 @@ class Cliente(models.Model):
 class Producto(models.Model):
 
     TIPO_PRODUCTO = [
-        ('BR', 'Brincolín'),
+        ('BR', 'Brincol?n'),
         ('ME', 'Mesa'),
         ('SI', 'Silla'),
-        ('AN', 'Animación'),
+        ('AN', 'Animaci?n'),
         ('FL', 'Flete'),
         ('LZ', 'Loza'),
         ('MT', 'Manteleria'),
@@ -47,28 +54,40 @@ class Producto(models.Model):
     stock_disponible = models.PositiveIntegerField(default=0)
     stock = models.IntegerField(default=0)
 
-    # 🟢 Control administrativo
+    # Control administrativo
     activo = models.BooleanField(default=True)
+    # Si False, no reserva inventario (ej. "Proyecto recreativo")
+    afecta_stock = models.BooleanField(default=True)
 
     # ===== INVENTARIO =====
     def hay_stock(self, cantidad, fecha, hora_inicio, hora_fin):
+        if not self.afecta_stock:
+            return True
         return self.stock_disponible_en_horario(fecha, hora_inicio, hora_fin) >= cantidad
 
     def reservar_stock(self, cantidad):
+        if not self.afecta_stock:
+            return
         Producto.objects.filter(pk=self.pk).update(
             stock_disponible=F('stock_disponible') - cantidad
         )
 
     def liberar_stock(self, cantidad):
+        if not self.afecta_stock:
+            return
         Producto.objects.filter(pk=self.pk).update(
             stock_disponible=F('stock_disponible') + cantidad
         )
 
     @property
     def disponible(self):
+        if not self.afecta_stock:
+            return self.activo
         return self.activo and self.stock_disponible > 0
 
     def stock_disponible_en_horario(self, fecha, hora_inicio, hora_fin):
+        if not self.afecta_stock:
+            return 999999
         rentados = RentaProducto.objects.filter(
             producto=self,
             renta__fecha_renta=fecha,
@@ -84,6 +103,8 @@ class Producto(models.Model):
     def ocupacion_por_dia(self, fecha):
         if not self.activo:
             return "INACTIVO"
+        if not self.afecta_stock:
+            return "LIBRE"
 
         usados = RentaProducto.objects.filter(
             producto=self,
@@ -183,6 +204,26 @@ class Renta(models.Model):
     evento_google_id = models.CharField(max_length=200, blank=True, null=True)
     lat = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     lon = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+
+    VALIDACION_LOGISTICA = [
+        ('NO_REQUIERE', 'No requiere'),
+        ('PENDIENTE', 'Pendiente de asesor'),
+        ('APROBADA', 'Aprobada'),
+        ('RECHAZADA', 'Rechazada'),
+    ]
+    validacion_logistica = models.CharField(
+        max_length=12,
+        choices=VALIDACION_LOGISTICA,
+        default='NO_REQUIERE',
+        db_index=True,
+    )
+    temporada_alta = models.ForeignKey(
+        'TemporadaAlta',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='rentas',
+    )
     
     def save(self, *args, **kwargs):
         if not self.folio:
@@ -198,7 +239,7 @@ class Renta(models.Model):
     def tiene_animacion(self):
         return self.rentaproductos.filter(producto__tipo='AN').exists()
 
-# ===== MÓDULO DE RUTAS =====
+# ===== M?DULO DE RUTAS =====
 
 class Ruta(models.Model):
     TIPO = [
@@ -228,7 +269,7 @@ class Ruta(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.get_tipo_display()} – {self.nombre} ({self.fecha})"
+        return f"{self.get_tipo_display()} ? {self.nombre} ({self.fecha})"
 
 
 class RutaEmpleado(models.Model):
@@ -242,7 +283,7 @@ class RutaEmpleado(models.Model):
         unique_together = ('ruta', 'empleado')
 
     def __str__(self):
-        return f"{self.empleado} – {self.ruta}"
+        return f"{self.empleado} ? {self.ruta}"
 
 
 class RutaRenta(models.Model):
@@ -269,7 +310,7 @@ class RutaRenta(models.Model):
         ]
 
     def __str__(self):
-        return f"Parada {self.orden} – Renta #{self.renta_id} ({self.get_estado_display()})"
+        return f"Parada {self.orden} ? Renta #{self.renta_id} ({self.get_estado_display()})"
 
 
 class EntregaDetalle(models.Model):
@@ -285,7 +326,7 @@ class EntregaDetalle(models.Model):
         unique_together = ('ruta_renta', 'producto_renta')
 
     def __str__(self):
-        return f"{self.producto_renta} – confirmado: {self.cantidad_confirmada}"
+        return f"{self.producto_renta} ? confirmado: {self.cantidad_confirmada}"
 
 
 class RecogidaProgramada(models.Model):
@@ -313,7 +354,7 @@ class RecogidaProgramada(models.Model):
         ]
 
     def __str__(self):
-        return f"Recogida Renta #{self.ruta_renta_entrega.renta_id} – {self.fecha_recogida}"
+        return f"Recogida Renta #{self.ruta_renta_entrega.renta_id} ? {self.fecha_recogida}"
 
 
 
@@ -376,11 +417,11 @@ class PushSuscripcion(models.Model):
     creada_en = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        verbose_name = 'Suscripción Push'
+        verbose_name = 'Suscripci?n Push'
         verbose_name_plural = 'Suscripciones Push'
 
     def __str__(self):
-        return f"Push {self.user.username} — {self.endpoint[:50]}"
+        return f"Push {self.user.username} ? {self.endpoint[:50]}"
 
 # =============================================
 # CONTABILIDAD
@@ -459,7 +500,7 @@ class PedidoFinanzas(models.Model):
 
 
 # =============================================
-# EMPLEADOS Y NÓMINA
+# EMPLEADOS Y N?MINA
 # =============================================
 class Empleado(models.Model):
     TIPO_EMPLEADO = [
@@ -520,7 +561,7 @@ class Nomina(models.Model):
         return sueldo_base + self.pago_eventos_extra()
 
     def save(self, *args, **kwargs):
-        # ⚠️ SOLO calcular total si ya existe la instancia
+        # ?? SOLO calcular total si ya existe la instancia
         if self.pk:
             self.total = self.calcular_total()
         super().save(*args, **kwargs)
@@ -531,7 +572,7 @@ class Gasto(models.Model):
     TIPO = [
         ('GASTO', 'Gasto General'),
         ('COMPRA', 'Compra'),
-        ('NOMINA', 'Nómina'),
+        ('NOMINA', 'N?mina'),
     ]
 
     CATEGORIA = [
@@ -541,8 +582,8 @@ class Gasto(models.Model):
         ('CONSUMIBLES', 'Consumibles'),
         ('SEGURO', 'Seguro'),
         ('IMPUESTOS', 'Impuestos'),
-        ('NOMINA', 'Nómina'),
-        ('DEVOLUCION', 'Devolución depósito'),
+        ('NOMINA', 'N?mina'),
+        ('DEVOLUCION', 'Devoluci?n dep?sito'),
     ]
 
     tipo = models.CharField(
@@ -573,9 +614,9 @@ class Gasto(models.Model):
         null=True,
     )
 
-    # 🔹 Relación opcional con Nomina
+    # ?? Relaci?n opcional con Nomina
     nomina = models.ForeignKey(
-        'Nomina',                # 👈 referencia por string para evitar errores
+        'Nomina',                # ?? referencia por string para evitar errores
         on_delete=models.CASCADE,
         null=True,
         blank=True,
@@ -589,7 +630,7 @@ class Gasto(models.Model):
 
 
 class PresupuestoCategoria(models.Model):
-    """Presupuesto mensual editable desde Django Admin por categoría de gasto."""
+    """Presupuesto mensual editable desde Django Admin por categor?a de gasto."""
 
     categoria = models.CharField(
         max_length=20,
@@ -599,22 +640,22 @@ class PresupuestoCategoria(models.Model):
     monto_mensual = models.DecimalField(
         max_digits=10,
         decimal_places=2,
-        help_text='Límite de gasto permitido en el mes calendario.',
+        help_text='L?mite de gasto permitido en el mes calendario.',
     )
     activo = models.BooleanField(
         default=True,
-        help_text='Si está inactivo, no se valida presupuesto para esta categoría.',
+        help_text='Si est? inactivo, no se valida presupuesto para esta categor?a.',
     )
     notas = models.CharField(max_length=255, blank=True)
 
     class Meta:
-        verbose_name = 'Presupuesto por categoría'
-        verbose_name_plural = 'Presupuestos por categoría'
+        verbose_name = 'Presupuesto por categor?a'
+        verbose_name_plural = 'Presupuestos por categor?a'
         ordering = ['categoria']
 
     def __str__(self):
         estado = 'activo' if self.activo else 'inactivo'
-        return f"{self.get_categoria_display()} — ${self.monto_mensual}/mes ({estado})"
+        return f"{self.get_categoria_display()} ? ${self.monto_mensual}/mes ({estado})"
 
 
 
@@ -697,7 +738,7 @@ class HorasExtra(models.Model):
             self.horas_trabajadas - self.horas_descontadas
         )
 
-        # Jornada según tipo de empleado
+        # Jornada seg?n tipo de empleado
         if self.empleado.es_eventual:
             dias_trabajados = Asistencia.objects.filter(
                 empleado=self.empleado,
@@ -822,7 +863,7 @@ class BitacoraMantenimiento(models.Model):
 
 
 # =============================================
-# ANIMACIÓN Y MATERIALES
+# ANIMACI?N Y MATERIALES
 # =============================================
 
 class MaterialAnimacion(models.Model):
@@ -842,8 +883,8 @@ class MaterialAnimacion(models.Model):
         return self.nombre
 
     class Meta:
-        verbose_name = "Material de Animación"
-        verbose_name_plural = "Materiales de Animación"
+        verbose_name = "Material de Animaci?n"
+        verbose_name_plural = "Materiales de Animaci?n"
         ordering = ('nombre',)
 
 class FotoMaterial (models.Model):
@@ -879,7 +920,7 @@ class AsignacionCoordinador(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"{self.renta.folio} → {self.coordinador}"
+        return f"{self.renta.folio} ? {self.coordinador}"
     class Meta:
         verbose_name = "Asignacion Coordinador"
 
@@ -900,7 +941,7 @@ class MaterialEvento(models.Model):
     # Checklist despacho
     despachado = models.BooleanField(default=False)
 
-    # Checklist recepción
+    # Checklist recepci?n
     recibido = models.BooleanField(default=False)
     observacion = models.CharField(max_length=255, blank=True, null=True)
 
@@ -922,7 +963,7 @@ class ListaMaterialEvento(models.Model):
         ('EN_EVENTO', 'En evento'),
         ('REGRESADA', 'Regresada a bodega'),
         ('REVISADA', 'Revisada'),
-        ('PENDIENTE', 'Pendiente revisión'),  # legacy
+        ('PENDIENTE', 'Pendiente revisi?n'),  # legacy
         ('PREPARADA', 'Preparada'),            # legacy
         ('RECIBIDA', 'Recibida'),              # legacy
     ]
@@ -934,7 +975,7 @@ class ListaMaterialEvento(models.Model):
     )
     estado = models.CharField(max_length=20, choices=ESTADO, default='BORRADOR')
 
-    # Revisión encargado
+    # Revisi?n encargado
     revisada_por = models.ForeignKey(
         User, on_delete=models.SET_NULL, null=True, blank=True,
         related_name='listas_revisadas'
@@ -948,7 +989,7 @@ class ListaMaterialEvento(models.Model):
     )
     fecha_surtido = models.DateTimeField(null=True, blank=True)
 
-    # Confirmación coordinador en evento
+    # Confirmaci?n coordinador en evento
     confirmada_por = models.ForeignKey(
         User, on_delete=models.SET_NULL, null=True, blank=True,
         related_name='listas_confirmadas'
@@ -957,7 +998,7 @@ class ListaMaterialEvento(models.Model):
     llego_completa = models.BooleanField(null=True, blank=True)
     observaciones_llegada = models.TextField(blank=True, null=True)
 
-    # Recepción bodega
+    # Recepci?n bodega
     recibida_por = models.ForeignKey(
         User, on_delete=models.SET_NULL, null=True, blank=True,
         related_name='listas_recibidas'
@@ -973,7 +1014,7 @@ class EvidenciaMaterial(models.Model):
         ('SALIDA', 'Salida a evento'),
         ('LLEGADA', 'Llegada a evento'),
         ('REGRESO', 'Regreso a bodega'),
-        ('DANO', 'Daño o faltante'),
+        ('DANO', 'Da?o o faltante'),
     ]
 
     lista = models.ForeignKey(
@@ -1124,11 +1165,11 @@ class SolicitudRegistro(models.Model):
         verbose_name = "Solicitud de Registro"
         verbose_name_plural = "Solicitudes de Registro"
 
-# ── Animadores ─────────────────────────────────────────────────────────────────
+# ?? Animadores ?????????????????????????????????????????????????????????????????
 
 class AnimadorEvento(models.Model):
     ESTADO = [
-        ('PENDIENTE', 'Pendiente confirmación'),
+        ('PENDIENTE', 'Pendiente confirmaci?n'),
         ('ACEPTADO', 'Aceptado'),
         ('RECHAZADO', 'Rechazado'),
     ]
@@ -1157,7 +1198,7 @@ class AnimadorEvento(models.Model):
         unique_together = ['asignacion', 'animador']
 
     def __str__(self):
-        return f"{self.animador.nombre} — {self.asignacion.renta.folio}"
+        return f"{self.animador.nombre} ? {self.asignacion.renta.folio}"
 
 
 class CalificacionCoordinador(models.Model):
@@ -1182,7 +1223,7 @@ class CalificacionCoordinador(models.Model):
         return round(sum(campos) / len(campos), 2)
 
     def __str__(self):
-        return f"Calificación de {self.animador_evento.animador.nombre} a {self.animador_evento.asignacion.coordinador.username}"
+        return f"Calificaci?n de {self.animador_evento.animador.nombre} a {self.animador_evento.asignacion.coordinador.username}"
 
 class CalificacionAnimador(models.Model):
     animador_evento = models.OneToOneField(
@@ -1208,11 +1249,11 @@ class CalificacionAnimador(models.Model):
         return round(sum(campos) / len(campos), 2)
 
     def __str__(self):
-        return f"Calificación de {self.animador_evento.asignacion.coordinador.username} a {self.animador_evento.animador.nombre}"
+        return f"Calificaci?n de {self.animador_evento.asignacion.coordinador.username} a {self.animador_evento.animador.nombre}"
 
 
 class CalificacionEncargado(models.Model):
-    """Coordinador califica al encargado de material después del evento"""
+    """Coordinador califica al encargado de material despu?s del evento"""
     lista = models.OneToOneField(
         'ListaMaterialEvento',
         on_delete=models.CASCADE,
@@ -1235,11 +1276,11 @@ class CalificacionEncargado(models.Model):
         return round(sum(campos) / len(campos), 2)
 
     def __str__(self):
-        return f"Cal. encargado — {self.lista_id}"
+        return f"Cal. encargado ? {self.lista_id}"
 
 
 class CalificacionCoordinadorPorEncargado(models.Model):
-    """Encargado de material califica al coordinador después del evento"""
+    """Encargado de material califica al coordinador despu?s del evento"""
     lista = models.OneToOneField(
         'ListaMaterialEvento',
         on_delete=models.CASCADE,
@@ -1262,4 +1303,273 @@ class CalificacionCoordinadorPorEncargado(models.Model):
         return round(sum(campos) / len(campos), 2)
 
     def __str__(self):
-        return f"Cal. coordinador — {self.lista_id}"
+        return f"Cal. coordinador ? {self.lista_id}"
+
+
+class TemporadaAlta(models.Model):
+    """Rangos donde el bot crea la renta pero requiere visto bueno de logistica."""
+    nombre = models.CharField(max_length=100)
+    fecha_inicio = models.DateField()
+    fecha_fin = models.DateField()
+    activo = models.BooleanField(default=True)
+    notas = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ['-fecha_inicio']
+        verbose_name = 'Temporada alta'
+        verbose_name_plural = 'Temporadas altas'
+
+    def __str__(self):
+        return f"{self.nombre} ({self.fecha_inicio} -> {self.fecha_fin})"
+
+    def contiene(self, fecha) -> bool:
+        return self.activo and self.fecha_inicio <= fecha <= self.fecha_fin
+
+
+class Factura(models.Model):
+    """CFDI emitido (FiscalAPI) ligado a una renta."""
+
+    ESTATUS = [
+        ('BORRADOR', 'Borrador'),
+        ('TIMBRADA', 'Timbrada'),
+        ('CANCELADA', 'Cancelada'),
+        ('ERROR', 'Error'),
+    ]
+
+    renta = models.ForeignKey(Renta, on_delete=models.CASCADE, related_name='facturas')
+    cliente = models.ForeignKey(Cliente, on_delete=models.CASCADE, related_name='facturas')
+    estatus = models.CharField(max_length=12, choices=ESTATUS, default='BORRADOR', db_index=True)
+
+    # Snapshot receptor
+    rfc = models.CharField(max_length=13)
+    razon_social = models.CharField(max_length=255)
+    regimen_fiscal = models.CharField(max_length=3)
+    codigo_postal = models.CharField(max_length=5)
+    email = models.EmailField(blank=True, default='')
+    uso_cfdi = models.CharField(max_length=5, default='G03')
+
+    total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    serie = models.CharField(max_length=25, blank=True, default='')
+    folio = models.CharField(max_length=40, blank=True, default='')
+    uuid = models.CharField(max_length=64, blank=True, default='', db_index=True)
+
+    provider = models.CharField(max_length=32, default='fiscalapi')
+    provider_id = models.CharField(max_length=64, blank=True, default='')
+    pdf_url = models.URLField(blank=True, default='', max_length=500)
+    xml_url = models.URLField(blank=True, default='', max_length=500)
+    error_mensaje = models.TextField(blank=True, default='')
+
+    timbrada_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    creada_por = models.ForeignKey(
+        User, null=True, blank=True, on_delete=models.SET_NULL, related_name='facturas_creadas'
+    )
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['renta', 'estatus']),
+        ]
+
+    def __str__(self):
+        return f"Factura {self.uuid or self.id} ({self.estatus}) ? {self.renta.folio}"
+
+
+# =============================================
+# COTIZACIONES
+# =============================================
+
+NOMBRE_PRODUCTO_PROYECTO = 'Proyecto recreativo'
+
+
+class Cotizacion(models.Model):
+    TIPO = [
+        ('NORMAL', 'Normal'),
+        ('PROYECTO', 'Proyecto'),
+    ]
+    STATUS = [
+        ('BORRADOR', 'Borrador'),
+        ('ENVIADA', 'Enviada'),
+        ('ACEPTADA', 'Aceptada'),
+        ('RECHAZADA', 'Rechazada'),
+        ('CONVERTIDA', 'Convertida'),
+    ]
+
+    folio = models.CharField(max_length=20, unique=True, blank=True)
+    tipo = models.CharField(max_length=10, choices=TIPO, default='NORMAL')
+    status = models.CharField(max_length=12, choices=STATUS, default='BORRADOR', db_index=True)
+    cliente = models.ForeignKey(Cliente, on_delete=models.CASCADE, related_name='cotizaciones')
+    destinatario = models.CharField(max_length=200, blank=True, default='')
+    nombre_evento = models.CharField(max_length=200, blank=True, default='')
+    asistentes = models.PositiveIntegerField(null=True, blank=True)
+    sede = models.CharField(max_length=255, blank=True, default='')
+    fecha_evento = models.DateField(null=True, blank=True)
+    hora_inicio = models.TimeField(null=True, blank=True)
+    hora_fin = models.TimeField(null=True, blank=True)
+    intro = models.TextField(blank=True, default='')
+    aplicar_iva = models.BooleanField(default=False)
+    aplicar_isr = models.BooleanField(default=False)
+    condiciones_pago = models.TextField(
+        blank=True,
+        default=(
+            'Se requiere el 50% de anticipo para confirmar la reservación del evento. '
+            'El 50% restante se liquida el día del evento.'
+        ),
+    )
+    firmado_por = models.CharField(
+        max_length=200,
+        blank=True,
+        default='Dra. Rossana Tamara Medina Valencia\nDirectora General',
+    )
+    subtotal = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    monto_iva = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    monto_isr = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    notas = models.TextField(blank=True, default='')
+    renta = models.OneToOneField(
+        Renta,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='cotizacion_origen',
+    )
+    creada_por = models.ForeignKey(
+        User, null=True, blank=True, on_delete=models.SET_NULL, related_name='cotizaciones_creadas'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Cotización'
+        verbose_name_plural = 'Cotizaciones'
+        indexes = [
+            models.Index(fields=['tipo', 'status']),
+            models.Index(fields=['fecha_evento']),
+        ]
+
+    def save(self, *args, **kwargs):
+        if not self.folio:
+            ts = int(timezone.now().timestamp())
+            suffix = uuid.uuid4().hex[:4].upper()
+            self.folio = f"C{ts}{suffix}"
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.folio} - {self.cliente.nombre} ({self.get_tipo_display()})"
+
+
+class CotizacionZona(models.Model):
+    cotizacion = models.ForeignKey(Cotizacion, on_delete=models.CASCADE, related_name='zonas')
+    orden = models.PositiveIntegerField(default=0)
+    titulo = models.CharField(max_length=200)
+    descripcion = models.TextField(blank=True, default='')
+
+    class Meta:
+        ordering = ['orden', 'id']
+        verbose_name = 'Zona de cotización'
+        verbose_name_plural = 'Zonas de cotización'
+
+    def __str__(self):
+        return f"{self.orden}. {self.titulo}"
+
+
+class CotizacionConcepto(models.Model):
+    cotizacion = models.ForeignKey(Cotizacion, on_delete=models.CASCADE, related_name='conceptos')
+    orden = models.PositiveIntegerField(default=0)
+    nombre = models.CharField(max_length=255)
+    descripcion = models.TextField(blank=True, default='')
+    cantidad = models.PositiveIntegerField(default=1)
+    monto = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    producto = models.ForeignKey(
+        Producto,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='conceptos_cotizacion',
+    )
+
+    class Meta:
+        ordering = ['orden', 'id']
+        verbose_name = 'Concepto de cotización'
+        verbose_name_plural = 'Conceptos de cotización'
+
+    def __str__(self):
+        return f"{self.nombre} (${self.monto})"
+
+
+# =============================================
+# COORDINACIÓN MULTI-EQUIPO
+# =============================================
+
+class CoordinadorApoyo(models.Model):
+    asignacion = models.ForeignKey(
+        AsignacionCoordinador,
+        on_delete=models.CASCADE,
+        related_name='apoyos',
+    )
+    usuario = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='eventos_como_apoyo',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('asignacion', 'usuario')
+        verbose_name = 'Coordinador de apoyo'
+        verbose_name_plural = 'Coordinadores de apoyo'
+
+    def __str__(self):
+        return f"Apoyo {self.usuario} @ {self.asignacion_id}"
+
+
+class SolicitudCambioMaterial(models.Model):
+    TIPO = [
+        ('AGREGAR', 'Agregar'),
+        ('QUITAR', 'Quitar'),
+        ('CAMBIAR_CANTIDAD', 'Cambiar cantidad'),
+    ]
+    ESTADO = [
+        ('PENDIENTE', 'Pendiente'),
+        ('APROBADA', 'Aprobada'),
+        ('RECHAZADA', 'Rechazada'),
+    ]
+
+    lista = models.ForeignKey(
+        ListaMaterialEvento,
+        on_delete=models.CASCADE,
+        related_name='solicitudes_cambio',
+    )
+    tipo = models.CharField(max_length=20, choices=TIPO)
+    material = models.ForeignKey(
+        MaterialAnimacion,
+        on_delete=models.CASCADE,
+        related_name='solicitudes_cambio',
+    )
+    cantidad = models.PositiveIntegerField(default=1)
+    nota = models.CharField(max_length=255, blank=True, default='')
+    solicitado_por = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='solicitudes_material_enviadas',
+    )
+    estado = models.CharField(max_length=12, choices=ESTADO, default='PENDIENTE', db_index=True)
+    revisado_por = models.ForeignKey(
+        User,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='solicitudes_material_revisadas',
+    )
+    comentario_revision = models.CharField(max_length=255, blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+    revisado_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Solicitud de cambio de material'
+        verbose_name_plural = 'Solicitudes de cambio de material'
+
+    def __str__(self):
+        return f"{self.get_tipo_display()} {self.material} ({self.estado})"

@@ -1,0 +1,130 @@
+{% extends 'core/base.html' %}
+{% block content %}
+
+<h2>Cotización {{ cotizacion.folio }}</h2>
+<p>
+    <strong>{{ cotizacion.get_tipo_display }}</strong> —
+    Estado: <strong>{{ cotizacion.get_status_display }}</strong>
+    {% if cotizacion.renta %}
+    — Renta: <a href="{% url 'editar_renta' cotizacion.renta.id %}">{{ cotizacion.renta.folio }}</a>
+    {% endif %}
+</p>
+
+<div style="margin-bottom:14px; display:flex; gap:8px; flex-wrap:wrap;">
+    {% if cotizacion.status != 'CONVERTIDA' %}
+    <a href="{% url 'editar_cotizacion' cotizacion.id %}" style="padding:8px 12px; background:#2196F3; color:white; text-decoration:none; border-radius:6px;">Editar</a>
+    {% endif %}
+    <a href="{% url 'cotizacion_pdf' cotizacion.id %}" target="_blank" style="padding:8px 12px; background:#9C27B0; color:white; text-decoration:none; border-radius:6px;">PDF</a>
+    <a href="{% url 'lista_cotizaciones' %}">← Volver</a>
+</div>
+
+{% if cotizacion.status != 'CONVERTIDA' %}
+<form method="post" action="{% url 'cambiar_status_cotizacion' cotizacion.id %}" style="margin-bottom:16px; display:flex; gap:8px; align-items:center;">
+    {% csrf_token %}
+    <label>Cambiar estado
+        <select name="status">
+            {% if cotizacion.status == 'BORRADOR' %}
+            <option value="ENVIADA">Enviada</option>
+            <option value="RECHAZADA">Rechazada</option>
+            {% elif cotizacion.status == 'ENVIADA' %}
+            <option value="ACEPTADA">Aceptada</option>
+            <option value="RECHAZADA">Rechazada</option>
+            <option value="BORRADOR">Borrador</option>
+            {% elif cotizacion.status == 'ACEPTADA' %}
+            <option value="ENVIADA">Enviada</option>
+            <option value="RECHAZADA">Rechazada</option>
+            {% elif cotizacion.status == 'RECHAZADA' %}
+            <option value="BORRADOR">Borrador</option>
+            {% endif %}
+        </select>
+    </label>
+    <button type="submit">Actualizar</button>
+</form>
+{% endif %}
+
+<section style="margin-bottom:18px;">
+    <h3>Datos</h3>
+    <p><strong>Cliente:</strong> {{ cotizacion.cliente.nombre }}</p>
+    <p><strong>Destinatario:</strong> {{ cotizacion.destinatario }}</p>
+    {% if cotizacion.nombre_evento %}<p><strong>Evento:</strong> {{ cotizacion.nombre_evento }}</p>{% endif %}
+    {% if cotizacion.asistentes %}<p><strong>Asistentes:</strong> {{ cotizacion.asistentes }}</p>{% endif %}
+    {% if cotizacion.sede %}<p><strong>Sede:</strong> {{ cotizacion.sede }}</p>{% endif %}
+    <p><strong>Fecha:</strong> {{ cotizacion.fecha_evento }} {{ cotizacion.hora_inicio }} - {{ cotizacion.hora_fin }}</p>
+    <p style="white-space:pre-wrap;">{{ cotizacion.intro }}</p>
+</section>
+
+{% if cotizacion.tipo == 'PROYECTO' and cotizacion.zonas.exists %}
+<section style="margin-bottom:18px;">
+    <h3>Zonas</h3>
+    {% for z in cotizacion.zonas.all %}
+    <div style="margin-bottom:10px;">
+        <strong>{{ z.orden|add:1 }}. {{ z.titulo }}</strong>
+        <p style="white-space:pre-wrap;">{{ z.descripcion }}</p>
+    </div>
+    {% endfor %}
+</section>
+{% endif %}
+
+<section style="margin-bottom:18px;">
+    <h3>Conceptos</h3>
+    <table border="1" width="100%" cellpadding="6">
+        <thead><tr><th>#</th><th>Concepto</th><th>Cant.</th><th>Producto</th><th>Monto</th></tr></thead>
+        <tbody>
+        {% for c in cotizacion.conceptos.all %}
+        <tr>
+            <td>{{ forloop.counter }}</td>
+            <td>
+                <strong>{{ c.nombre }}</strong>
+                {% if c.descripcion %}<br><small>{{ c.descripcion }}</small>{% endif %}
+            </td>
+            <td>{{ c.cantidad }}</td>
+            <td>{% if c.producto %}{{ c.producto.nombre }}{% else %}—{% endif %}</td>
+            <td>${{ c.monto }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5">Sin conceptos</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    <p>Subtotal: <strong>${{ cotizacion.subtotal }}</strong></p>
+    {% if cotizacion.aplicar_iva %}<p>IVA 16%: ${{ cotizacion.monto_iva }}</p>{% endif %}
+    {% if cotizacion.aplicar_isr %}<p>ISR 1.25%: ${{ cotizacion.monto_isr }}</p>{% endif %}
+    <p>Total: <strong>${{ cotizacion.total }}</strong></p>
+</section>
+
+{% if cotizacion.status != 'CONVERTIDA' %}
+<section style="border:1px solid #ddd; padding:14px; border-radius:8px; max-width:640px;">
+    <h3>Convertir a renta</h3>
+    <form method="post" action="{% url 'convertir_cotizacion' cotizacion.id %}">
+        {% csrf_token %}
+        <label>Anticipo <input type="number" step="0.01" name="anticipo" value="0"></label>
+        <br><br>
+        <label>Coordinador líder
+            <select name="lider_id">
+                <option value="">— Opcional / asignar después —</option>
+                {% for u in coordinadores %}
+                <option value="{{ u.id }}">{{ u.get_full_name|default:u.username }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        <br><br>
+        <label>Coordinadores de apoyo (Ctrl/Cmd para varios)
+            <select name="apoyo_ids" multiple size="5" style="min-width:260px;">
+                {% for u in coordinadores %}
+                <option value="{{ u.id }}">{{ u.get_full_name|default:u.username }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        <br><br>
+        <button type="submit" style="padding:10px 16px; background:#FF9800; color:white; border:none; border-radius:6px; font-weight:bold;"
+                onclick="return confirm('¿Convertir esta cotización en renta?');">
+            Convertir a renta
+        </button>
+    </form>
+    <p style="font-size:13px; color:#555; margin-top:8px;">
+        En proyectos: se crea línea “Proyecto recreativo” con el total y se reservan solo productos de inventario.
+    </p>
+</section>
+{% endif %}
+
+{% endblock %}

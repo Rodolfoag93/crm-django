@@ -122,6 +122,7 @@ from core.views.coordinador import (
     detalle_evento,
     agregar_material_evento,
     eliminar_material_evento,
+    revisar_solicitud_material,
     alertas_coordinador,
 )
 
@@ -140,3 +141,22 @@ from core.views.materiales import (
 from core.views.productos import (
     crear_producto_ajax,
 )
+
+# ── Cotizador ─────────────────────────────────────────────────────────
+from core.views.cotizador import (
+    lista_cotizaciones,
+    nueva_cotizacion,
+    editar_cotizacion,
+    detalle_cotizacion,
+    cotizacion_pdf,
+    cambiar_status_cotizacion,
+    convertir_cotizacion,
+)
+
+
+def nueva_cotizacion_normal(request):
+    return nueva_cotizacion(request, tipo='NORMAL')
+
+
+def nueva_cotizacion_proyecto(request):
+    return nueva_cotizacion(request, tipo='PROYECTO')

@@ -1,0 +1,205 @@
+{% extends 'core/base.html' %}
+{% block content %}
+
+<h2>{% if editando %}Editar{% else %}Nueva{% endif %} cotización {{ tipo|lower }}</h2>
+
+<form method="post" id="form-cotizacion">
+    {% csrf_token %}
+    <input type="hidden" name="conceptos_data" id="conceptos_data">
+    <input type="hidden" name="zonas_data" id="zonas_data">
+
+    <fieldset style="margin-bottom:16px; padding:12px;">
+        <legend>Cliente y evento</legend>
+        <label>Cliente
+            <select name="cliente_id" id="cliente_id" required style="width:100%; max-width:420px;">
+                <option value="">— Seleccionar —</option>
+            </select>
+        </label>
+        <br><br>
+        <label>Destinatario <input type="text" name="destinatario" id="destinatario" value="{{ cotizacion.destinatario|default:'' }}" style="width:100%; max-width:420px;"></label>
+        <br><br>
+        {% if tipo == 'PROYECTO' %}
+        <label>Nombre del evento <input type="text" name="nombre_evento" value="{{ cotizacion.nombre_evento|default:'' }}" style="width:100%; max-width:420px;"></label>
+        <br><br>
+        <label>Asistentes <input type="number" name="asistentes" min="1" value="{{ cotizacion.asistentes|default:'' }}"></label>
+        <br><br>
+        <label>Sede / lugar <input type="text" name="sede" value="{{ cotizacion.sede|default:'' }}" style="width:100%; max-width:420px;"></label>
+        <br><br>
+        {% endif %}
+        <label>Fecha evento <input type="date" name="fecha_evento" value="{% if cotizacion.fecha_evento %}{{ cotizacion.fecha_evento|date:'Y-m-d' }}{% endif %}" required></label>
+        <label>Inicio <input type="time" name="hora_inicio" value="{% if cotizacion.hora_inicio %}{{ cotizacion.hora_inicio|time:'H:i' }}{% endif %}" required></label>
+        <label>Fin <input type="time" name="hora_fin" value="{% if cotizacion.hora_fin %}{{ cotizacion.hora_fin|time:'H:i' }}{% endif %}" required></label>
+        <br><br>
+        <label>Introducción / carta
+            <textarea name="intro" rows="5" style="width:100%; max-width:700px;">{{ cotizacion.intro|default:'' }}</textarea>
+        </label>
+    </fieldset>
+
+    {% if tipo == 'PROYECTO' %}
+    <fieldset style="margin-bottom:16px; padding:12px;">
+        <legend>Zonas narrativas</legend>
+        <div id="zonas-list"></div>
+        <button type="button" onclick="addZona()">+ Zona</button>
+        <button type="button" onclick="addZona('Bienvenida', 'Se realizará la bienvenida con animadores para recibir a los asistentes.')">+ Bienvenida</button>
+        <button type="button" onclick="addZona('Escenario', 'Espacio de interacción y conducción del programa recreativo.')">+ Escenario</button>
+        <button type="button" onclick="addZona('Zona feria / retos', 'Estaciones de juegos y retos para los asistentes.')">+ Feria</button>
+    </fieldset>
+    {% endif %}
+
+    <fieldset style="margin-bottom:16px; padding:12px;">
+        <legend>Conceptos cobrables</legend>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
+            <select id="producto_select" style="min-width:220px;"></select>
+            <input type="number" id="producto_cantidad" value="1" min="1" style="width:70px;">
+            <button type="button" onclick="addProducto()">+ Del catálogo</button>
+            <button type="button" onclick="addConceptoLibre()">+ Concepto libre</button>
+        </div>
+        <div id="conceptos-list"></div>
+        <p><strong>Subtotal estimado:</strong> $<span id="subtotal-preview">0.00</span></p>
+    </fieldset>
+
+    <fieldset style="margin-bottom:16px; padding:12px;">
+        <legend>Impuestos y condiciones</legend>
+        <label><input type="checkbox" name="aplicar_iva" {% if cotizacion.aplicar_iva %}checked{% endif %}> Aplicar IVA 16%</label>
+        <label style="margin-left:12px;"><input type="checkbox" name="aplicar_isr" {% if cotizacion.aplicar_isr %}checked{% endif %}> Aplicar ISR 1.25%</label>
+        <br><br>
+        <label>Condiciones de pago
+            <textarea name="condiciones_pago" rows="3" style="width:100%; max-width:700px;">{% if cotizacion %}{{ cotizacion.condiciones_pago }}{% else %}Se requiere el 50% de anticipo para confirmar la reservación del evento. El 50% restante se liquida el día del evento.{% endif %}</textarea>
+        </label>
+        <br>
+        <label>Notas internas
+            <textarea name="notas" rows="2" style="width:100%; max-width:700px;">{{ cotizacion.notas|default:'' }}</textarea>
+        </label>
+    </fieldset>
+
+    <button type="submit" style="padding:10px 18px; background:#4CAF50; color:white; border:none; border-radius:6px; font-weight:bold;">
+        Guardar cotización
+    </button>
+    <a href="{% url 'lista_cotizaciones' %}" style="margin-left:10px;">Cancelar</a>
+</form>
+
+<script>
+const CLIENTES = {{ clientes_json|safe }};
+const PRODUCTOS = {{ productos_json|safe }};
+let zonas = {{ zonas_json|safe }};
+let conceptos = {{ conceptos_json|safe }};
+const selectedCliente = "{% if cotizacion %}{{ cotizacion.cliente_id }}{% endif %}";
+
+function money(n) {
+  return (Number(n) || 0).toFixed(2);
+}
+
+function fillClientes() {
+  const sel = document.getElementById('cliente_id');
+  CLIENTES.forEach(c => {
+    const opt = document.createElement('option');
+    opt.value = c.id;
+    opt.textContent = `${c.nombre}${c.telefono ? ' — ' + c.telefono : ''}`;
+    if (String(c.id) === String(selectedCliente)) opt.selected = true;
+    sel.appendChild(opt);
+  });
+  sel.addEventListener('change', () => {
+    const c = CLIENTES.find(x => String(x.id) === sel.value);
+    if (c && !document.getElementById('destinatario').value) {
+      document.getElementById('destinatario').value = c.nombre;
+    }
+  });
+}
+
+function fillProductos() {
+  const sel = document.getElementById('producto_select');
+  PRODUCTOS.forEach(p => {
+    const opt = document.createElement('option');
+    opt.value = p.id;
+    opt.textContent = `${p.nombre} — $${money(p.precio)}`;
+    sel.appendChild(opt);
+  });
+}
+
+function renderZonas() {
+  const box = document.getElementById('zonas-list');
+  if (!box) return;
+  box.innerHTML = '';
+  zonas.forEach((z, i) => {
+    const div = document.createElement('div');
+    div.style.cssText = 'border:1px solid #ccc; padding:8px; margin-bottom:8px; border-radius:6px;';
+    div.innerHTML = `
+      <input type="text" placeholder="Título" value="${(z.titulo||'').replace(/"/g,'&quot;')}" onchange="zonas[${i}].titulo=this.value" style="width:100%; max-width:400px; margin-bottom:6px;">
+      <textarea rows="3" placeholder="Descripción" onchange="zonas[${i}].descripcion=this.value" style="width:100%; max-width:700px;">${z.descripcion||''}</textarea>
+      <div><button type="button" onclick="zonas.splice(${i},1); renderZonas();">Quitar</button></div>
+    `;
+    box.appendChild(div);
+  });
+}
+
+function addZona(titulo='', descripcion='') {
+  zonas.push({orden: zonas.length, titulo, descripcion});
+  renderZonas();
+}
+
+function renderConceptos() {
+  const box = document.getElementById('conceptos-list');
+  box.innerHTML = '';
+  let sub = 0;
+  conceptos.forEach((c, i) => {
+    sub += Number(c.monto) || 0;
+    const div = document.createElement('div');
+    div.style.cssText = 'display:flex; gap:8px; flex-wrap:wrap; align-items:center; border-bottom:1px solid #eee; padding:6px 0;';
+    div.innerHTML = `
+      <input type="text" value="${(c.nombre||'').replace(/"/g,'&quot;')}" onchange="conceptos[${i}].nombre=this.value" style="min-width:180px;">
+      <input type="number" min="1" value="${c.cantidad||1}" onchange="conceptos[${i}].cantidad=parseInt(this.value||1)" style="width:70px;">
+      <input type="number" step="0.01" value="${money(c.monto)}" onchange="conceptos[${i}].monto=this.value; renderConceptos();" style="width:110px;">
+      <input type="text" placeholder="Descripción" value="${(c.descripcion||'').replace(/"/g,'&quot;')}" onchange="conceptos[${i}].descripcion=this.value" style="min-width:180px; flex:1;">
+      <small>${c.producto_id ? 'Catálogo #'+c.producto_id : 'Libre'}</small>
+      <button type="button" onclick="conceptos.splice(${i},1); renderConceptos();">Quitar</button>
+    `;
+    box.appendChild(div);
+  });
+  document.getElementById('subtotal-preview').textContent = money(sub);
+}
+
+function addProducto() {
+  const id = document.getElementById('producto_select').value;
+  const p = PRODUCTOS.find(x => String(x.id) === String(id));
+  if (!p) return;
+  const cant = parseInt(document.getElementById('producto_cantidad').value || 1, 10);
+  const unit = Number(p.precio) || 0;
+  conceptos.push({
+    orden: conceptos.length,
+    nombre: p.nombre,
+    descripcion: '',
+    cantidad: cant,
+    monto: money(unit * cant),
+    producto_id: p.id,
+  });
+  renderConceptos();
+}
+
+function addConceptoLibre() {
+  const nombre = prompt('Nombre del concepto (paquete, hidratación, traslado...)');
+  if (!nombre) return;
+  const monto = prompt('Monto', '0') || '0';
+  conceptos.push({
+    orden: conceptos.length,
+    nombre,
+    descripcion: '',
+    cantidad: 1,
+    monto: money(monto),
+    producto_id: null,
+  });
+  renderConceptos();
+}
+
+document.getElementById('form-cotizacion').addEventListener('submit', function() {
+  document.getElementById('conceptos_data').value = JSON.stringify(conceptos.map((c,i)=>({...c, orden:i})));
+  const zonasEl = document.getElementById('zonas_data');
+  if (zonasEl) zonasEl.value = JSON.stringify(zonas.map((z,i)=>({...z, orden:i})));
+});
+
+fillClientes();
+fillProductos();
+renderZonas();
+renderConceptos();
+</script>
+
+{% endblock %}

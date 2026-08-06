@@ -1,13 +1,14 @@
 from rest_framework.routers import DefaultRouter
 from core.api.views import (
     ClienteViewSet, ProductoViewSet, RentaViewSet,
-    EmpleadoViewSet, NominaViewSet, GastoViewSet,
-    MovimientoContableViewSet, AsistenciaViewSet, SolicitudRegistroViewSet, HorasExtraViewSet, me, push_suscribir, push_desuscribir, push_vapid_key,
+    EmpleadoViewSet, NominaViewSet, GastoViewSet, CuentaViewSet,
+    MovimientoContableViewSet, AsistenciaViewSet, SolicitudRegistroViewSet, HorasExtraViewSet, TemporadaAltaViewSet, me, push_suscribir, push_desuscribir, push_vapid_key,
     api_mantenimiento, api_marcar_limpieza, api_dashboard_admin, api_rentas_hoy, api_asistencia_hoy, api_editar_asistencia_admin,
     api_rutas_admin, api_crear_ruta, api_agregar_parada_admin, api_editar_ruta, api_eliminar_parada_admin, api_rentas_disponibles,
-    api_nueva_renta, api_buscar_clientes, api_buscar_productos, api_cuentas, api_crear_gasto,
+    api_nueva_renta, api_buscar_clientes, api_buscar_productos, api_crear_gasto,
     api_catalogo_pagos_extra, api_crear_pago_extra_nomina, api_eliminar_pago_extra, api_recibo_nomina, api_mapa_entregas, api_mis_eventos, api_evento_detalle,
     api_lista_material_evento, api_agregar_material_evento, api_quitar_material_evento, api_catalogo_materiales,
+    api_revisar_solicitud_material,
     api_listas_material_encargado, api_lista_material_detalle_encargado, api_surtir_lista, api_confirmar_llegada_coordinador,
     api_recibir_lista_bodega, api_subir_evidencia, api_evidencias_lista, api_enviar_lista_coordinador, api_mis_eventos_animador,
     api_responder_evento_animador, api_calificar_coordinador,
@@ -29,10 +30,12 @@ router.register(r'rentas', RentaViewSet)
 router.register(r'empleados', EmpleadoViewSet)
 router.register(r'nomina', NominaViewSet, basename='nomina')
 router.register(r'gastos', GastoViewSet)
+router.register(r'cuentas', CuentaViewSet, basename='cuenta')
 router.register(r'movimientos', MovimientoContableViewSet)
 router.register(r'asistencias', AsistenciaViewSet, basename='asistencia')
 router.register(r'solicitudes', SolicitudRegistroViewSet, basename='solicitud')
 router.register(r'horas-extra', HorasExtraViewSet, basename='horas-extra')
+router.register(r'temporadas-alta', TemporadaAltaViewSet, basename='temporadas-alta')
 
 
 urlpatterns = [
@@ -65,7 +68,6 @@ urlpatterns = [
     path('nueva-renta/', api_nueva_renta, name='api_nueva_renta'),
     path('clientes-buscar/', api_buscar_clientes, name='api_buscar_clientes'),
     path('productos-buscar/', api_buscar_productos, name='api_buscar_productos'),
-    path('cuentas/', api_cuentas, name='api_cuentas'),
     path('crear-gasto/', api_crear_gasto, name='api_crear_gasto'),
     path('coordinador/eventos/', api_mis_eventos),
     path('coordinador/eventos/<int:asignacion_id>/', api_evento_detalle),
@@ -74,6 +76,7 @@ urlpatterns = [
     path('coordinador/material/<int:item_id>/quitar/', api_quitar_material_evento),
     path('coordinador/catalogo-materiales/', api_catalogo_materiales),
     path('coordinador/eventos/<int:asignacion_id>/material/enviar/', api_enviar_lista_coordinador),
+    path('coordinador/solicitudes-material/<int:solicitud_id>/revisar/', api_revisar_solicitud_material),
     path('encargado/listas/', api_listas_material_encargado),
     path('encargado/listas/<int:lista_id>/', api_lista_material_detalle_encargado),
     path('encargado/listas/<int:lista_id>/surtir/', api_surtir_lista),
@@ -103,11 +106,17 @@ urlpatterns = [
 
     # ── Bot WhatsApp ──────────────────────────────────────────────────
     path('bot/cliente/', bot_views.bot_cliente),
+    path('bot/empleados/telefonos/', bot_views.bot_empleados_telefonos),
     path('bot/disponibilidad/', bot_views.bot_disponibilidad),
     path('bot/manteles-regalo/', bot_views.bot_manteles_regalo),
     path('bot/promo-mantel/preview/', bot_views.bot_promo_mantel_preview),
     path('bot/cotizacion/', bot_views.bot_cotizacion),
     path('bot/renta/crear/', bot_views.bot_renta_crear),
     path('bot/renta/', bot_views.bot_renta_detalle),
+    path('bot/renta/<str:folio>/pago/', bot_views.bot_renta_pago),
+    path('bot/renta/<str:folio>/cancelar/', bot_views.bot_renta_cancelar),
+    path('bot/renta/<str:folio>/editar/', bot_views.bot_renta_editar),
+    path('bot/renta/<str:folio>/validacion/', bot_views.bot_renta_validacion),
+    path('bot/temporada/', bot_views.bot_temporada_check),
     path('bot/renta/<str:folio>/', bot_views.bot_renta_detalle),
 ]

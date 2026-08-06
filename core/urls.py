@@ -49,6 +49,16 @@ urlpatterns = [
     path('rentas/<int:renta_id>/asignar-coordinador/', views.asignar_coordinador_animacion, name='asignar_coordinador_animacion'),
     path('rentas/<int:pk>/marcar-recolectado/', views.marcar_recolectado, name='marcar_recolectado'),
 
+    # ─── Cotizador ───────────────────────────────────────────────────
+    path('cotizaciones/', views.lista_cotizaciones, name='lista_cotizaciones'),
+    path('cotizaciones/nueva/normal/', views.nueva_cotizacion_normal, name='nueva_cotizacion_normal'),
+    path('cotizaciones/nueva/proyecto/', views.nueva_cotizacion_proyecto, name='nueva_cotizacion_proyecto'),
+    path('cotizaciones/<int:cotizacion_id>/', views.detalle_cotizacion, name='detalle_cotizacion'),
+    path('cotizaciones/<int:cotizacion_id>/editar/', views.editar_cotizacion, name='editar_cotizacion'),
+    path('cotizaciones/<int:cotizacion_id>/pdf/', views.cotizacion_pdf, name='cotizacion_pdf'),
+    path('cotizaciones/<int:cotizacion_id>/status/', views.cambiar_status_cotizacion, name='cambiar_status_cotizacion'),
+    path('cotizaciones/<int:cotizacion_id>/convertir/', views.convertir_cotizacion, name='convertir_cotizacion'),
+
     # ─── Rutas de entrega ────────────────────────────────────────────
     path('rutas/', views.lista_rutas, name='lista_rutas'),
     path('rutas/crear/', views.crear_ruta, name='crear_ruta'),
@@ -143,6 +153,7 @@ urlpatterns = [
     path('mis-eventos/<int:asignacion_id>/', views.detalle_evento, name='detalle_evento'),
     path('mis-eventos/<int:asignacion_id>/agregar-material/', views.agregar_material_evento, name='agregar_material_evento'),
     path('material-evento/<int:material_evento_id>/eliminar/', views.eliminar_material_evento, name='eliminar_material_evento'),
+    path('solicitudes-material/<int:solicitud_id>/revisar/', views.revisar_solicitud_material, name='revisar_solicitud_material'),
 
     # ─── Encargado de material ───────────────────────────────────────
     path('encargado/', views.home_encargado, name='home_encargado'),
