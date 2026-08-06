@@ -3,29 +3,184 @@
 <head>
 <meta charset="UTF-8">
 <style>
-  @page { size: Letter; margin: 2cm; }
-  body { font-family: Georgia, 'Times New Roman', serif; font-size: 12px; color: #222; line-height: 1.5; }
-  h1 { font-size: 18px; margin: 0 0 4px; }
-  h2 { font-size: 14px; margin: 18px 0 6px; }
-  .muted { color: #555; }
-  .intro { white-space: pre-wrap; margin: 14px 0 18px; }
-  .zona { margin-bottom: 14px; }
-  .zona-title { font-weight: bold; }
-  .zona-body { white-space: pre-wrap; margin: 4px 0 0; }
-  .concepto { margin-bottom: 14px; }
-  .concepto-title { font-weight: bold; }
-  table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-  th, td { border-bottom: 1px solid #ccc; padding: 6px 4px; text-align: left; }
-  th { border-bottom: 2px solid #222; }
+  @page { size: Letter; margin: 1.6cm 1.8cm; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-size: 11.5px;
+    color: #1a2e1a;
+    line-height: 1.5;
+    margin: 0;
+  }
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding-bottom: 14px;
+    border-bottom: 3px solid #0f3d22;
+    margin-bottom: 18px;
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .brand img {
+    height: 64px;
+    width: auto;
+    object-fit: contain;
+  }
+  .brand-text .name {
+    font-size: 20px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    color: #0f3d22;
+    margin: 0;
+    text-transform: uppercase;
+  }
+  .brand-text .tag {
+    font-size: 10px;
+    color: #5a7060;
+    margin: 2px 0 0;
+  }
+  .meta { text-align: right; }
+  .meta .label {
+    font-size: 10px;
+    color: #5a7060;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+  }
+  .meta .folio {
+    display: inline-block;
+    background: #e8f5e9;
+    color: #0f3d22;
+    font-weight: 700;
+    font-size: 12px;
+    padding: 6px 12px;
+    border-radius: 6px;
+  }
+  .intro {
+    white-space: pre-wrap;
+    margin: 0 0 18px;
+    color: #243024;
+  }
+  h2 {
+    font-size: 12px;
+    color: #0f3d22;
+    margin: 20px 0 8px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid #ddeadd;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+  }
+  .zona {
+    margin-bottom: 12px;
+    padding: 10px 12px;
+    background: #f7faf7;
+    border-radius: 6px;
+    border-left: 3px solid #16a34a;
+  }
+  .zona-title { font-weight: 700; color: #162016; }
+  .zona-body { white-space: pre-wrap; margin: 4px 0 0; color: #3a4f3a; }
+  .concepto { margin-bottom: 12px; }
+  .concepto-title { font-weight: 700; color: #162016; }
+  table.conceptos {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 4px;
+  }
+  table.conceptos thead th {
+    background: #0f3d22;
+    color: #fff;
+    font-size: 10.5px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    padding: 8px 10px;
+    text-align: left;
+  }
+  table.conceptos thead th.right { text-align: right; }
+  table.conceptos tbody td {
+    padding: 9px 10px;
+    border-bottom: 1px solid #ddeadd;
+  }
+  table.conceptos tbody tr:nth-child(even) td { background: #f7faf7; }
   .right { text-align: right; }
-  .totals { margin-top: 14px; width: 320px; margin-left: auto; }
-  .totals td { border: none; padding: 3px 0; }
-  .firma { margin-top: 36px; white-space: pre-wrap; }
+  .totals-wrap {
+    margin-top: 16px;
+    width: 300px;
+    margin-left: auto;
+  }
+  .totals-wrap table { width: 100%; border-collapse: collapse; }
+  .totals-wrap td {
+    padding: 4px 0;
+    border: none;
+    color: #3a4f3a;
+  }
+  .totals-wrap tr.total td {
+    padding-top: 8px;
+    border-top: 2px solid #0f3d22;
+    font-size: 13px;
+    color: #0f3d22;
+  }
+  .note {
+    margin-top: 14px;
+    padding: 10px 12px;
+    background: #f4f8f4;
+    border-left: 3px solid #16a34a;
+    color: #5a7060;
+    font-size: 10.5px;
+  }
+  .condiciones { margin-top: 16px; }
+  .condiciones strong {
+    color: #0f3d22;
+    display: block;
+    margin-bottom: 4px;
+  }
+  .cierre { margin-top: 14px; color: #3a4f3a; }
+  .firma {
+    margin-top: 36px;
+    white-space: pre-wrap;
+    color: #162016;
+  }
+  .firma .atentamente {
+    font-size: 10px;
+    letter-spacing: 1px;
+    color: #5a7060;
+    margin-bottom: 14px;
+  }
+  .firma .lugar {
+    margin-top: 16px;
+    color: #5a7060;
+    font-size: 11px;
+  }
+  .footer-line {
+    margin-top: 28px;
+    border-top: 1px solid #ddeadd;
+    padding-top: 8px;
+    font-size: 9.5px;
+    color: #8fa890;
+    text-align: center;
+  }
 </style>
 </head>
 <body>
-  <h1>TROTAMUNDOS</h1>
-  <p class="muted">Cotización de proyecto {{ cotizacion.folio }}</p>
+  <div class="header">
+    <div class="brand">
+      {% if logo_url %}<img src="{{ logo_url }}" alt="Trotamundos">{% endif %}
+      <div class="brand-text">
+        <p class="name">Trotamundos</p>
+        <p class="tag">Proyectos recreativos</p>
+      </div>
+    </div>
+    <div class="meta">
+      <div class="label">Cotización de proyecto</div>
+      <div class="folio">{{ cotizacion.folio }}</div>
+    </div>
+  </div>
+
   <div class="intro">{{ cotizacion.intro }}</div>
 
   {% if zonas %}
@@ -39,7 +194,7 @@
   {% endif %}
 
   <h2>Detalle de conceptos</h2>
-  {% for c in conceptos %}
+  {% for c in conceptos_fmt %}
   <div class="concepto">
     <div class="concepto-title">{{ forloop.counter }}. {{ c.nombre }} — ${{ c.monto }}</div>
     {% if c.descripcion %}<div class="zona-body">{{ c.descripcion }}</div>{% endif %}
@@ -47,12 +202,12 @@
   {% endfor %}
 
   <h2>Resumen</h2>
-  <table>
+  <table class="conceptos">
     <thead>
       <tr><th>Concepto</th><th class="right">Monto</th></tr>
     </thead>
     <tbody>
-      {% for c in conceptos %}
+      {% for c in conceptos_fmt %}
       <tr>
         <td>{{ c.nombre }}</td>
         <td class="right">${{ c.monto }}</td>
@@ -61,30 +216,37 @@
     </tbody>
   </table>
 
-  <table class="totals">
-    <tr><td>Subtotal</td><td class="right">${{ cotizacion.subtotal }}</td></tr>
-    {% if cotizacion.aplicar_iva %}<tr><td>IVA (16%)</td><td class="right">${{ cotizacion.monto_iva }}</td></tr>{% endif %}
-    {% if cotizacion.aplicar_isr %}<tr><td>ISR (1.25%)</td><td class="right">${{ cotizacion.monto_isr }}</td></tr>{% endif %}
-    <tr><td><strong>Costo Total del proyecto</strong></td><td class="right"><strong>${{ cotizacion.total }}</strong></td></tr>
-  </table>
+  <div class="totals-wrap">
+    <table>
+      <tr><td>Subtotal</td><td class="right">${{ subtotal_fmt }}</td></tr>
+      {% if cotizacion.aplicar_iva %}<tr><td>IVA (16%)</td><td class="right">${{ iva_fmt }}</td></tr>{% endif %}
+      {% if cotizacion.aplicar_isr %}<tr><td>ISR (1.25%)</td><td class="right">${{ isr_fmt }}</td></tr>{% endif %}
+      <tr class="total"><td><strong>Costo total del proyecto</strong></td><td class="right"><strong>${{ total_fmt }}</strong></td></tr>
+    </table>
+  </div>
 
   {% if cotizacion.aplicar_iva or cotizacion.aplicar_isr %}
-  <p class="muted" style="margin-top:12px;">
-    Nota: Los montos son en pesos mexicanos.
+  <div class="note">
+    Nota: montos en pesos mexicanos.
     {% if cotizacion.aplicar_iva %}Se suma IVA (16%){% endif %}
     {% if cotizacion.aplicar_isr %} y se resta ISR (1.25%){% endif %}
     sobre el subtotal.
-  </p>
+  </div>
   {% else %}
-  <p class="muted" style="margin-top:12px;">Nota. Estos costos no incluyen IVA.</p>
+  <div class="note">Nota: estos costos no incluyen IVA. Montos en pesos mexicanos (MXN).</div>
   {% endif %}
 
-  <p style="margin-top:14px;"><strong>Condiciones de pago:</strong><br>{{ cotizacion.condiciones_pago }}</p>
-  <p>Me despido cordialmente no sin antes reiterarles que todo lo aquí descrito son propuestas y que estamos a sus órdenes para cualquier duda o modificación al proyecto.</p>
-  <div class="firma">
-    ATENTAMENTE<br><br>
-    {{ cotizacion.firmado_por }}<br><br>
-    {{ lugar_fecha }}
+  <div class="condiciones">
+    <strong>Condiciones de pago</strong>
+    {{ cotizacion.condiciones_pago }}
   </div>
+  <p class="cierre">Me despido cordialmente no sin antes reiterarles que todo lo aquí descrito son propuestas y que estamos a sus órdenes para cualquier duda o modificación al proyecto.</p>
+
+  <div class="firma">
+    <div class="atentamente">ATENTAMENTE</div>
+    {{ cotizacion.firmado_por }}
+    <div class="lugar">{{ lugar_fecha }}</div>
+  </div>
+  <div class="footer-line">Trotamundos · Colima, Col. · Documento generado electrónicamente</div>
 </body>
 </html>

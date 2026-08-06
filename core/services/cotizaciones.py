@@ -3,7 +3,9 @@
 from datetime import date, datetime, time
 from decimal import Decimal, ROUND_HALF_UP
 from io import BytesIO
+from pathlib import Path
 
+from django.conf import settings
 from django.db import transaction
 from django.template.loader import render_to_string
 from django.utils import timezone
@@ -21,6 +23,10 @@ from core.services.rentas import RentaServiceError, crear_renta
 
 IVA_RATE = Decimal('0.16')
 ISR_RATE = Decimal('0.0125')
+MESES_ES = (
+    'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+    'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
+)
 
 
 class CotizacionServiceError(Exception):
@@ -66,12 +72,31 @@ def parse_hora(value):
 
 def _fmt_fecha(value, fmt='%d/%m/%Y'):
     d = parse_fecha(value)
-    return d.strftime(fmt) if d else ''
+    if not d:
+        return ''
+    if fmt in ('largo', '%d de %B de %Y'):
+        return f'{d.day} de {MESES_ES[d.month - 1]} de {d.year}'
+    return d.strftime(fmt)
 
 
 def _fmt_hora(value, fmt='%H:%M'):
     t = parse_hora(value)
     return t.strftime(fmt) if t else ''
+
+
+def _fmt_money(value):
+    return f'{_money(value):,.2f}'
+
+
+def _logo_file_uri() -> str:
+    candidates = [
+        Path(settings.BASE_DIR) / 'core' / 'static' / 'img' / 'logo1.png',
+        Path(settings.BASE_DIR) / 'staticfiles' / 'img' / 'logo1.png',
+    ]
+    for path in candidates:
+        if path.exists():
+            return path.resolve().as_uri()
+    return ''
 
 
 def recalcular_totales(cotizacion: Cotizacion) -> Cotizacion:
@@ -98,7 +123,7 @@ def generar_intro(cotizacion: Cotizacion) -> str:
         if cotizacion.asistentes:
             partes.append(f'para {cotizacion.asistentes} asistentes')
         if cotizacion.fecha_evento:
-            fecha = _fmt_fecha(cotizacion.fecha_evento, '%d de %B de %Y')
+            fecha = _fmt_fecha(cotizacion.fecha_evento, 'largo')
             horario = ''
             if cotizacion.hora_inicio and cotizacion.hora_fin:
                 horario = (
@@ -108,7 +133,7 @@ def generar_intro(cotizacion: Cotizacion) -> str:
             sede = f' en {cotizacion.sede}' if cotizacion.sede else ''
             partes.append(f'a realizarse{sede} el día {fecha}{horario}')
         return f'{dest}\nPRESENTE\n\n{", ".join(partes)}.'.replace('  ', ' ')
-    fecha = _fmt_fecha(cotizacion.fecha_evento)
+    fecha = _fmt_fecha(cotizacion.fecha_evento, 'largo') if cotizacion.fecha_evento else ''
     return (
         f'{dest}\nPRESENTE\n\n'
         f'Por medio del presente le presentamos la cotización de renta'
@@ -318,17 +343,33 @@ def render_pdf_bytes(cotizacion: Cotizacion) -> bytes:
         if cotizacion.tipo == 'PROYECTO'
         else 'core/cotizacion_normal_pdf.html'
     )
+    hoy = timezone.localdate()
+    conceptos = list(cotizacion.conceptos.all())
     html_string = render_to_string(template, {
         'cotizacion': cotizacion,
         'zonas': cotizacion.zonas.all(),
-        'conceptos': cotizacion.conceptos.all(),
-        'fecha': timezone.localdate(),
-        'lugar_fecha': f'Colima, Col., a {timezone.localdate().strftime("%d de %B de %Y")}',
+        'conceptos': conceptos,
+        'fecha': hoy,
+        'lugar_fecha': f'Colima, Col., a {_fmt_fecha(hoy, "largo")}',
+        'logo_url': _logo_file_uri(),
+        'subtotal_fmt': _fmt_money(cotizacion.subtotal),
+        'iva_fmt': _fmt_money(cotizacion.monto_iva),
+        'isr_fmt': _fmt_money(cotizacion.monto_isr),
+        'total_fmt': _fmt_money(cotizacion.total),
+        'conceptos_fmt': [
+            {
+                'nombre': c.nombre,
+                'descripcion': c.descripcion,
+                'cantidad': c.cantidad,
+                'monto': _fmt_money(c.monto),
+            }
+            for c in conceptos
+        ],
     })
     try:
         from weasyprint import HTML
         buffer = BytesIO()
-        HTML(string=html_string).write_pdf(buffer)
+        HTML(string=html_string, base_url=Path(settings.BASE_DIR).resolve().as_uri() + '/').write_pdf(buffer)
         return buffer.getvalue()
     except Exception:
         # Fallback: return HTML bytes if WeasyPrint unavailable
