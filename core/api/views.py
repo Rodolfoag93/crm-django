@@ -3278,7 +3278,21 @@ def _cotizacion_to_dict(c, detalle=False):
     }
     if detalle:
         data['zonas'] = [
-            {'id': z.id, 'orden': z.orden, 'titulo': z.titulo, 'descripcion': z.descripcion}
+            {
+                'id': z.id,
+                'orden': z.orden,
+                'titulo': z.titulo,
+                'descripcion': z.descripcion,
+                'imagenes': [
+                    {
+                        'id': img.id,
+                        'url': img.imagen.url if img.imagen else '',
+                        'pie': img.pie,
+                        'orden': img.orden,
+                    }
+                    for img in z.imagenes.all()
+                ],
+            }
             for z in c.zonas.all()
         ]
         data['conceptos'] = [
@@ -3364,7 +3378,9 @@ def api_crm_cotizaciones(request):
         sincronizar_conceptos(c, request.data.get('conceptos') or [])
         if tipo == 'PROYECTO':
             sincronizar_zonas(c, request.data.get('zonas') or [])
-        c.refresh_from_db()
+        c = Cotizacion.objects.select_related('cliente', 'renta').prefetch_related(
+            'zonas__imagenes', 'conceptos__producto'
+        ).get(id=c.id)
         return Response(_cotizacion_to_dict(c, detalle=True), status=201)
     except CotizacionServiceError as exc:
         return Response({'error': exc.message}, status=exc.status)
@@ -3378,7 +3394,9 @@ def api_crm_cotizacion_detalle(request, cotizacion_id):
     if not request.user.is_staff:
         return Response({'error': 'No autorizado.'}, status=403)
     c = get_object_or_404(
-        Cotizacion.objects.select_related('cliente', 'renta').prefetch_related('zonas', 'conceptos__producto'),
+        Cotizacion.objects.select_related('cliente', 'renta').prefetch_related(
+            'zonas__imagenes', 'conceptos__producto'
+        ),
         id=cotizacion_id,
     )
     if request.method == 'GET':
@@ -3413,19 +3431,70 @@ def api_crm_cotizacion_detalle(request, cotizacion_id):
             c.aplicar_iva = bool(request.data.get('aplicar_iva'))
         if 'aplicar_isr' in request.data:
             c.aplicar_isr = bool(request.data.get('aplicar_isr'))
-        if not c.intro:
+        # Regenerar intro automático si el cliente no envió intro custom
+        if 'intro' not in request.data or not (request.data.get('intro') or '').strip():
+            c.intro = generar_intro(c)
+        elif not c.intro:
             c.intro = generar_intro(c)
         c.save()
         if 'conceptos' in request.data:
             sincronizar_conceptos(c, request.data.get('conceptos') or [])
         if c.tipo == 'PROYECTO' and 'zonas' in request.data:
             sincronizar_zonas(c, request.data.get('zonas') or [])
-        c.refresh_from_db()
+        c = Cotizacion.objects.select_related('cliente', 'renta').prefetch_related(
+            'zonas__imagenes', 'conceptos__producto'
+        ).get(id=c.id)
         return Response(_cotizacion_to_dict(c, detalle=True))
     except CotizacionServiceError as exc:
         return Response({'error': exc.message}, status=exc.status)
     except Exception as exc:
         return Response({'error': str(exc)}, status=400)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def api_crm_cotizacion_zona_imagen(request, cotizacion_id, zona_id):
+    if not request.user.is_staff:
+        return Response({'error': 'No autorizado.'}, status=403)
+    from core.models import CotizacionZona, CotizacionZonaImagen
+    c = get_object_or_404(Cotizacion, id=cotizacion_id)
+    if c.status == 'CONVERTIDA':
+        return Response({'error': 'La cotización ya fue convertida.'}, status=400)
+    zona = get_object_or_404(CotizacionZona, id=zona_id, cotizacion=c)
+    archivo = request.FILES.get('imagen') or request.FILES.get('file')
+    if not archivo:
+        return Response({'error': 'imagen requerida'}, status=400)
+    if zona.imagenes.count() >= 6:
+        return Response({'error': 'Máximo 6 imágenes por zona.'}, status=400)
+    img = CotizacionZonaImagen.objects.create(
+        zona=zona,
+        imagen=archivo,
+        pie=(request.data.get('pie') or '').strip(),
+        orden=zona.imagenes.count(),
+    )
+    return Response({
+        'id': img.id,
+        'url': img.imagen.url if img.imagen else '',
+        'pie': img.pie,
+        'orden': img.orden,
+    }, status=201)
+
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def api_crm_cotizacion_zona_imagen_borrar(request, cotizacion_id, zona_id, imagen_id):
+    if not request.user.is_staff:
+        return Response({'error': 'No autorizado.'}, status=403)
+    from core.models import CotizacionZona, CotizacionZonaImagen
+    c = get_object_or_404(Cotizacion, id=cotizacion_id)
+    if c.status == 'CONVERTIDA':
+        return Response({'error': 'La cotización ya fue convertida.'}, status=400)
+    zona = get_object_or_404(CotizacionZona, id=zona_id, cotizacion=c)
+    img = get_object_or_404(CotizacionZonaImagen, id=imagen_id, zona=zona)
+    if img.imagen:
+        img.imagen.delete(save=False)
+    img.delete()
+    return Response({'ok': True})
 
 
 @api_view(['POST'])

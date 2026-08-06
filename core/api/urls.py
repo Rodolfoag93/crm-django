@@ -19,6 +19,7 @@ from core.api.views import (
     api_calificar_encargado, api_calificar_coordinador_encargado, api_estado_calificaciones_lista,
     api_crm_cotizaciones, api_crm_cotizacion_detalle, api_crm_cotizacion_status,
     api_crm_cotizacion_convertir, api_crm_cotizacion_pdf,
+    api_crm_cotizacion_zona_imagen, api_crm_cotizacion_zona_imagen_borrar,
 )
 from core.views.rutas import api_mis_rutas, api_confirmar_entrega, api_confirmar_recogida
 from core.api import bot_views
@@ -107,6 +108,8 @@ urlpatterns = [
     path('crm/cotizaciones/<int:cotizacion_id>/status/', api_crm_cotizacion_status, name='api_crm_cotizacion_status'),
     path('crm/cotizaciones/<int:cotizacion_id>/convertir/', api_crm_cotizacion_convertir, name='api_crm_cotizacion_convertir'),
     path('crm/cotizaciones/<int:cotizacion_id>/pdf/', api_crm_cotizacion_pdf, name='api_crm_cotizacion_pdf'),
+    path('crm/cotizaciones/<int:cotizacion_id>/zonas/<int:zona_id>/imagenes/', api_crm_cotizacion_zona_imagen, name='api_crm_cotizacion_zona_imagen'),
+    path('crm/cotizaciones/<int:cotizacion_id>/zonas/<int:zona_id>/imagenes/<int:imagen_id>/', api_crm_cotizacion_zona_imagen_borrar, name='api_crm_cotizacion_zona_imagen_borrar'),
     path('encargado/listas/<int:lista_id>/calificar-coordinador/', api_calificar_coordinador_encargado),
     path('coordinador/listas/<int:lista_id>/calificar-encargado/', api_calificar_encargado),
     path('listas/<int:lista_id>/calificaciones/', api_estado_calificaciones_lista),

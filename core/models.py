@@ -1474,6 +1474,22 @@ class CotizacionZona(models.Model):
         return f"{self.orden}. {self.titulo}"
 
 
+class CotizacionZonaImagen(models.Model):
+    zona = models.ForeignKey(CotizacionZona, on_delete=models.CASCADE, related_name='imagenes')
+    imagen = models.ImageField(upload_to='cotizaciones/zonas/')
+    pie = models.CharField(max_length=200, blank=True, default='')
+    orden = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['orden', 'id']
+        verbose_name = 'Imagen de zona'
+        verbose_name_plural = 'Imágenes de zona'
+
+    def __str__(self):
+        return f"Img zona {self.zona_id} ({self.orden})"
+
+
 class CotizacionConcepto(models.Model):
     cotizacion = models.ForeignKey(Cotizacion, on_delete=models.CASCADE, related_name='conceptos')
     orden = models.PositiveIntegerField(default=0)

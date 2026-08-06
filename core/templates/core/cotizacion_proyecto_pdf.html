@@ -189,6 +189,16 @@
   <div class="zona">
     <div class="zona-title">Zona {{ forloop.counter }}. {{ z.titulo }}</div>
     <div class="zona-body">{{ z.descripcion }}</div>
+    {% if z.imagenes %}
+    <div class="zona-imgs" style="margin-top:10px;">
+      {% for img in z.imagenes %}
+      <div style="display:inline-block; width:48%; margin:0 1% 10px 0; vertical-align:top;">
+        <img src="{{ img.url }}" alt="{{ img.pie|default:z.titulo }}" style="width:100%; max-height:180px; object-fit:cover; border-radius:4px; border:1px solid #ddeadd;">
+        {% if img.pie %}<div style="font-size:9.5px; color:#5a7060; margin-top:3px;">{{ img.pie }}</div>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
   </div>
   {% endfor %}
   {% endif %}

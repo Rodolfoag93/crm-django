@@ -142,17 +142,32 @@ def generar_intro(cotizacion: Cotizacion) -> str:
 
 
 def sincronizar_zonas(cotizacion: Cotizacion, zonas_data):
-    cotizacion.zonas.all().delete()
+    """Actualiza zonas por id (conserva imágenes). Crea nuevas y borra las omitidas."""
+    keep_ids = []
     for i, z in enumerate(zonas_data or []):
         titulo = (z.get('titulo') or '').strip()
         if not titulo:
             continue
-        CotizacionZona.objects.create(
-            cotizacion=cotizacion,
-            orden=int(z.get('orden', i)),
-            titulo=titulo,
-            descripcion=(z.get('descripcion') or '').strip(),
-        )
+        zona_id = z.get('id')
+        descripcion = (z.get('descripcion') or '').strip()
+        orden = int(z.get('orden', i))
+        zona = None
+        if zona_id:
+            zona = CotizacionZona.objects.filter(id=zona_id, cotizacion=cotizacion).first()
+        if zona:
+            zona.orden = orden
+            zona.titulo = titulo
+            zona.descripcion = descripcion
+            zona.save(update_fields=['orden', 'titulo', 'descripcion'])
+        else:
+            zona = CotizacionZona.objects.create(
+                cotizacion=cotizacion,
+                orden=orden,
+                titulo=titulo,
+                descripcion=descripcion,
+            )
+        keep_ids.append(zona.id)
+    cotizacion.zonas.exclude(id__in=keep_ids).delete()
 
 
 def sincronizar_conceptos(cotizacion: Cotizacion, conceptos_data):
@@ -336,6 +351,16 @@ def convertir_a_renta(cotizacion: Cotizacion, lider_id=None, apoyo_ids=None, ant
     return resultado
 
 
+def _imagen_file_uri(field_file) -> str:
+    if not field_file:
+        return ''
+    try:
+        path = Path(field_file.path)
+        return path.resolve().as_uri() if path.exists() else ''
+    except Exception:
+        return ''
+
+
 def render_pdf_bytes(cotizacion: Cotizacion) -> bytes:
     recalcular_totales(cotizacion)
     template = (
@@ -345,9 +370,21 @@ def render_pdf_bytes(cotizacion: Cotizacion) -> bytes:
     )
     hoy = timezone.localdate()
     conceptos = list(cotizacion.conceptos.all())
+    zonas_fmt = []
+    for z in cotizacion.zonas.prefetch_related('imagenes').all():
+        imgs = []
+        for img in z.imagenes.all():
+            uri = _imagen_file_uri(img.imagen)
+            if uri:
+                imgs.append({'url': uri, 'pie': img.pie or ''})
+        zonas_fmt.append({
+            'titulo': z.titulo,
+            'descripcion': z.descripcion,
+            'imagenes': imgs,
+        })
     html_string = render_to_string(template, {
         'cotizacion': cotizacion,
-        'zonas': cotizacion.zonas.all(),
+        'zonas': zonas_fmt,
         'conceptos': conceptos,
         'fecha': hoy,
         'lugar_fecha': f'Colima, Col., a {_fmt_fecha(hoy, "largo")}',
@@ -362,6 +399,7 @@ def render_pdf_bytes(cotizacion: Cotizacion) -> bytes:
                 'descripcion': c.descripcion,
                 'cantidad': c.cantidad,
                 'monto': _fmt_money(c.monto),
+                'es_servicio': c.producto_id is None,
             }
             for c in conceptos
         ],

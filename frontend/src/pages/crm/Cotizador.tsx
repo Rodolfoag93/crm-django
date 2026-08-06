@@ -24,9 +24,18 @@ interface ConceptoDraft {
   producto_id: number | null
 }
 
+interface ZonaImagen {
+  id: number
+  url: string
+  pie?: string
+}
+
 interface ZonaDraft {
+  id?: number
   titulo: string
   descripcion: string
+  imagenes: ZonaImagen[]
+  pendingFiles: File[]
 }
 
 interface ClienteEncontrado {
@@ -65,10 +74,16 @@ export default function CotizadorCRM() {
   const [tipoFiltro, setTipoFiltro] = useState('')
   const [statusFiltro, setStatusFiltro] = useState('')
   const [showForm, setShowForm] = useState(false)
+  const [editingId, setEditingId] = useState<number | null>(null)
   const [tipoNueva, setTipoNueva] = useState<Tipo>('NORMAL')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [detalle, setDetalle] = useState<any>(null)
+  const [showServicio, setShowServicio] = useState(false)
+  const [servicioNombre, setServicioNombre] = useState('')
+  const [servicioDesc, setServicioDesc] = useState('')
+  const [servicioCant, setServicioCant] = useState('1')
+  const [servicioMonto, setServicioMonto] = useState('')
 
   const [clienteId, setClienteId] = useState<number | null>(null)
   const [clienteNuevo, setClienteNuevo] = useState(false)
@@ -189,7 +204,16 @@ export default function CotizadorCRM() {
     [conceptos],
   )
 
+  const resetServicioForm = () => {
+    setShowServicio(false)
+    setServicioNombre('')
+    setServicioDesc('')
+    setServicioCant('1')
+    setServicioMonto('')
+  }
+
   const abrirNueva = (tipo: Tipo) => {
+    setEditingId(null)
     setTipoNueva(tipo)
     setShowForm(true)
     setDetalle(null)
@@ -205,10 +229,65 @@ export default function CotizadorCRM() {
     setAplicarIva(tipo === 'PROYECTO')
     setAplicarIsr(tipo === 'PROYECTO')
     setConceptos([])
-    setZonas(tipo === 'PROYECTO' ? [{ titulo: 'Bienvenida', descripcion: '' }] : [])
+    setZonas(tipo === 'PROYECTO' ? [{ titulo: 'Bienvenida', descripcion: '', imagenes: [], pendingFiles: [] }] : [])
     setQueryProducto('')
     setResultProductos([])
     setCantidadProd('1')
+    resetServicioForm()
+  }
+
+  const cargarEnFormulario = (data: any) => {
+    setEditingId(data.id)
+    setTipoNueva(data.tipo)
+    setShowForm(true)
+    setDetalle(null)
+    setError('')
+    setClienteId(data.cliente_id)
+    setClienteNuevo(false)
+    setNombreCliente(data.cliente_nombre || '')
+    setTelefonoCliente('')
+    setBusquedaCliente('')
+    setSugerencias([])
+    setDestinatario(data.destinatario || data.cliente_nombre || '')
+    setNombreEvento(data.nombre_evento || '')
+    setAsistentes(data.asistentes != null ? String(data.asistentes) : '')
+    setSede(data.sede || '')
+    setFecha(data.fecha_evento || '')
+    setHoraInicio((data.hora_inicio || '').slice(0, 5))
+    setHoraFin((data.hora_fin || '').slice(0, 5))
+    setAplicarIva(Boolean(data.aplicar_iva))
+    setAplicarIsr(Boolean(data.aplicar_isr))
+    setConceptos((data.conceptos || []).map((c: any) => ({
+      nombre: c.nombre,
+      descripcion: c.descripcion || '',
+      cantidad: c.cantidad || 1,
+      monto: String(c.monto ?? '0'),
+      producto_id: c.producto_id ?? null,
+    })))
+    setZonas((data.zonas || []).map((z: any) => ({
+      id: z.id,
+      titulo: z.titulo || '',
+      descripcion: z.descripcion || '',
+      imagenes: z.imagenes || [],
+      pendingFiles: [],
+    })))
+    setQueryProducto('')
+    setResultProductos([])
+    setCantidadProd('1')
+    resetServicioForm()
+  }
+
+  const abrirEditar = async (id: number) => {
+    try {
+      const { data } = await api.get(`/crm/cotizaciones/${id}/`)
+      if (data.status === 'CONVERTIDA') {
+        alert('No se puede editar una cotización ya convertida a renta.')
+        return
+      }
+      cargarEnFormulario(data)
+    } catch (e: any) {
+      alert(e?.response?.data?.error || 'No se pudo cargar la cotización')
+    }
   }
 
   const addProducto = (p: ProductoEncontrado) => {
@@ -225,17 +304,50 @@ export default function CotizadorCRM() {
     setResultProductos([])
   }
 
-  const addConceptoLibre = () => {
-    const nombre = window.prompt('Nombre del concepto')
-    if (!nombre) return
-    const monto = window.prompt('Monto', '0') || '0'
+  const addConceptoServicio = () => {
+    if (!servicioNombre.trim()) return
+    const cant = Math.max(1, parseInt(servicioCant || '1', 10))
     setConceptos(prev => [...prev, {
-      nombre,
-      descripcion: '',
-      cantidad: 1,
-      monto: String(Number(monto) || 0),
+      nombre: servicioNombre.trim(),
+      descripcion: servicioDesc.trim(),
+      cantidad: cant,
+      monto: String(Number(servicioMonto) || 0),
       producto_id: null,
     }])
+    resetServicioForm()
+  }
+
+  const subirImagenesPendientes = async (cotizacionId: number, zonasGuardadas: any[], drafts: ZonaDraft[]) => {
+    const conTitulo = drafts.filter(z => z.titulo.trim())
+    for (let i = 0; i < conTitulo.length; i++) {
+      const draft = conTitulo[i]
+      const saved = zonasGuardadas[i]
+      if (!saved?.id || !draft.pendingFiles?.length) continue
+      for (const file of draft.pendingFiles) {
+        const fd = new FormData()
+        fd.append('imagen', file)
+        await api.post(
+          `/crm/cotizaciones/${cotizacionId}/zonas/${saved.id}/imagenes/`,
+          fd,
+          { headers: { 'Content-Type': 'multipart/form-data' } },
+        )
+      }
+    }
+  }
+
+  const borrarImagenZona = async (zonaIdx: number, imagenId: number) => {
+    const zona = zonas[zonaIdx]
+    if (zona?.id && editingId) {
+      try {
+        await api.delete(`/crm/cotizaciones/${editingId}/zonas/${zona.id}/imagenes/${imagenId}/`)
+      } catch (e: any) {
+        alert(e?.response?.data?.error || 'No se pudo borrar la imagen')
+        return
+      }
+    }
+    setZonas(arr => arr.map((z, i) => i === zonaIdx
+      ? { ...z, imagenes: z.imagenes.filter(img => img.id !== imagenId) }
+      : z))
   }
 
   const guardar = async () => {
@@ -271,11 +383,26 @@ export default function CotizadorCRM() {
         aplicar_iva: aplicarIva,
         aplicar_isr: aplicarIsr,
         conceptos: conceptos.map((c, i) => ({ ...c, orden: i })),
-        zonas: zonas.map((z, i) => ({ ...z, orden: i })),
+        zonas: zonas.map((z, i) => ({
+          id: z.id,
+          titulo: z.titulo,
+          descripcion: z.descripcion,
+          orden: i,
+        })),
       }
-      const { data } = await api.post('/crm/cotizaciones/', payload)
+      const { data } = editingId
+        ? await api.put(`/crm/cotizaciones/${editingId}/`, payload)
+        : await api.post('/crm/cotizaciones/', payload)
+
+      if (tipoNueva === 'PROYECTO') {
+        await subirImagenesPendientes(data.id, data.zonas || [], zonas)
+        const refreshed = await api.get(`/crm/cotizaciones/${data.id}/`)
+        setDetalle(refreshed.data)
+      } else {
+        setDetalle(data)
+      }
       setShowForm(false)
-      setDetalle(data)
+      setEditingId(null)
       fetchList()
     } catch (e: any) {
       const data = e?.response?.data
@@ -356,7 +483,9 @@ export default function CotizadorCRM() {
 
       {showForm && (
         <div className="bg-white rounded-xl border p-5 flex flex-col gap-4" style={{ borderColor: '#ddeadd' }}>
-          <h2 className="font-semibold" style={{ color: '#162016' }}>Nueva cotización {tipoNueva.toLowerCase()}</h2>
+          <h2 className="font-semibold" style={{ color: '#162016' }}>
+            {editingId ? 'Editar' : 'Nueva'} cotización {tipoNueva.toLowerCase()}
+          </h2>
           {error && <div className="text-sm text-red-600">{error}</div>}
 
           <div className="flex flex-col gap-3">
@@ -530,13 +659,89 @@ export default function CotizadorCRM() {
             <div>
               <div className="flex items-center justify-between mb-2">
                 <h3 className="text-sm font-semibold">Zonas narrativas</h3>
-                <button type="button" className="text-sm" style={{ color: '#0f3d22' }} onClick={() => setZonas(z => [...z, { titulo: '', descripcion: '' }])}>+ Zona</button>
+                <button
+                  type="button"
+                  className="text-sm"
+                  style={{ color: '#0f3d22' }}
+                  onClick={() => setZonas(z => [...z, { titulo: '', descripcion: '', imagenes: [], pendingFiles: [] }])}
+                >+ Zona</button>
               </div>
-              <div className="flex flex-col gap-2">
+              <div className="flex flex-col gap-3">
                 {zonas.map((z, i) => (
-                  <div key={i} className="border rounded-lg p-3" style={{ borderColor: '#ddeadd' }}>
-                    <input value={z.titulo} onChange={e => setZonas(arr => arr.map((x, idx) => idx === i ? { ...x, titulo: e.target.value } : x))} placeholder="Título" className="border rounded px-2 py-1 text-sm w-full mb-2" style={{ borderColor: '#ddeadd' }} />
-                    <textarea value={z.descripcion} onChange={e => setZonas(arr => arr.map((x, idx) => idx === i ? { ...x, descripcion: e.target.value } : x))} placeholder="Descripción" rows={2} className="border rounded px-2 py-1 text-sm w-full" style={{ borderColor: '#ddeadd' }} />
+                  <div key={z.id || i} className="border rounded-lg p-3 flex flex-col gap-2" style={{ borderColor: '#ddeadd' }}>
+                    <div className="flex gap-2">
+                      <input
+                        value={z.titulo}
+                        onChange={e => setZonas(arr => arr.map((x, idx) => idx === i ? { ...x, titulo: e.target.value } : x))}
+                        placeholder="Título de la zona"
+                        className="border rounded px-2 py-1 text-sm w-full"
+                        style={{ borderColor: '#ddeadd' }}
+                      />
+                      <button
+                        type="button"
+                        className="text-xs text-red-600 px-2"
+                        onClick={() => setZonas(arr => arr.filter((_, idx) => idx !== i))}
+                      >Quitar</button>
+                    </div>
+                    <textarea
+                      value={z.descripcion}
+                      onChange={e => setZonas(arr => arr.map((x, idx) => idx === i ? { ...x, descripcion: e.target.value } : x))}
+                      placeholder="Descripción / narrativa"
+                      rows={2}
+                      className="border rounded px-2 py-1 text-sm w-full"
+                      style={{ borderColor: '#ddeadd' }}
+                    />
+                    <div>
+                      <div className="text-xs font-medium mb-1.5" style={{ color: '#5a7060' }}>Imágenes de referencia (salen en el PDF)</div>
+                      <div className="flex flex-wrap gap-2 mb-2">
+                        {z.imagenes.map(img => (
+                          <div key={img.id} className="relative" style={{ width: 72, height: 72 }}>
+                            <img src={img.url} alt="" className="w-full h-full object-cover rounded-md border" style={{ borderColor: '#ddeadd' }} />
+                            <button
+                              type="button"
+                              onClick={() => borrarImagenZona(i, img.id)}
+                              className="absolute -top-1 -right-1 w-5 h-5 rounded-full text-white text-xs"
+                              style={{ background: '#b91c1c' }}
+                            >×</button>
+                          </div>
+                        ))}
+                        {z.pendingFiles.map((file, fi) => (
+                          <div key={`p-${fi}`} className="relative" style={{ width: 72, height: 72 }}>
+                            <img src={URL.createObjectURL(file)} alt="" className="w-full h-full object-cover rounded-md border" style={{ borderColor: '#86efac' }} />
+                            <button
+                              type="button"
+                              onClick={() => setZonas(arr => arr.map((x, idx) => idx === i
+                                ? { ...x, pendingFiles: x.pendingFiles.filter((_, j) => j !== fi) }
+                                : x))}
+                              className="absolute -top-1 -right-1 w-5 h-5 rounded-full text-white text-xs"
+                              style={{ background: '#b91c1c' }}
+                            >×</button>
+                          </div>
+                        ))}
+                      </div>
+                      <label className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border cursor-pointer" style={{ borderColor: '#ddeadd', color: '#0f3d22' }}>
+                        + Adjuntar imagen
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={e => {
+                            const files = Array.from(e.target.files || [])
+                            if (!files.length) return
+                            setZonas(arr => arr.map((x, idx) => {
+                              if (idx !== i) return x
+                              const total = x.imagenes.length + x.pendingFiles.length + files.length
+                              if (total > 6) {
+                                alert('Máximo 6 imágenes por zona')
+                                return x
+                              }
+                              return { ...x, pendingFiles: [...x.pendingFiles, ...files] }
+                            }))
+                            e.target.value = ''
+                          }}
+                        />
+                      </label>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -587,19 +792,48 @@ export default function CotizadorCRM() {
                 min={1}
                 value={cantidadProd}
                 onChange={e => setCantidadProd(e.target.value)}
-                title="Cantidad al agregar"
+                title="Cantidad al agregar del catálogo"
                 className="border rounded-lg px-3 py-2 text-sm w-20"
                 style={{ borderColor: '#ddeadd' }}
               />
-              <button type="button" onClick={addConceptoLibre} className="px-3 py-2 rounded-lg text-sm border" style={{ borderColor: '#ddeadd' }}>+ Libre</button>
+              <button
+                type="button"
+                onClick={() => setShowServicio(s => !s)}
+                className="px-3 py-2 rounded-lg text-sm font-semibold text-white"
+                style={{ background: '#0f3d22' }}
+              >+ Servicio</button>
             </div>
+
+            {showServicio && (
+              <div className="mb-3 rounded-xl border p-3 flex flex-col gap-2" style={{ borderColor: '#bbf7d0', background: '#f0fdf4' }}>
+                <div className="text-xs font-semibold uppercase tracking-wide" style={{ color: '#15803d' }}>
+                  Servicio / subcontrato (no está en catálogo)
+                </div>
+                <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}>
+                  <input value={servicioNombre} onChange={e => setServicioNombre(e.target.value)} placeholder="Nombre del servicio *" className="border rounded-lg px-3 py-2 text-sm" style={{ borderColor: '#ddeadd' }} />
+                  <input value={servicioDesc} onChange={e => setServicioDesc(e.target.value)} placeholder="Descripción (opcional)" className="border rounded-lg px-3 py-2 text-sm" style={{ borderColor: '#ddeadd' }} />
+                  <input type="number" min={1} value={servicioCant} onChange={e => setServicioCant(e.target.value)} placeholder="Cant." className="border rounded-lg px-3 py-2 text-sm" style={{ borderColor: '#ddeadd' }} />
+                  <input type="number" step="0.01" value={servicioMonto} onChange={e => setServicioMonto(e.target.value)} placeholder="Monto $" className="border rounded-lg px-3 py-2 text-sm" style={{ borderColor: '#ddeadd' }} />
+                </div>
+                <div className="flex gap-2">
+                  <button type="button" onClick={addConceptoServicio} disabled={!servicioNombre.trim()} className="px-3 py-1.5 rounded-lg text-sm font-semibold text-white disabled:opacity-50" style={{ background: '#16a34a' }}>Agregar servicio</button>
+                  <button type="button" onClick={resetServicioForm} className="px-3 py-1.5 rounded-lg text-sm border" style={{ borderColor: '#ddeadd' }}>Cancelar</button>
+                </div>
+              </div>
+            )}
+
             <div className="flex flex-col gap-2">
               {conceptos.map((c, i) => (
                 <div key={i} className="flex gap-2 flex-wrap items-center text-sm">
                   <input value={c.nombre} onChange={e => setConceptos(arr => arr.map((x, idx) => idx === i ? { ...x, nombre: e.target.value } : x))} className="border rounded px-2 py-1 flex-1 min-w-[160px]" style={{ borderColor: '#ddeadd' }} />
+                  {!c.producto_id && (
+                    <input value={c.descripcion} onChange={e => setConceptos(arr => arr.map((x, idx) => idx === i ? { ...x, descripcion: e.target.value } : x))} placeholder="Nota" className="border rounded px-2 py-1 flex-1 min-w-[120px]" style={{ borderColor: '#ddeadd' }} />
+                  )}
                   <input type="number" value={c.cantidad} onChange={e => setConceptos(arr => arr.map((x, idx) => idx === i ? { ...x, cantidad: Number(e.target.value) || 1 } : x))} className="border rounded px-2 py-1 w-16" style={{ borderColor: '#ddeadd' }} />
                   <input type="number" step="0.01" value={c.monto} onChange={e => setConceptos(arr => arr.map((x, idx) => idx === i ? { ...x, monto: e.target.value } : x))} className="border rounded px-2 py-1 w-28" style={{ borderColor: '#ddeadd' }} />
-                  <span className="text-xs" style={{ color: '#8fa890' }}>{c.producto_id ? 'Catálogo' : 'Libre'}</span>
+                  <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: c.producto_id ? '#dcfce7' : '#fef3c7', color: c.producto_id ? '#15803d' : '#b45309' }}>
+                    {c.producto_id ? 'Catálogo' : 'Servicio'}
+                  </span>
                   <button type="button" onClick={() => setConceptos(arr => arr.filter((_, idx) => idx !== i))} className="text-red-600">Quitar</button>
                 </div>
               ))}
@@ -614,9 +848,9 @@ export default function CotizadorCRM() {
 
           <div className="flex gap-2">
             <button disabled={saving || !clienteListo || !fecha} onClick={guardar} className="px-4 py-2 rounded-lg text-white text-sm font-semibold disabled:opacity-50" style={{ background: '#16a34a' }}>
-              {saving ? 'Guardando...' : 'Guardar'}
+              {saving ? 'Guardando...' : editingId ? 'Guardar cambios' : 'Guardar'}
             </button>
-            <button onClick={() => setShowForm(false)} className="px-4 py-2 rounded-lg text-sm border" style={{ borderColor: '#ddeadd' }}>Cancelar</button>
+            <button onClick={() => { setShowForm(false); setEditingId(null) }} className="px-4 py-2 rounded-lg text-sm border" style={{ borderColor: '#ddeadd' }}>Cancelar</button>
           </div>
         </div>
       )}
@@ -629,6 +863,9 @@ export default function CotizadorCRM() {
               <p className="text-sm" style={{ color: '#5a7060' }}>{detalle.tipo} · {STATUS_LABEL[detalle.status as Status]} · Total {money(detalle.total)}</p>
             </div>
             <div className="flex gap-2 flex-wrap">
+              {detalle.status !== 'CONVERTIDA' && (
+                <button onClick={() => abrirEditar(detalle.id)} className="px-3 py-1.5 rounded-lg text-sm text-white" style={{ background: '#16a34a' }}>Editar</button>
+              )}
               <button onClick={abrirPdf} className="px-3 py-1.5 rounded-lg text-sm text-white" style={{ background: '#7c3aed' }}>PDF</button>
               {detalle.status !== 'CONVERTIDA' && (
                 <button onClick={convertir} className="px-3 py-1.5 rounded-lg text-sm text-white" style={{ background: '#ea580c' }}>Convertir a renta</button>
@@ -680,7 +917,12 @@ export default function CotizadorCRM() {
                 <td className="px-4 py-3">{money(c.total)}</td>
                 <td className="px-4 py-3">{STATUS_LABEL[c.status]}</td>
                 <td className="px-4 py-3">
-                  <button onClick={() => verDetalle(c.id)} className="text-sm font-semibold" style={{ color: '#0f3d22' }}>Ver</button>
+                  <div className="flex gap-3">
+                    <button onClick={() => verDetalle(c.id)} className="text-sm font-semibold" style={{ color: '#0f3d22' }}>Ver</button>
+                    {c.status !== 'CONVERTIDA' && (
+                      <button onClick={() => abrirEditar(c.id)} className="text-sm font-semibold" style={{ color: '#16a34a' }}>Editar</button>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}
