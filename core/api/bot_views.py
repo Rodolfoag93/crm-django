@@ -27,6 +27,7 @@ from core.services.promociones_renta import (
     validar_manteles_regalo,
 )
 from core.services.rentas import RentaServiceError, cancelar_renta, crear_renta, editar_renta
+from core.services import whatsapp_cart as wa_cart
 
 
 def _require_staff(request):
@@ -525,3 +526,28 @@ def _serializar_renta(renta):
         'temporada_alta': renta.temporada_alta.nombre if getattr(renta, 'temporada_alta_id', None) else None,
         'requiere_validacion_logistica': getattr(renta, 'validacion_logistica', '') == 'PENDIENTE',
     }
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def bot_resolver_carrito(request):
+    """
+    Resuelve product_retailer_id del catálogo WhatsApp → Producto.id del CRM.
+
+    Body: { "items": [ {"product_retailer_id": "...", "cantidad": 1}, ... ] }
+
+    - `items` ausente o no-lista → 400 (bug del caller / n8n).
+    - `items: []` → 200 con resueltos=[] y no_identificados=[] (caso válido).
+    - No consulta stock/disponibilidad; solo mapeo determinista.
+    """
+    denied = _require_staff(request)
+    if denied:
+        return denied
+
+    if 'items' not in request.data:
+        return Response({'error': 'items es requerido (lista).'}, status=400)
+    items = request.data.get('items')
+    if not isinstance(items, list):
+        return Response({'error': 'items debe ser una lista.'}, status=400)
+
+    return Response(wa_cart.resolver_carrito(items))

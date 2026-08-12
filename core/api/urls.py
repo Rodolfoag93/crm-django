@@ -129,4 +129,5 @@ urlpatterns = [
     path('bot/renta/<str:folio>/validacion/', bot_views.bot_renta_validacion),
     path('bot/temporada/', bot_views.bot_temporada_check),
     path('bot/renta/<str:folio>/', bot_views.bot_renta_detalle),
+    path('bot/whatsapp/resolver-carrito/', bot_views.bot_resolver_carrito, name='bot_resolver_carrito'),
 ]

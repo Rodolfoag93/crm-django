@@ -45,6 +45,15 @@ class Producto(models.Model):
         ('OT', 'Otro'),
     ]
 
+    CATEGORIA_WEB = [
+        ('', 'Sin categoría'),
+        ('chicos', 'Chicos'),
+        ('medianos', 'Medianos'),
+        ('acuaticos', 'Acuáticos'),
+        ('extremos', 'Extremos'),
+        ('mecanicos', 'Mecánicos'),
+    ]
+
     nombre = models.CharField(max_length=100)
     tipo = models.CharField(max_length=2, choices=TIPO_PRODUCTO)
     precio = models.DecimalField(max_digits=10, decimal_places=2)
@@ -58,6 +67,29 @@ class Producto(models.Model):
     activo = models.BooleanField(default=True)
     # Si False, no reserva inventario (ej. "Proyecto recreativo")
     afecta_stock = models.BooleanField(default=True)
+    # Campos ya aplicados en prod vía 0033/0034 (deben vivir en el modelo).
+    foto = models.ImageField(upload_to='productos/', blank=True, null=True)
+    categoria_web = models.CharField(
+        max_length=20, choices=CATEGORIA_WEB, blank=True, default='',
+        help_text='Categoría del catálogo público (brincolines).',
+    )
+    # SKU del catálogo Meta/WhatsApp (product_retailer_id). Vacío = no mapeado.
+    meta_retailer_id = models.CharField(
+        max_length=64,
+        blank=True,
+        default='',
+        db_index=True,
+        help_text='product_retailer_id del catálogo Meta/WhatsApp. Debe coincidir exactamente.',
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['meta_retailer_id'],
+                condition=~models.Q(meta_retailer_id=''),
+                name='producto_meta_retailer_id_unique_nonempty',
+            ),
+        ]
 
     # ===== INVENTARIO =====
     def hay_stock(self, cantidad, fecha, hora_inicio, hora_fin):

@@ -33,8 +33,16 @@ class FacturaAdmin(admin.ModelAdmin):
     readonly_fields = ('created_at', 'timbrada_at', 'provider_id', 'uuid')
 
 
+@admin.register(Producto)
+class ProductoAdmin(admin.ModelAdmin):
+    list_display = ('id', 'nombre', 'tipo', 'precio', 'activo', 'meta_retailer_id')
+    list_filter = ('tipo', 'activo')
+    search_fields = ('nombre', 'meta_retailer_id')
+    list_editable = ('meta_retailer_id', 'activo')
+    ordering = ('nombre',)
+
+
 admin.site.register(Cliente)
-admin.site.register(Producto)
 admin.site.register(Renta)
 admin.site.register(Cotizacion)
 admin.site.register(CotizacionZona)
