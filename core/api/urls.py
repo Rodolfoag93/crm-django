@@ -20,6 +20,7 @@ from core.api.views import (
     api_crm_cotizaciones, api_crm_cotizacion_detalle, api_crm_cotizacion_status,
     api_crm_cotizacion_convertir, api_crm_cotizacion_pdf,
     api_crm_cotizacion_zona_imagen, api_crm_cotizacion_zona_imagen_borrar,
+    api_reporte_negocio, api_reporte_negocio_pdf,
 )
 from core.views.rutas import api_mis_rutas, api_confirmar_entrega, api_confirmar_recogida
 from core.api import bot_views
@@ -130,4 +131,8 @@ urlpatterns = [
     path('bot/temporada/', bot_views.bot_temporada_check),
     path('bot/renta/<str:folio>/', bot_views.bot_renta_detalle),
     path('bot/whatsapp/resolver-carrito/', bot_views.bot_resolver_carrito, name='bot_resolver_carrito'),
+
+    # ── Reportes de negocio ───────────────────────────────────────────
+    path('reportes/negocio/', api_reporte_negocio),
+    path('reportes/negocio/pdf/', api_reporte_negocio_pdf),
 ]

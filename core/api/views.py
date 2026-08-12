@@ -3559,3 +3559,78 @@ def api_crm_cotizacion_pdf(request, cotizacion_id):
     response = HttpResponse(content, content_type='application/pdf' if is_pdf else 'text/html')
     response['Content-Disposition'] = f'inline; filename="cotizacion_{c.folio}.{"pdf" if is_pdf else "html"}"'
     return response
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def api_reporte_negocio(request):
+    if not (request.user.is_staff or request.user.is_superuser):
+        return Response({'error': 'No autorizado'}, status=status.HTTP_403_FORBIDDEN)
+    from core.services.reportes import ReporteError, generar_reporte
+    try:
+        data = generar_reporte(
+            tipo=request.query_params.get('tipo') or 'semana',
+            fecha=request.query_params.get('fecha'),
+        )
+    except ReporteError as exc:
+        return Response({'error': exc.message}, status=exc.status)
+
+    def dec(v):
+        if isinstance(v, Decimal):
+            return str(v)
+        return v
+
+    out = {
+        k: dec(v)
+        for k, v in data.items()
+        if k not in ('ventas', 'gastos', 'renta_mas_alta', 'cobros_por_cuenta')
+    }
+    out['renta_mas_alta'] = None
+    if data.get('renta_mas_alta'):
+        out['renta_mas_alta'] = {
+            **data['renta_mas_alta'],
+            'total': str(data['renta_mas_alta']['total']),
+        }
+    out['cobros_por_cuenta'] = [
+        {'cuenta': c['cuenta'], 'monto': str(c['monto'])}
+        for c in (data.get('cobros_por_cuenta') or [])
+    ]
+    out['ventas'] = [
+        {
+            **{k: v for k, v in row.items() if k != 'cuentas'},
+            'total': str(row['total']),
+            'cuentas': [
+                {'cuenta': c['cuenta'], 'monto': str(c['monto'])}
+                for c in (row.get('cuentas') or [])
+            ],
+        }
+        for row in data['ventas']
+    ]
+    out['gastos'] = [
+        {**g, 'monto': str(g['monto'])} for g in data['gastos']
+    ]
+    return Response(out)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def api_reporte_negocio_pdf(request):
+    if not (request.user.is_staff or request.user.is_superuser):
+        return Response({'error': 'No autorizado'}, status=status.HTTP_403_FORBIDDEN)
+    from django.http import HttpResponse
+    from core.services.reportes import ReporteError, generar_reporte, render_reporte_pdf_bytes
+    try:
+        data = generar_reporte(
+            tipo=request.query_params.get('tipo') or 'semana',
+            fecha=request.query_params.get('fecha'),
+        )
+    except ReporteError as exc:
+        return Response({'error': exc.message}, status=exc.status)
+
+    content = render_reporte_pdf_bytes(data)
+    is_pdf = content[:4] == b'%PDF'
+    tipo = data.get('tipo') or 'semana'
+    fname = f"reporte_{tipo}_{data['fecha_inicio']}_{data['fecha_fin']}.{'pdf' if is_pdf else 'html'}"
+    response = HttpResponse(content, content_type='application/pdf' if is_pdf else 'text/html')
+    response['Content-Disposition'] = f'inline; filename="{fname}"'
+    return response

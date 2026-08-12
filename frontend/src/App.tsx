@@ -39,6 +39,7 @@ import Rentas from './pages/crm/Rentas'
 import Clientes from './pages/crm/Clientes'
 import Rankings from './pages/crm/Rankings'
 import Placeholder from './pages/crm/Placeholder'
+import Reportes from './pages/crm/Reportes'
 import Gastos from './pages/crm/Gastos'
 import Cuentas from './pages/crm/Cuentas'
 import Animacion from './pages/crm/Animacion'
@@ -179,7 +180,7 @@ export default function App() {
           <Route path="empleados" element={<Empleados />} />
           <Route path="nomina" element={<NominaCRM />} />
           <Route path="animacion" element={<Animacion />} />
-          <Route path="contabilidad" element={<Placeholder />} />
+          <Route path="contabilidad" element={<Reportes />} />
           <Route path="gastos" element={<Gastos />} />
           <Route path="cuentas" element={<Cuentas />} />
         </Route>

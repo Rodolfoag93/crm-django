@@ -34,7 +34,7 @@ const navSections: NavSection[] = [
   {
     label: 'Finanzas',
     items: [
-      { to: '/crm/contabilidad', label: 'Contabilidad', icon: <Icon d="M12 1v22M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" /> },
+      { to: '/crm/contabilidad', label: 'Reportes', icon: <Icon d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8zM14 2v6h6M16 13H8M16 17H8M10 9H8" /> },
       { to: '/crm/gastos', label: 'Gastos', icon: <Icon d="M22 12h-4l-3 9L9 3l-3 9H2" /> },
       { to: '/crm/cuentas', label: 'Cuentas', icon: <Icon d="M1 4h22v16H1zM1 10h22" /> },
     ],
@@ -57,7 +57,7 @@ const BREADCRUMB: Record<string, string> = {
   '/crm/empleados': 'Empleados',
   '/crm/nomina': 'Nómina',
   '/crm/animacion': 'Animación',
-  '/crm/contabilidad': 'Contabilidad',
+  '/crm/contabilidad': 'Reportes',
   '/crm/gastos': 'Gastos',
   '/crm/cuentas': 'Cuentas',
   '/crm/rankings': 'Rankings',
