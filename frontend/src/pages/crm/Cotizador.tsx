@@ -246,10 +246,6 @@ export default function CotizadorCRM() {
     () => conceptos.filter(c => c.es_sugerencia),
     [conceptos],
   )
-  const confirmadosPreview = useMemo(
-    () => conceptos.filter(c => !c.es_sugerencia),
-    [conceptos],
-  )
 
   const resetServicioForm = () => {
     setShowServicio(false)
