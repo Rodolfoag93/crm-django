@@ -1,8 +1,37 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import api from '../../lib/api'
 
-type Tipo = 'NORMAL' | 'PROYECTO'
+type Tipo = 'NORMAL' | 'PROYECTO' | 'RALLY'
 type Status = 'BORRADOR' | 'ENVIADA' | 'ACEPTADA' | 'RECHAZADA' | 'CONVERTIDA'
+
+const TIPO_LABEL: Record<Tipo, string> = {
+  NORMAL: 'Normal',
+  PROYECTO: 'Proyecto',
+  RALLY: 'Rally',
+}
+
+const PAQUETES_RALLY = [
+  {
+    titulo: 'Trotavesura acuática',
+    descripcion: 'Evento acuático: fiesta de espuma, gladiadores, volei/beis splash, meseros locos, cascos acuáticos, resbalón, patos al agua, guerra de globinos, entre otros.',
+  },
+  {
+    titulo: 'Feria de destreza',
+    descripcion: 'Juegos y módulos de feria con premios a ganadores: canicas, tiro al blanco, futbol, tira latas, lotería, aros, ruleta, boliche, entre otros.',
+  },
+  {
+    titulo: 'Rally de retos e integración',
+    descripcion: 'Retos y trabajo en equipo: Roller Ball, Rally de colores, Reloj, Cazadores, Canaletas, Papa caliente, catapultas, Código secreto, entre otros.',
+  },
+  {
+    titulo: 'Evento de sensaciones',
+    descripcion: 'Actividades con harina, lodo, espuma, gelatina, agua, plumas: guerra de harina, pastelazo, estaciones de sensaciones, chiquero, pista ciega, entre otros.',
+  },
+  {
+    titulo: 'Olimpiadas recreativas',
+    descripcion: 'Actividades olímpicas por equipos: carrera de costales, obstáculos, tiro al blanco, quemados, luz verde luz roja, futbol modificado, encestando, entre otros.',
+  },
+]
 
 interface CotizacionListItem {
   id: number
@@ -239,7 +268,7 @@ export default function CotizadorCRM() {
     setZonas(tipo === 'PROYECTO' ? [{ titulo: 'Bienvenida', descripcion: '', imagenes: [], pendingFiles: [] }] : [])
     setQueryProducto('')
     setResultProductos([])
-    setCantidadProd('1')
+    setCantidadProd(tipo === 'RALLY' ? '6' : '1')
     resetServicioForm()
   }
 
@@ -300,9 +329,10 @@ export default function CotizadorCRM() {
   const addProducto = (p: ProductoEncontrado) => {
     const cant = Math.max(1, parseInt(cantidadProd || '1', 10))
     const unit = Number(p.precio) || 0
+    const esBaseRally = (p.nombre || '').startsWith('Base Rally')
     setConceptos(prev => [...prev, {
       nombre: p.nombre,
-      descripcion: '',
+      descripcion: esBaseRally ? 'Precio por base/grupo' : '',
       cantidad: cant,
       monto: String((unit * cant).toFixed(2)),
       producto_id: p.id,
@@ -434,7 +464,7 @@ export default function CotizadorCRM() {
 
   const abrirConvertir = () => {
     if (!detalle) return
-    setAnticipoConv('')
+    setAnticipoConv(detalle.tipo === 'RALLY' ? '1000' : '')
     setMetodoPagoConv('efectivo')
     setCuentaAnticipoId('')
     setErrorConvertir('')
@@ -496,7 +526,7 @@ export default function CotizadorCRM() {
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <h1 className="font-bold" style={{ fontSize: 20, letterSpacing: '-0.4px', color: '#162016' }}>Cotizador</h1>
-          <p className="text-sm mt-0.5" style={{ color: '#5a7060' }}>Cotizaciones normales y de proyectos recreativos</p>
+          <p className="text-sm mt-0.5" style={{ color: '#5a7060' }}>Cotizaciones normales, proyectos y rally por base/grupo</p>
         </div>
         <div className="flex gap-2">
           <button onClick={() => abrirNueva('NORMAL')} className="px-3 py-2 rounded-lg text-white text-sm font-semibold" style={{ background: '#16a34a' }}>
@@ -504,6 +534,9 @@ export default function CotizadorCRM() {
           </button>
           <button onClick={() => abrirNueva('PROYECTO')} className="px-3 py-2 rounded-lg text-white text-sm font-semibold" style={{ background: '#0f3d22' }}>
             + Proyecto
+          </button>
+          <button onClick={() => abrirNueva('RALLY')} className="px-3 py-2 rounded-lg text-white text-sm font-semibold" style={{ background: '#ea580c' }}>
+            + Rally
           </button>
         </div>
       </div>
@@ -520,6 +553,7 @@ export default function CotizadorCRM() {
           <option value="">Todos los tipos</option>
           <option value="NORMAL">Normal</option>
           <option value="PROYECTO">Proyecto</option>
+          <option value="RALLY">Rally</option>
         </select>
         <select value={statusFiltro} onChange={e => setStatusFiltro(e.target.value)} className="border rounded-lg px-3 py-2 text-sm" style={{ borderColor: '#ddeadd' }}>
           <option value="">Todos los estados</option>
@@ -698,6 +732,18 @@ export default function CotizadorCRM() {
                   </label>
                 </>
               )}
+              {tipoNueva === 'RALLY' && (
+                <>
+                  <label className="text-sm flex flex-col gap-1">
+                    Evento
+                    <input value={nombreEvento} onChange={e => setNombreEvento(e.target.value)} className="border rounded-lg px-3 py-2" style={{ borderColor: '#ddeadd' }} />
+                  </label>
+                  <label className="text-sm flex flex-col gap-1">
+                    Sede
+                    <input value={sede} onChange={e => setSede(e.target.value)} className="border rounded-lg px-3 py-2" style={{ borderColor: '#ddeadd' }} />
+                  </label>
+                </>
+              )}
             </div>
           </div>
 
@@ -794,8 +840,71 @@ export default function CotizadorCRM() {
             </div>
           )}
 
+          {tipoNueva === 'RALLY' && (
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-sm font-semibold">Paquetes / actividades</h3>
+                <button
+                  type="button"
+                  className="text-sm"
+                  style={{ color: '#0f3d22' }}
+                  onClick={() => setZonas(z => [...z, { titulo: '', descripcion: '', imagenes: [], pendingFiles: [] }])}
+                >+ Paquete libre</button>
+              </div>
+              <p className="text-xs mb-2" style={{ color: '#5a7060' }}>
+                Texto del PDF. El cobro va en Base Rally × bases (+ brincolines/traslado del catálogo).
+              </p>
+              <div className="flex flex-wrap gap-2 mb-3">
+                {PAQUETES_RALLY.map(p => (
+                  <button
+                    key={p.titulo}
+                    type="button"
+                    className="text-xs px-2.5 py-1.5 rounded-lg border"
+                    style={{ borderColor: '#fdba74', color: '#c2410c', background: '#fff7ed' }}
+                    onClick={() => setZonas(z => [...z, { titulo: p.titulo, descripcion: p.descripcion, imagenes: [], pendingFiles: [] }])}
+                  >+ {p.titulo}</button>
+                ))}
+              </div>
+              <div className="flex flex-col gap-3">
+                {zonas.map((z, i) => (
+                  <div key={z.id || i} className="border rounded-lg p-3 flex flex-col gap-2" style={{ borderColor: '#ddeadd' }}>
+                    <div className="flex gap-2">
+                      <input
+                        value={z.titulo}
+                        onChange={e => setZonas(arr => arr.map((x, idx) => idx === i ? { ...x, titulo: e.target.value } : x))}
+                        placeholder="Título del paquete"
+                        className="border rounded px-2 py-1 text-sm w-full"
+                        style={{ borderColor: '#ddeadd' }}
+                      />
+                      <button
+                        type="button"
+                        className="text-xs text-red-600 px-2"
+                        onClick={() => setZonas(arr => arr.filter((_, idx) => idx !== i))}
+                      >Quitar</button>
+                    </div>
+                    <textarea
+                      value={z.descripcion}
+                      onChange={e => setZonas(arr => arr.map((x, idx) => idx === i ? { ...x, descripcion: e.target.value } : x))}
+                      placeholder="Descripción / actividades"
+                      rows={2}
+                      className="border rounded px-2 py-1 text-sm w-full"
+                      style={{ borderColor: '#ddeadd' }}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div>
-            <h3 className="text-sm font-semibold mb-2">Conceptos</h3>
+            <h3 className="text-sm font-semibold mb-2">
+              {tipoNueva === 'RALLY' ? 'Cobro (Base Rally × bases + complementos)' : 'Conceptos'}
+            </h3>
+            {tipoNueva === 'RALLY' && (
+              <p className="text-xs mb-2" style={{ color: '#5a7060' }}>
+                Obligatorio: producto <strong>Base Rally 2/3/4 horas</strong> (cantidad = bases/grupos). Opcional: traslado y brincolines.
+              </p>
+            )}
             <div className="flex gap-2 flex-wrap items-start mb-3">
               <div className="relative flex-1 min-w-[220px]">
                 <div className="flex items-center gap-2 border rounded-lg px-3 py-2" style={{ borderColor: '#ddeadd' }}>
@@ -803,7 +912,7 @@ export default function CotizadorCRM() {
                   <input
                     value={queryProducto}
                     onChange={e => setQueryProducto(e.target.value)}
-                    placeholder="Buscar producto del catálogo…"
+                    placeholder={tipoNueva === 'RALLY' ? 'Buscar Base Rally, traslado, brincolín…' : 'Buscar producto del catálogo…'}
                     className="flex-1 text-sm outline-none"
                     style={{ color: '#162016' }}
                   />
@@ -838,16 +947,18 @@ export default function CotizadorCRM() {
                 min={1}
                 value={cantidadProd}
                 onChange={e => setCantidadProd(e.target.value)}
-                title="Cantidad al agregar del catálogo"
+                title={tipoNueva === 'RALLY' ? 'Cantidad (bases si es Base Rally)' : 'Cantidad al agregar del catálogo'}
                 className="border rounded-lg px-3 py-2 text-sm w-20"
                 style={{ borderColor: '#ddeadd' }}
               />
+              {tipoNueva !== 'RALLY' && (
               <button
                 type="button"
                 onClick={() => setShowServicio(s => !s)}
                 className="px-3 py-2 rounded-lg text-sm font-semibold text-white"
                 style={{ background: '#0f3d22' }}
               >+ Servicio</button>
+              )}
             </div>
 
             {showServicio && (
@@ -906,7 +1017,7 @@ export default function CotizadorCRM() {
           <div className="flex justify-between gap-3 flex-wrap mb-3">
             <div>
               <h2 className="font-semibold" style={{ color: '#162016' }}>{detalle.folio} — {detalle.cliente_nombre}</h2>
-              <p className="text-sm" style={{ color: '#5a7060' }}>{detalle.tipo} · {STATUS_LABEL[detalle.status as Status]} · Total {money(detalle.total)}</p>
+              <p className="text-sm" style={{ color: '#5a7060' }}>{TIPO_LABEL[detalle.tipo as Tipo] || detalle.tipo} · {STATUS_LABEL[detalle.status as Status]} · Total {money(detalle.total)}</p>
             </div>
             <div className="flex gap-2 flex-wrap">
               {detalle.status !== 'CONVERTIDA' && (
@@ -1129,7 +1240,7 @@ export default function CotizadorCRM() {
             {items.map(c => (
               <tr key={c.id} className="border-t" style={{ borderColor: '#eef3ee' }}>
                 <td className="px-4 py-3 font-medium">{c.folio}</td>
-                <td className="px-4 py-3">{c.tipo === 'PROYECTO' ? 'Proyecto' : 'Normal'}</td>
+                <td className="px-4 py-3">{TIPO_LABEL[c.tipo] || c.tipo}</td>
                 <td className="px-4 py-3">{c.cliente_nombre}</td>
                 <td className="px-4 py-3">{c.fecha_evento || '—'}</td>
                 <td className="px-4 py-3">{money(c.total)}</td>
