@@ -12,6 +12,10 @@
        style="padding:10px 16px; background:#2196F3; color:white; text-decoration:none; border-radius:8px; font-weight:bold;">
        + Cotización proyecto
     </a>
+    <a href="{% url 'nueva_cotizacion_rally' %}"
+       style="padding:10px 16px; background:#FF9800; color:white; text-decoration:none; border-radius:8px; font-weight:bold;">
+       + Cotización rally
+    </a>
 </div>
 
 <form method="get" style="margin-bottom: 20px; display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
@@ -20,6 +24,7 @@
         <option value="">Todos los tipos</option>
         <option value="NORMAL" {% if tipo == 'NORMAL' %}selected{% endif %}>Normal</option>
         <option value="PROYECTO" {% if tipo == 'PROYECTO' %}selected{% endif %}>Proyecto</option>
+        <option value="RALLY" {% if tipo == 'RALLY' %}selected{% endif %}>Rally</option>
     </select>
     <select name="status">
         <option value="">Todos los estados</option>

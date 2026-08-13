@@ -53,6 +53,7 @@ urlpatterns = [
     path('cotizaciones/', views.lista_cotizaciones, name='lista_cotizaciones'),
     path('cotizaciones/nueva/normal/', views.nueva_cotizacion_normal, name='nueva_cotizacion_normal'),
     path('cotizaciones/nueva/proyecto/', views.nueva_cotizacion_proyecto, name='nueva_cotizacion_proyecto'),
+    path('cotizaciones/nueva/rally/', views.nueva_cotizacion_rally, name='nueva_cotizacion_rally'),
     path('cotizaciones/<int:cotizacion_id>/', views.detalle_cotizacion, name='detalle_cotizacion'),
     path('cotizaciones/<int:cotizacion_id>/editar/', views.editar_cotizacion, name='editar_cotizacion'),
     path('cotizaciones/<int:cotizacion_id>/pdf/', views.cotizacion_pdf, name='cotizacion_pdf'),

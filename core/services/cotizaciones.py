@@ -11,6 +11,7 @@ from django.template.loader import render_to_string
 from django.utils import timezone
 
 from core.models import (
+    BASE_RALLY_POR_HORAS,
     NOMBRE_PRODUCTO_PROYECTO,
     AsignacionCoordinador,
     CoordinadorApoyo,
@@ -27,6 +28,8 @@ MESES_ES = (
     'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
     'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
 )
+TIPOS_COTIZACION = ('NORMAL', 'PROYECTO', 'RALLY')
+
 
 
 class CotizacionServiceError(Exception):
@@ -120,6 +123,47 @@ def recalcular_totales(cotizacion: Cotizacion) -> Cotizacion:
     return cotizacion
 
 
+def listar_productos_base_rally():
+    """Bases por horas del catálogo (excluye brincolines como Rally Pista)."""
+    nombres = list(BASE_RALLY_POR_HORAS.values())
+    return list(
+        Producto.objects.filter(activo=True, nombre__in=nombres).order_by('precio', 'nombre')
+    )
+
+
+def listar_productos_traslado_rally():
+    return list(
+        Producto.objects.filter(activo=True, nombre__istartswith='Traslado')
+        .exclude(nombre__icontains='Rally Pista')
+        .order_by('nombre')
+    )
+
+
+def obtener_producto_base_rally(horas: int) -> Producto:
+    horas = int(horas)
+    nombre = BASE_RALLY_POR_HORAS.get(horas)
+    if not nombre:
+        raise CotizacionServiceError(
+            f'Duración no soportada ({horas} h). Usa 2, 3 o 4 horas (Base Rally).'
+        )
+    producto = Producto.objects.filter(activo=True, nombre=nombre).first()
+    if not producto:
+        raise CotizacionServiceError(f'No existe el producto de catálogo "{nombre}".')
+    return producto
+
+
+def productos_catalogo_rally_qs():
+    """Selector de catálogo para cotización RALLY: bases + traslados."""
+    from django.db.models import Q
+    nombres_base = list(BASE_RALLY_POR_HORAS.values())
+    return (
+        Producto.objects.filter(activo=True)
+        .filter(Q(nombre__in=nombres_base) | Q(nombre__istartswith='Traslado'))
+        .exclude(nombre__iexact='Rally Pista')
+        .order_by('nombre')
+    )
+
+
 def generar_intro(cotizacion: Cotizacion) -> str:
     cliente = cotizacion.cliente.nombre
     dest = cotizacion.destinatario or cliente
@@ -130,6 +174,23 @@ def generar_intro(cotizacion: Cotizacion) -> str:
         ]
         if cotizacion.asistentes:
             partes.append(f'para {cotizacion.asistentes} asistentes')
+        if cotizacion.fecha_evento:
+            fecha = _fmt_fecha(cotizacion.fecha_evento, 'largo')
+            horario = ''
+            if cotizacion.hora_inicio and cotizacion.hora_fin:
+                horario = (
+                    f' de {_fmt_hora(cotizacion.hora_inicio)}'
+                    f' a {_fmt_hora(cotizacion.hora_fin)} horas'
+                )
+            sede = f' en {cotizacion.sede}' if cotizacion.sede else ''
+            partes.append(f'a realizarse{sede} el día {fecha}{horario}')
+        return f'{dest}\nPRESENTE\n\n{", ".join(partes)}.'.replace('  ', ' ')
+    if cotizacion.tipo == 'RALLY':
+        partes = [
+            'Por medio del presente le presentamos la propuesta recreativa'
+            f'{" " + cotizacion.nombre_evento if cotizacion.nombre_evento else ""}'
+            ' (paquetes por base/grupo)'
+        ]
         if cotizacion.fecha_evento:
             fecha = _fmt_fecha(cotizacion.fecha_evento, 'largo')
             horario = ''
@@ -248,7 +309,7 @@ def convertir_a_renta(
         raise CotizacionServiceError('No se puede convertir una cotización rechazada.')
     if not cotizacion.fecha_evento or not cotizacion.hora_inicio or not cotizacion.hora_fin:
         raise CotizacionServiceError('La cotización requiere fecha y horario del evento.')
-    if not cotizacion.conceptos.exists() and cotizacion.tipo == 'NORMAL':
+    if not cotizacion.conceptos.exists() and cotizacion.tipo in ('NORMAL', 'RALLY'):
         raise CotizacionServiceError('Agrega al menos un concepto/producto.')
 
     anticipo_dec = _money(anticipo)
@@ -280,6 +341,22 @@ def convertir_a_renta(
         if libres:
             comentarios_extra.append(libres)
     else:
+        # NORMAL y RALLY: líneas ligadas a catálogo (Base Rally N horas, Traslado, etc.)
+        if cotizacion.tipo == 'RALLY':
+            conceptos_rally = list(cotizacion.conceptos.select_related('producto').all())
+            tiene_base = any(
+                (c.producto and c.producto.nombre in BASE_RALLY_POR_HORAS.values())
+                for c in conceptos_rally
+            )
+            if not tiene_base:
+                raise CotizacionServiceError(
+                    'La cotización rally requiere al menos un producto "Base Rally N horas".'
+                )
+            paquetes = list(cotizacion.zonas.values_list('titulo', flat=True))
+            if paquetes:
+                comentarios_extra.append(
+                    'Paquetes / actividades:\n' + '\n'.join(f'- {t}' for t in paquetes)
+                )
         for c in cotizacion.conceptos.select_related('producto').all():
             if not c.producto_id:
                 raise CotizacionServiceError(
@@ -385,11 +462,12 @@ def _imagen_file_uri(field_file) -> str:
 
 def render_pdf_bytes(cotizacion: Cotizacion) -> bytes:
     recalcular_totales(cotizacion)
-    template = (
-        'core/cotizacion_proyecto_pdf.html'
-        if cotizacion.tipo == 'PROYECTO'
-        else 'core/cotizacion_normal_pdf.html'
-    )
+    if cotizacion.tipo == 'PROYECTO':
+        template = 'core/cotizacion_proyecto_pdf.html'
+    elif cotizacion.tipo == 'RALLY':
+        template = 'core/cotizacion_rally_pdf.html'
+    else:
+        template = 'core/cotizacion_normal_pdf.html'
     hoy = timezone.localdate()
     conceptos = list(cotizacion.conceptos.all())
     zonas_fmt = []

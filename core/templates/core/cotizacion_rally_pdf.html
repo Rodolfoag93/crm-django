@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<style>
+  @page { size: Letter; margin: 1.6cm 1.8cm; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-size: 11.5px;
+    color: #1a2e1a;
+    line-height: 1.5;
+    margin: 0;
+  }
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding-bottom: 14px;
+    border-bottom: 3px solid #0f3d22;
+    margin-bottom: 18px;
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .brand img {
+    height: 64px;
+    width: auto;
+    object-fit: contain;
+  }
+  .brand-text .name {
+    font-size: 20px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    color: #0f3d22;
+    margin: 0;
+    text-transform: uppercase;
+  }
+  .brand-text .tag {
+    font-size: 10px;
+    color: #5a7060;
+    margin: 2px 0 0;
+  }
+  .meta { text-align: right; }
+  .meta .label {
+    font-size: 10px;
+    color: #5a7060;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+  }
+  .meta .folio {
+    display: inline-block;
+    background: #fff3e0;
+    color: #e65100;
+    font-weight: 700;
+    font-size: 12px;
+    padding: 6px 12px;
+    border-radius: 6px;
+  }
+  .intro {
+    white-space: pre-wrap;
+    margin: 0 0 18px;
+    color: #243024;
+  }
+  h2 {
+    font-size: 12px;
+    color: #0f3d22;
+    margin: 20px 0 8px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid #ddeadd;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+  }
+  .zona {
+    margin-bottom: 12px;
+    padding: 10px 12px;
+    background: #f7faf7;
+    border-radius: 6px;
+    border-left: 3px solid #ff9800;
+  }
+  .zona-title { font-weight: 700; color: #162016; }
+  .zona-body { white-space: pre-wrap; margin: 4px 0 0; color: #3a4f3a; }
+  table.conceptos {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 4px;
+  }
+  table.conceptos thead th {
+    background: #0f3d22;
+    color: #fff;
+    font-size: 10.5px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    padding: 8px 10px;
+    text-align: left;
+  }
+  table.conceptos thead th.right { text-align: right; }
+  table.conceptos tbody td {
+    padding: 9px 10px;
+    border-bottom: 1px solid #ddeadd;
+  }
+  table.conceptos tbody tr:nth-child(even) td { background: #f7faf7; }
+  .right { text-align: right; }
+  .totals-wrap {
+    margin-top: 16px;
+    width: 300px;
+    margin-left: auto;
+  }
+  .totals-wrap table { width: 100%; border-collapse: collapse; }
+  .totals-wrap td {
+    padding: 4px 0;
+    border: none;
+    color: #3a4f3a;
+  }
+  .totals-wrap tr.total td {
+    padding-top: 8px;
+    border-top: 2px solid #0f3d22;
+    font-size: 13px;
+    color: #0f3d22;
+  }
+  .note {
+    margin-top: 14px;
+    padding: 10px 12px;
+    background: #fff8f0;
+    border-left: 3px solid #ff9800;
+    color: #5a7060;
+    font-size: 10.5px;
+  }
+  .condiciones { margin-top: 16px; }
+  .condiciones strong {
+    color: #0f3d22;
+    display: block;
+    margin-bottom: 4px;
+  }
+  .cierre { margin-top: 14px; color: #3a4f3a; }
+  .firma {
+    margin-top: 36px;
+    white-space: pre-wrap;
+    color: #162016;
+  }
+  .firma .atentamente {
+    font-size: 10px;
+    letter-spacing: 1px;
+    color: #5a7060;
+    margin-bottom: 14px;
+  }
+  .firma .lugar {
+    margin-top: 16px;
+    color: #5a7060;
+    font-size: 11px;
+  }
+  .footer-line {
+    margin-top: 28px;
+    border-top: 1px solid #ddeadd;
+    padding-top: 8px;
+    font-size: 9.5px;
+    color: #8fa890;
+    text-align: center;
+  }
+  .powered-by {
+    margin-top: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    font-size: 10px;
+    font-weight: 700;
+    color: #5a7060;
+  }
+  .powered-by img {
+    width: 16px;
+    height: 16px;
+    object-fit: contain;
+    border-radius: 4px;
+  }
+  .powered-by span { color: #0b1f3a; }
+  .meta-evento {
+    margin: 0 0 14px;
+    padding: 10px 12px;
+    background: #f7faf7;
+    border-radius: 6px;
+    color: #3a4f3a;
+  }
+</style>
+</head>
+<body>
+  <div class="header">
+    <div class="brand">
+      {% if logo_url %}<img src="{{ logo_url }}" alt="Trotamundos">{% endif %}
+      <div class="brand-text">
+        <p class="name">Trotamundos</p>
+        <p class="tag">Propuesta recreativa · Rally / bases</p>
+      </div>
+    </div>
+    <div class="meta">
+      <div class="label">Cotización rally</div>
+      <div class="folio">{{ cotizacion.folio }}</div>
+    </div>
+  </div>
+
+  <div class="intro">{{ cotizacion.intro }}</div>
+
+  <div class="meta-evento">
+    {% if cotizacion.nombre_evento %}<div><strong>Evento:</strong> {{ cotizacion.nombre_evento }}</div>{% endif %}
+    {% if cotizacion.sede %}<div><strong>Sede:</strong> {{ cotizacion.sede }}</div>{% endif %}
+    {% if cotizacion.fecha_evento %}
+    <div><strong>Fecha:</strong> {{ cotizacion.fecha_evento }}
+      {% if cotizacion.hora_inicio and cotizacion.hora_fin %}
+      · {{ cotizacion.hora_inicio }} – {{ cotizacion.hora_fin }}
+      {% endif %}
+    </div>
+    {% endif %}
+    <div>Incluye animador por estación/reto y coordinador general, más material necesario, bocina y micrófono según el paquete.</div>
+  </div>
+
+  {% if zonas %}
+  <h2>Paquetes / actividades propuestas</h2>
+  {% for z in zonas %}
+  <div class="zona">
+    <div class="zona-title">{{ forloop.counter }}. {{ z.titulo }}</div>
+    <div class="zona-body">{{ z.descripcion }}</div>
+  </div>
+  {% endfor %}
+  {% endif %}
+
+  <h2>Costo por base / grupo</h2>
+  <table class="conceptos">
+    <thead>
+      <tr>
+        <th>Concepto</th>
+        <th class="right">Bases</th>
+        <th class="right">Monto</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for c in conceptos_fmt %}
+      <tr>
+        <td>
+          {{ c.nombre }}
+          {% if c.descripcion %}<div style="font-size:10px;color:#5a7060;">{{ c.descripcion }}</div>{% endif %}
+        </td>
+        <td class="right">{{ c.cantidad }}</td>
+        <td class="right">${{ c.monto }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <div class="totals-wrap">
+    <table>
+      <tr><td>Subtotal</td><td class="right">${{ subtotal_fmt }}</td></tr>
+      {% if cotizacion.aplicar_iva %}<tr><td>IVA (16%)</td><td class="right">${{ iva_fmt }}</td></tr>{% endif %}
+      {% if cotizacion.aplicar_isr %}<tr><td>ISR (1.25%)</td><td class="right">${{ isr_fmt }}</td></tr>{% endif %}
+      <tr class="total"><td><strong>Total</strong></td><td class="right"><strong>${{ total_fmt }}</strong></td></tr>
+    </table>
+  </div>
+
+  {% if cotizacion.aplicar_iva or cotizacion.aplicar_isr %}
+  <div class="note">
+    Nota: montos en pesos mexicanos.
+    {% if cotizacion.aplicar_iva %}Se suma IVA (16%){% endif %}
+    {% if cotizacion.aplicar_isr %} y se resta ISR (1.25%){% endif %}
+    sobre el subtotal.
+  </div>
+  {% else %}
+  <div class="note">Nota: precios por base/grupo sin IVA, salvo que se solicite factura. Montos en pesos mexicanos (MXN).</div>
+  {% endif %}
+
+  <div class="condiciones">
+    <strong>Condiciones de pago</strong>
+    {{ cotizacion.condiciones_pago }}
+  </div>
+  <p class="cierre">
+    Las propuestas se pueden modificar, fusionar o complementar con el catálogo de juegos mecánicos y brincolines con costo extra.
+    Quedamos a sus órdenes para cualquier duda o ajuste.
+  </p>
+
+  <div class="firma">
+    <div class="atentamente">ATENTAMENTE</div>
+    {{ cotizacion.firmado_por }}
+    <div class="lugar">{{ lugar_fecha }}</div>
+  </div>
+  <div class="footer-line">Trotamundos · Colima, Col. · Documento generado electrónicamente</div>
+  <div class="powered-by">
+    {% if nexoo_url %}<img src="{{ nexoo_url }}" alt="Nexoo">{% endif %}
+    <span>powered by nexoo</span>
+  </div>
+</body>
+</html>

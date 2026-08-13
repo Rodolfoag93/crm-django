@@ -160,3 +160,7 @@ def nueva_cotizacion_normal(request):
 
 def nueva_cotizacion_proyecto(request):
     return nueva_cotizacion(request, tipo='PROYECTO')
+
+
+def nueva_cotizacion_rally(request):
+    return nueva_cotizacion(request, tipo='RALLY')

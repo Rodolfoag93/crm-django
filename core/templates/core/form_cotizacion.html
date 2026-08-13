@@ -18,11 +18,13 @@
         <br><br>
         <label>Destinatario <input type="text" name="destinatario" id="destinatario" value="{{ cotizacion.destinatario|default:'' }}" style="width:100%; max-width:420px;"></label>
         <br><br>
-        {% if tipo == 'PROYECTO' %}
+        {% if tipo == 'PROYECTO' or tipo == 'RALLY' %}
         <label>Nombre del evento <input type="text" name="nombre_evento" value="{{ cotizacion.nombre_evento|default:'' }}" style="width:100%; max-width:420px;"></label>
         <br><br>
+        {% if tipo == 'PROYECTO' %}
         <label>Asistentes <input type="number" name="asistentes" min="1" value="{{ cotizacion.asistentes|default:'' }}"></label>
         <br><br>
+        {% endif %}
         <label>Sede / lugar <input type="text" name="sede" value="{{ cotizacion.sede|default:'' }}" style="width:100%; max-width:420px;"></label>
         <br><br>
         {% endif %}
@@ -44,15 +46,33 @@
         <button type="button" onclick="addZona('Escenario', 'Espacio de interacción y conducción del programa recreativo.')">+ Escenario</button>
         <button type="button" onclick="addZona('Zona feria / retos', 'Estaciones de juegos y retos para los asistentes.')">+ Feria</button>
     </fieldset>
+    {% elif tipo == 'RALLY' %}
+    <fieldset style="margin-bottom:16px; padding:12px;">
+        <legend>Paquetes / actividades (texto del PDF)</legend>
+        <p style="color:#555; margin-top:0;">Elige uno o más paquetes temáticos. No afectan el precio (el cobro va en Base Rally × bases).</p>
+        <div id="zonas-list"></div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;">
+            <button type="button" onclick="addZona()">+ Paquete libre</button>
+            <span id="paquetes-rally-btns"></span>
+        </div>
+    </fieldset>
     {% endif %}
 
     <fieldset style="margin-bottom:16px; padding:12px;">
-        <legend>Conceptos cobrables</legend>
+        <legend>{% if tipo == 'RALLY' %}Cobro (Base Rally × bases/grupos + traslado){% else %}Conceptos cobrables{% endif %}</legend>
+        {% if tipo == 'RALLY' %}
+        <p style="color:#555; margin-top:0;">
+            Usa <strong>Base Rally 2/3/4 horas</strong> con cantidad = número de bases/grupos.
+            Agrega un <strong>Traslado …</strong> si aplica. No uses Rally Pista (brincolín).
+        </p>
+        {% endif %}
         <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
             <select id="producto_select" style="min-width:220px;"></select>
-            <input type="number" id="producto_cantidad" value="1" min="1" style="width:70px;">
+            <input type="number" id="producto_cantidad" value="{% if tipo == 'RALLY' %}6{% else %}1{% endif %}" min="1" style="width:70px;" title="{% if tipo == 'RALLY' %}Bases / grupos{% else %}Cantidad{% endif %}">
             <button type="button" onclick="addProducto()">+ Del catálogo</button>
+            {% if tipo != 'RALLY' %}
             <button type="button" onclick="addConceptoLibre()">+ Concepto libre</button>
+            {% endif %}
         </div>
         <div id="conceptos-list"></div>
         <p><strong>Subtotal estimado:</strong> $<span id="subtotal-preview">0.00</span></p>
@@ -64,7 +84,7 @@
         <label style="margin-left:12px;"><input type="checkbox" name="aplicar_isr" {% if cotizacion.aplicar_isr %}checked{% endif %}> Aplicar ISR 1.25%</label>
         <br><br>
         <label>Condiciones de pago
-            <textarea name="condiciones_pago" rows="3" style="width:100%; max-width:700px;">{% if cotizacion %}{{ cotizacion.condiciones_pago }}{% else %}Se requiere el 50% de anticipo para confirmar la reservación del evento. El 50% restante se liquida el día del evento.{% endif %}</textarea>
+            <textarea name="condiciones_pago" rows="3" style="width:100%; max-width:700px;">{% if cotizacion %}{{ cotizacion.condiciones_pago }}{% elif condiciones_default %}{{ condiciones_default }}{% else %}Se requiere el 50% de anticipo para confirmar la reservación del evento. El 50% restante se liquida el día del evento.{% endif %}</textarea>
         </label>
         <br>
         <label>Notas internas
@@ -81,6 +101,8 @@
 <script>
 const CLIENTES = {{ clientes_json|safe }};
 const PRODUCTOS = {{ productos_json|safe }};
+const PAQUETES_RALLY = {{ paquetes_rally_json|default:'[]'|safe }};
+const TIPO = "{{ tipo }}";
 let zonas = {{ zonas_json|safe }};
 let conceptos = {{ conceptos_json|safe }};
 const selectedCliente = "{% if cotizacion %}{{ cotizacion.cliente_id }}{% endif %}";
@@ -116,6 +138,18 @@ function fillProductos() {
   });
 }
 
+function fillPaquetesRallyBtns() {
+  const box = document.getElementById('paquetes-rally-btns');
+  if (!box || !PAQUETES_RALLY.length) return;
+  PAQUETES_RALLY.forEach((p, idx) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.textContent = '+ ' + p.titulo;
+    btn.onclick = () => addZona(p.titulo, p.descripcion);
+    box.appendChild(btn);
+  });
+}
+
 function renderZonas() {
   const box = document.getElementById('zonas-list');
   if (!box) return;
@@ -137,6 +171,13 @@ function addZona(titulo='', descripcion='') {
   renderZonas();
 }
 
+function unitPriceOf(c) {
+  const p = PRODUCTOS.find(x => String(x.id) === String(c.producto_id));
+  if (p) return Number(p.precio) || 0;
+  const cant = Number(c.cantidad) || 1;
+  return cant ? (Number(c.monto) || 0) / cant : 0;
+}
+
 function renderConceptos() {
   const box = document.getElementById('conceptos-list');
   box.innerHTML = '';
@@ -145,9 +186,12 @@ function renderConceptos() {
     sub += Number(c.monto) || 0;
     const div = document.createElement('div');
     div.style.cssText = 'display:flex; gap:8px; flex-wrap:wrap; align-items:center; border-bottom:1px solid #eee; padding:6px 0;';
+    const cantLabel = TIPO === 'RALLY' && (c.nombre || '').startsWith('Base Rally') ? 'bases' : 'cant';
     div.innerHTML = `
       <input type="text" value="${(c.nombre||'').replace(/"/g,'&quot;')}" onchange="conceptos[${i}].nombre=this.value" style="min-width:180px;">
-      <input type="number" min="1" value="${c.cantidad||1}" onchange="conceptos[${i}].cantidad=parseInt(this.value||1)" style="width:70px;">
+      <label style="font-size:12px;color:#666;">${cantLabel}
+        <input type="number" min="1" value="${c.cantidad||1}" onchange="onCantidadChange(${i}, this.value)" style="width:70px;">
+      </label>
       <input type="number" step="0.01" value="${money(c.monto)}" onchange="conceptos[${i}].monto=this.value; renderConceptos();" style="width:110px;">
       <input type="text" placeholder="Descripción" value="${(c.descripcion||'').replace(/"/g,'&quot;')}" onchange="conceptos[${i}].descripcion=this.value" style="min-width:180px; flex:1;">
       <small>${c.producto_id ? 'Catálogo #'+c.producto_id : 'Libre'}</small>
@@ -156,6 +200,15 @@ function renderConceptos() {
     box.appendChild(div);
   });
   document.getElementById('subtotal-preview').textContent = money(sub);
+}
+
+function onCantidadChange(i, value) {
+  const cant = Math.max(parseInt(value || 1, 10), 1);
+  conceptos[i].cantidad = cant;
+  if (conceptos[i].producto_id) {
+    conceptos[i].monto = money(unitPriceOf(conceptos[i]) * cant);
+  }
+  renderConceptos();
 }
 
 function addProducto() {
@@ -167,7 +220,7 @@ function addProducto() {
   conceptos.push({
     orden: conceptos.length,
     nombre: p.nombre,
-    descripcion: '',
+    descripcion: TIPO === 'RALLY' && (p.nombre || '').startsWith('Base Rally') ? 'Precio por base/grupo' : '',
     cantidad: cant,
     monto: money(unit * cant),
     producto_id: p.id,
@@ -198,6 +251,7 @@ document.getElementById('form-cotizacion').addEventListener('submit', function()
 
 fillClientes();
 fillProductos();
+fillPaquetesRallyBtns();
 renderZonas();
 renderConceptos();
 </script>

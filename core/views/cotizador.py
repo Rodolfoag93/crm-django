@@ -11,11 +11,19 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
 from core.decorators import no_coordinador, solo_admin
-from core.models import Cliente, Cotizacion, Producto
+from core.models import (
+    CONDICIONES_PAGO_RALLY,
+    PAQUETES_RALLY,
+    Cliente,
+    Cotizacion,
+    Producto,
+)
 from core.services.cotizaciones import (
     CotizacionServiceError,
+    TIPOS_COTIZACION,
     convertir_a_renta,
     generar_intro,
+    productos_catalogo_rally_qs,
     recalcular_totales,
     render_pdf_bytes,
     sincronizar_conceptos,
@@ -42,16 +50,21 @@ def _parse_json_list(raw, field_name='datos'):
     return data
 
 
-def _clientes_productos_context():
+def _clientes_productos_context(tipo='NORMAL'):
     clientes = list(Cliente.objects.all().order_by('nombre').values(
         'id', 'nombre', 'telefono', 'calle_y_numero', 'colonia', 'ciudad_o_municipio'
     ))
-    productos = list(
-        Producto.objects.filter(activo=True)
-        .exclude(nombre='Proyecto recreativo')
-        .order_by('nombre')
-        .values('id', 'nombre', 'precio', 'tipo', 'afecta_stock')
-    )
+    if tipo == 'RALLY':
+        productos = list(
+            productos_catalogo_rally_qs().values('id', 'nombre', 'precio', 'tipo', 'afecta_stock')
+        )
+    else:
+        productos = list(
+            Producto.objects.filter(activo=True)
+            .exclude(nombre='Proyecto recreativo')
+            .order_by('nombre')
+            .values('id', 'nombre', 'precio', 'tipo', 'afecta_stock')
+        )
     return clientes, productos
 
 
@@ -75,6 +88,8 @@ def _aplicar_cabecera(cotizacion, post, user=None):
     condiciones = (post.get('condiciones_pago') or '').strip()
     if condiciones:
         cotizacion.condiciones_pago = condiciones
+    elif cotizacion.tipo == 'RALLY' and not cotizacion.condiciones_pago:
+        cotizacion.condiciones_pago = CONDICIONES_PAGO_RALLY
     cotizacion.notas = (post.get('notas') or '').strip()
     if user and not cotizacion.creada_por_id:
         cotizacion.creada_por = user
@@ -97,7 +112,7 @@ def lista_cotizaciones(request):
             | Q(nombre_evento__icontains=q)
             | Q(destinatario__icontains=q)
         )
-    if tipo in ('NORMAL', 'PROYECTO'):
+    if tipo in TIPOS_COTIZACION:
         qs = qs.filter(tipo=tipo)
     if status:
         qs = qs.filter(status=status)
@@ -116,16 +131,18 @@ def lista_cotizaciones(request):
 @no_coordinador
 def nueva_cotizacion(request, tipo='NORMAL'):
     tipo = tipo.upper()
-    if tipo not in ('NORMAL', 'PROYECTO'):
+    if tipo not in TIPOS_COTIZACION:
         tipo = 'NORMAL'
-    clientes, productos = _clientes_productos_context()
+    clientes, productos = _clientes_productos_context(tipo=tipo)
     if request.method == 'POST':
         try:
             cotizacion = Cotizacion(tipo=tipo, status='BORRADOR')
+            if tipo == 'RALLY':
+                cotizacion.condiciones_pago = CONDICIONES_PAGO_RALLY
             _aplicar_cabecera(cotizacion, request.POST, user=request.user)
             cotizacion.save()
             sincronizar_conceptos(cotizacion, _parse_json_list(request.POST.get('conceptos_data'), 'conceptos'))
-            if tipo == 'PROYECTO':
+            if tipo in ('PROYECTO', 'RALLY'):
                 sincronizar_zonas(cotizacion, _parse_json_list(request.POST.get('zonas_data'), 'zonas'))
             if not cotizacion.intro:
                 cotizacion.intro = generar_intro(cotizacion)
@@ -142,8 +159,10 @@ def nueva_cotizacion(request, tipo='NORMAL'):
         'editando': False,
         'clientes_json': json.dumps(clientes, default=str),
         'productos_json': json.dumps(productos, default=str),
+        'paquetes_rally_json': json.dumps(PAQUETES_RALLY, default=str),
         'zonas_json': '[]',
         'conceptos_json': '[]',
+        'condiciones_default': CONDICIONES_PAGO_RALLY if tipo == 'RALLY' else None,
         'module': 'ventas',
     })
 
@@ -160,13 +179,13 @@ def editar_cotizacion(request, cotizacion_id):
         messages.warning(request, 'La cotización ya fue convertida; solo lectura.')
         return redirect('detalle_cotizacion', cotizacion_id=cotizacion.id)
 
-    clientes, productos = _clientes_productos_context()
+    clientes, productos = _clientes_productos_context(tipo=cotizacion.tipo)
     if request.method == 'POST':
         try:
             _aplicar_cabecera(cotizacion, request.POST, user=request.user)
             cotizacion.save()
             sincronizar_conceptos(cotizacion, _parse_json_list(request.POST.get('conceptos_data'), 'conceptos'))
-            if cotizacion.tipo == 'PROYECTO':
+            if cotizacion.tipo in ('PROYECTO', 'RALLY'):
                 sincronizar_zonas(cotizacion, _parse_json_list(request.POST.get('zonas_data'), 'zonas'))
             messages.success(request, 'Cotización actualizada.')
             return redirect('detalle_cotizacion', cotizacion_id=cotizacion.id)
@@ -196,8 +215,10 @@ def editar_cotizacion(request, cotizacion_id):
         'editando': True,
         'clientes_json': json.dumps(clientes, default=str),
         'productos_json': json.dumps(productos, default=str),
+        'paquetes_rally_json': json.dumps(PAQUETES_RALLY, default=str),
         'zonas_json': json.dumps(zonas, default=str),
         'conceptos_json': json.dumps(conceptos, default=str),
+        'condiciones_default': None,
         'module': 'ventas',
     })
 

@@ -3331,7 +3331,7 @@ def api_crm_cotizaciones(request):
                 | Q(nombre_evento__icontains=q)
                 | Q(destinatario__icontains=q)
             )
-        if tipo in ('NORMAL', 'PROYECTO'):
+        if tipo in ('NORMAL', 'PROYECTO', 'RALLY'):
             qs = qs.filter(tipo=tipo)
         if status_f:
             qs = qs.filter(status=status_f)
@@ -3347,13 +3347,14 @@ def api_crm_cotizaciones(request):
         sincronizar_zonas,
     )
     tipo = (request.data.get('tipo') or 'NORMAL').upper()
-    if tipo not in ('NORMAL', 'PROYECTO'):
+    if tipo not in ('NORMAL', 'PROYECTO', 'RALLY'):
         return Response({'error': 'tipo inválido'}, status=400)
     cliente_id = request.data.get('cliente_id')
     if not cliente_id:
         return Response({'error': 'cliente_id requerido'}, status=400)
     cliente = get_object_or_404(Cliente, id=cliente_id)
     try:
+        from core.models import CONDICIONES_PAGO_RALLY
         c = Cotizacion(
             tipo=tipo,
             status='BORRADOR',
@@ -3373,12 +3374,14 @@ def api_crm_cotizaciones(request):
         )
         if request.data.get('condiciones_pago'):
             c.condiciones_pago = request.data.get('condiciones_pago')
+        elif tipo == 'RALLY':
+            c.condiciones_pago = CONDICIONES_PAGO_RALLY
         c.save()
         if not c.intro:
             c.intro = generar_intro(c)
             c.save(update_fields=['intro'])
         sincronizar_conceptos(c, request.data.get('conceptos') or [])
-        if tipo == 'PROYECTO':
+        if tipo in ('PROYECTO', 'RALLY'):
             sincronizar_zonas(c, request.data.get('zonas') or [])
         c = Cotizacion.objects.select_related('cliente', 'renta').prefetch_related(
             'zonas__imagenes', 'conceptos__producto'
@@ -3441,7 +3444,7 @@ def api_crm_cotizacion_detalle(request, cotizacion_id):
         c.save()
         if 'conceptos' in request.data:
             sincronizar_conceptos(c, request.data.get('conceptos') or [])
-        if c.tipo == 'PROYECTO' and 'zonas' in request.data:
+        if c.tipo in ('PROYECTO', 'RALLY') and 'zonas' in request.data:
             sincronizar_zonas(c, request.data.get('zonas') or [])
         c = Cotizacion.objects.select_related('cliente', 'renta').prefetch_related(
             'zonas__imagenes', 'conceptos__producto'

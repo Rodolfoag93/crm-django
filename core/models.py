@@ -1413,11 +1413,74 @@ class Factura(models.Model):
 
 NOMBRE_PRODUCTO_PROYECTO = 'Proyecto recreativo'
 
+# Productos de catálogo para cotización RALLY (no incluir "Rally Pista": es brincolín).
+BASE_RALLY_POR_HORAS = {
+    2: 'Base Rally 2 horas',
+    3: 'Base Rally 3 horas',
+    4: 'Base Rally 4 horas',
+}
+
+PAQUETES_RALLY = [
+    {
+        'titulo': 'Trotavesura acuática',
+        'descripcion': (
+            'Evento acuático con o sobre agua: fiesta de espuma, gladiadores acuáticos, '
+            'volei splash, beis splash, meseros locos, cascos acuáticos, resbalón, '
+            'patos al agua, jaulas y llaves, espónjate, guerra de globinos, pies al agua, '
+            'entre otros. Incluye animador por estación y coordinador general.'
+        ),
+    },
+    {
+        'titulo': 'Feria de destreza',
+        'descripcion': (
+            'Día de destreza y habilidades tipo juegos y módulos de feria. Incluye premios '
+            'solo para ganadores: canicas, tiro al blanco, futbol, tira latas, fuerza, '
+            'lotería, canasta, pesca de botellas, botes, bolita, aros, ruleta, pesca de '
+            'peces, boliche, traga bolas, entre otros.'
+        ),
+    },
+    {
+        'titulo': 'Rally de retos e integración',
+        'descripcion': (
+            'Retos y trabajo en equipo para integración de grupos. Puede incluir trofeo a '
+            'los 3 mejores puntajes: Roller Ball, Rally de colores, Dale la vuelta, '
+            'A que no se atreven, Reloj, Cazadores, Pollos adentro, Payaso de Rodeo, '
+            'Canaletas, Como Perros y Gatos, Manotazo, Papa caliente, Basta mecánica, '
+            'catapultas, Código secreto, entre otros.'
+        ),
+    },
+    {
+        'titulo': 'Evento de sensaciones',
+        'descripcion': (
+            'Actividades con harina, tierra, lodo, espuma, gelatina, agua, plumas, etc.: '
+            'guerra de harina, baraja empolvada, pastelazo, una aguja en un pajar, '
+            'rally de 5 estaciones de sensaciones, chiquero, carrera descalzos por campo '
+            'minado, desplumados, pista ciega, texturas, adivina qué tocas, entre otros.'
+        ),
+    },
+    {
+        'titulo': 'Olimpiadas recreativas',
+        'descripcion': (
+            'Actividades olímpicas modificadas por equipos/bases: carrera de costales, '
+            'obstáculos, carrera de caballos, salto de jenga, tiro al blanco, lanzamiento '
+            'de zapato, quemados, luz verde luz roja, futbol modificado, encestando, '
+            'entre otros.'
+        ),
+    },
+]
+
+CONDICIONES_PAGO_RALLY = (
+    'Se reserva la fecha con $1,000 pesos por transferencia o depósito. '
+    'El pago del evento se realiza al llegar y antes de instalar, o vía transferencia. '
+    'Los precios son por base/grupo y sin IVA; si requiere factura, notificar.'
+)
+
 
 class Cotizacion(models.Model):
     TIPO = [
         ('NORMAL', 'Normal'),
         ('PROYECTO', 'Proyecto'),
+        ('RALLY', 'Rally'),
     ]
     STATUS = [
         ('BORRADOR', 'Borrador'),
