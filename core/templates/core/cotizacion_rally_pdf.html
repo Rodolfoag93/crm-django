@@ -228,17 +228,63 @@
   {% endfor %}
   {% endif %}
 
-  <h2>Costo por base / grupo</h2>
+  {% if tarifas_rally %}
+  <h2>Tarifa por base / grupo</h2>
+  <table class="conceptos">
+    <thead>
+      <tr>
+        <th>Duración</th>
+        <th class="right">Precio por base</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for t in tarifas_rally %}
+      <tr>
+        <td>{{ t.nombre }}</td>
+        <td class="right">${{ t.precio }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <div class="note">El total se calcula al confirmar cantidad de bases/grupos y duración. Esta propuesta no fija un monto final.</div>
+  {% endif %}
+
+  {% if conceptos_sugeridos %}
+  <h2>Complementos sugeridos (brincolines / extras)</h2>
+  <table class="conceptos">
+    <thead>
+      <tr>
+        <th>Sugerencia</th>
+        <th class="right">Precio ref.</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for c in conceptos_sugeridos %}
+      <tr>
+        <td>
+          {{ c.nombre }}
+          {% if c.descripcion %}<div style="font-size:10px;color:#5a7060;">{{ c.descripcion }}</div>{% endif %}
+        </td>
+        <td class="right">${{ c.precio_unitario }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <div class="note">Estos complementos son opcionales y <strong>no suman al total</strong> de la propuesta. Se confirman al cerrar el pedido.</div>
+  {% endif %}
+
+  {% if tiene_cobro_confirmado %}
+  <h2>Cobro confirmado</h2>
   <table class="conceptos">
     <thead>
       <tr>
         <th>Concepto</th>
-        <th class="right">Bases</th>
+        <th class="right">Cant.</th>
         <th class="right">Monto</th>
       </tr>
     </thead>
     <tbody>
-      {% for c in conceptos_fmt %}
+      {% for c in conceptos_confirmados %}
       <tr>
         <td>
           {{ c.nombre }}
@@ -259,13 +305,14 @@
       <tr class="total"><td><strong>Total</strong></td><td class="right"><strong>${{ total_fmt }}</strong></td></tr>
     </table>
   </div>
+  {% endif %}
 
   {% if cotizacion.aplicar_iva or cotizacion.aplicar_isr %}
   <div class="note">
     Nota: montos en pesos mexicanos.
     {% if cotizacion.aplicar_iva %}Se suma IVA (16%){% endif %}
     {% if cotizacion.aplicar_isr %} y se resta ISR (1.25%){% endif %}
-    sobre el subtotal.
+    sobre el subtotal confirmado.
   </div>
   {% else %}
   <div class="note">Nota: precios por base/grupo sin IVA, salvo que se solicite factura. Montos en pesos mexicanos (MXN).</div>

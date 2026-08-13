@@ -51,6 +51,7 @@ interface ConceptoDraft {
   cantidad: number
   monto: string
   producto_id: number | null
+  es_sugerencia: boolean
 }
 
 interface ZonaImagen {
@@ -147,6 +148,7 @@ export default function CotizadorCRM() {
   const [resultProductos, setResultProductos] = useState<ProductoEncontrado[]>([])
   const [buscandoProducto, setBuscandoProducto] = useState(false)
   const [cantidadProd, setCantidadProd] = useState('1')
+  const [modoAgregarRally, setModoAgregarRally] = useState<'sugerido' | 'confirmado'>('sugerido')
 
   const fetchList = useCallback(() => {
     setLoading(true)
@@ -236,7 +238,16 @@ export default function CotizadorCRM() {
   )
 
   const subtotalPreview = useMemo(
-    () => conceptos.reduce((s, c) => s + (Number(c.monto) || 0), 0),
+    () => conceptos.reduce((s, c) => s + (c.es_sugerencia ? 0 : (Number(c.monto) || 0)), 0),
+    [conceptos],
+  )
+
+  const sugeridosPreview = useMemo(
+    () => conceptos.filter(c => c.es_sugerencia),
+    [conceptos],
+  )
+  const confirmadosPreview = useMemo(
+    () => conceptos.filter(c => !c.es_sugerencia),
     [conceptos],
   )
 
@@ -269,6 +280,7 @@ export default function CotizadorCRM() {
     setQueryProducto('')
     setResultProductos([])
     setCantidadProd(tipo === 'RALLY' ? '6' : '1')
+    setModoAgregarRally(tipo === 'RALLY' ? 'sugerido' : 'sugerido')
     resetServicioForm()
   }
 
@@ -299,6 +311,7 @@ export default function CotizadorCRM() {
       cantidad: c.cantidad || 1,
       monto: String(c.monto ?? '0'),
       producto_id: c.producto_id ?? null,
+      es_sugerencia: Boolean(c.es_sugerencia),
     })))
     setZonas((data.zonas || []).map((z: any) => ({
       id: z.id,
@@ -310,6 +323,7 @@ export default function CotizadorCRM() {
     setQueryProducto('')
     setResultProductos([])
     setCantidadProd('1')
+    setModoAgregarRally('sugerido')
     resetServicioForm()
   }
 
@@ -330,12 +344,18 @@ export default function CotizadorCRM() {
     const cant = Math.max(1, parseInt(cantidadProd || '1', 10))
     const unit = Number(p.precio) || 0
     const esBaseRally = (p.nombre || '').startsWith('Base Rally')
+    // RALLY propuesta: lo agregado en modo "sugerido" no suma al total.
+    // Al cerrar el pedido (modo confirmado) sí cuenta para convertir a renta.
+    const esSugerencia = tipoNueva === 'RALLY' && modoAgregarRally === 'sugerido'
     setConceptos(prev => [...prev, {
       nombre: p.nombre,
-      descripcion: esBaseRally ? 'Precio por base/grupo' : '',
+      descripcion: esBaseRally
+        ? 'Precio por base/grupo'
+        : (esSugerencia ? 'Sugerencia (no suma al total)' : ''),
       cantidad: cant,
       monto: String((unit * cant).toFixed(2)),
       producto_id: p.id,
+      es_sugerencia: esSugerencia,
     }])
     setQueryProducto('')
     setResultProductos([])
@@ -350,8 +370,19 @@ export default function CotizadorCRM() {
       cantidad: cant,
       monto: String(Number(servicioMonto) || 0),
       producto_id: null,
+      es_sugerencia: false,
     }])
     resetServicioForm()
+  }
+
+  const toggleSugerencia = (idx: number) => {
+    setConceptos(arr => arr.map((c, i) => i === idx ? {
+      ...c,
+      es_sugerencia: !c.es_sugerencia,
+      descripcion: !c.es_sugerencia
+        ? (c.descripcion || 'Sugerencia (no suma al total)')
+        : (c.descripcion === 'Sugerencia (no suma al total)' ? '' : c.descripcion),
+    } : c))
   }
 
   const subirImagenesPendientes = async (cotizacionId: number, zonasGuardadas: any[], drafts: ZonaDraft[]) => {
@@ -898,12 +929,38 @@ export default function CotizadorCRM() {
 
           <div>
             <h3 className="text-sm font-semibold mb-2">
-              {tipoNueva === 'RALLY' ? 'Cobro (Base Rally × bases + complementos)' : 'Conceptos'}
+              {tipoNueva === 'RALLY' ? 'Productos de la propuesta' : 'Conceptos'}
             </h3>
             {tipoNueva === 'RALLY' && (
-              <p className="text-xs mb-2" style={{ color: '#5a7060' }}>
-                Obligatorio: producto <strong>Base Rally 2/3/4 horas</strong> (cantidad = bases/grupos). Opcional: traslado y brincolines.
-              </p>
+              <div className="mb-3">
+                <p className="text-xs mb-2" style={{ color: '#5a7060' }}>
+                  La propuesta se envía <strong>sin total fijo</strong>. Los brincolines van como
+                  sugerencia (no suman). Antes de convertir a renta, cambia a
+                  <strong> cobro confirmado</strong> y agrega Base Rally × bases + lo elegido.
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => { setModoAgregarRally('sugerido'); setCantidadProd('1') }}
+                    className="px-3 py-1.5 rounded-lg text-xs font-semibold border"
+                    style={{
+                      borderColor: modoAgregarRally === 'sugerido' ? '#ea580c' : '#ddeadd',
+                      background: modoAgregarRally === 'sugerido' ? '#fff7ed' : 'white',
+                      color: modoAgregarRally === 'sugerido' ? '#c2410c' : '#5a7060',
+                    }}
+                  >Agregar como sugerencia</button>
+                  <button
+                    type="button"
+                    onClick={() => { setModoAgregarRally('confirmado'); setCantidadProd('6') }}
+                    className="px-3 py-1.5 rounded-lg text-xs font-semibold border"
+                    style={{
+                      borderColor: modoAgregarRally === 'confirmado' ? '#16a34a' : '#ddeadd',
+                      background: modoAgregarRally === 'confirmado' ? '#f0fdf4' : 'white',
+                      color: modoAgregarRally === 'confirmado' ? '#15803d' : '#5a7060',
+                    }}
+                  >Agregar a cobro confirmado</button>
+                </div>
+              </div>
             )}
             <div className="flex gap-2 flex-wrap items-start mb-3">
               <div className="relative flex-1 min-w-[220px]">
@@ -988,14 +1045,40 @@ export default function CotizadorCRM() {
                   )}
                   <input type="number" value={c.cantidad} onChange={e => setConceptos(arr => arr.map((x, idx) => idx === i ? { ...x, cantidad: Number(e.target.value) || 1 } : x))} className="border rounded px-2 py-1 w-16" style={{ borderColor: '#ddeadd' }} />
                   <input type="number" step="0.01" value={c.monto} onChange={e => setConceptos(arr => arr.map((x, idx) => idx === i ? { ...x, monto: e.target.value } : x))} className="border rounded px-2 py-1 w-28" style={{ borderColor: '#ddeadd' }} />
-                  <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: c.producto_id ? '#dcfce7' : '#fef3c7', color: c.producto_id ? '#15803d' : '#b45309' }}>
-                    {c.producto_id ? 'Catálogo' : 'Servicio'}
-                  </span>
+                  {tipoNueva === 'RALLY' ? (
+                    <button
+                      type="button"
+                      onClick={() => toggleSugerencia(i)}
+                      className="text-xs px-2 py-0.5 rounded-full"
+                      style={{
+                        background: c.es_sugerencia ? '#ffedd5' : '#dcfce7',
+                        color: c.es_sugerencia ? '#c2410c' : '#15803d',
+                      }}
+                      title="Clic para alternar sugerencia / cobro"
+                    >
+                      {c.es_sugerencia ? 'Sugerido' : 'Confirmado'}
+                    </button>
+                  ) : (
+                    <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: c.producto_id ? '#dcfce7' : '#fef3c7', color: c.producto_id ? '#15803d' : '#b45309' }}>
+                      {c.producto_id ? 'Catálogo' : 'Servicio'}
+                    </span>
+                  )}
                   <button type="button" onClick={() => setConceptos(arr => arr.filter((_, idx) => idx !== i))} className="text-red-600">Quitar</button>
                 </div>
               ))}
             </div>
-            <p className="text-sm mt-2" style={{ color: '#5a7060' }}>Subtotal: <strong>{money(subtotalPreview)}</strong></p>
+            <p className="text-sm mt-2" style={{ color: '#5a7060' }}>
+              {tipoNueva === 'RALLY' ? (
+                <>
+                  Sugeridos: <strong>{sugeridosPreview.length}</strong>
+                  {' · '}
+                  Cobro confirmado: <strong>{money(subtotalPreview)}</strong>
+                  {subtotalPreview <= 0 && <span className="ml-1 text-xs">(propuesta sin total)</span>}
+                </>
+              ) : (
+                <>Subtotal: <strong>{money(subtotalPreview)}</strong></>
+              )}
+            </p>
           </div>
 
           <div className="flex gap-4 text-sm">
@@ -1243,7 +1326,9 @@ export default function CotizadorCRM() {
                 <td className="px-4 py-3">{TIPO_LABEL[c.tipo] || c.tipo}</td>
                 <td className="px-4 py-3">{c.cliente_nombre}</td>
                 <td className="px-4 py-3">{c.fecha_evento || '—'}</td>
-                <td className="px-4 py-3">{money(c.total)}</td>
+                <td className="px-4 py-3">
+                  {c.tipo === 'RALLY' && Number(c.total) <= 0 ? 'Propuesta' : money(c.total)}
+                </td>
                 <td className="px-4 py-3">{STATUS_LABEL[c.status]}</td>
                 <td className="px-4 py-3">
                   <div className="flex gap-3">

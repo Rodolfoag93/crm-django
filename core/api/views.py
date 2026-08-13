@@ -3307,6 +3307,7 @@ def _cotizacion_to_dict(c, detalle=False):
                 'monto': str(x.monto),
                 'producto_id': x.producto_id,
                 'producto_nombre': x.producto.nombre if x.producto_id else None,
+                'es_sugerencia': bool(x.es_sugerencia),
             }
             for x in c.conceptos.all()
         ]

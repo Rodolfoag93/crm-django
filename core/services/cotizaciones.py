@@ -111,7 +111,16 @@ def _nexoo_file_uri() -> str:
 
 
 def recalcular_totales(cotizacion: Cotizacion) -> Cotizacion:
-    subtotal = sum((_money(c.monto) for c in cotizacion.conceptos.all()), Decimal('0.00'))
+    # Las líneas marcadas como sugerencia (p. ej. brincolines en propuesta RALLY)
+    # no forman parte del total cobrable.
+    subtotal = sum(
+        (
+            _money(c.monto)
+            for c in cotizacion.conceptos.all()
+            if not getattr(c, 'es_sugerencia', False)
+        ),
+        Decimal('0.00'),
+    )
     monto_iva = _money(subtotal * IVA_RATE) if cotizacion.aplicar_iva else Decimal('0.00')
     monto_isr = _money(subtotal * ISR_RATE) if cotizacion.aplicar_isr else Decimal('0.00')
     total = _money(subtotal + monto_iva - monto_isr)
@@ -200,7 +209,8 @@ def generar_intro(cotizacion: Cotizacion) -> str:
         partes = [
             'Por medio del presente le presentamos la propuesta recreativa'
             f'{" " + cotizacion.nombre_evento if cotizacion.nombre_evento else ""}'
-            ' (paquetes por base/grupo)'
+            ' por base/grupo. El monto final se confirma al definir cantidad de bases,'
+            ' duración y complementos elegidos'
         ]
         if cotizacion.fecha_evento:
             fecha = _fmt_fecha(cotizacion.fecha_evento, 'largo')
@@ -269,6 +279,7 @@ def sincronizar_conceptos(cotizacion: Cotizacion, conceptos_data):
             descripcion=(c.get('descripcion') or '').strip(),
             cantidad=max(int(c.get('cantidad') or 1), 1),
             monto=_money(c.get('monto') or 0),
+            es_sugerencia=bool(c.get('es_sugerencia')),
             producto=producto,
         )
     recalcular_totales(cotizacion)
@@ -320,7 +331,7 @@ def convertir_a_renta(
         raise CotizacionServiceError('No se puede convertir una cotización rechazada.')
     if not cotizacion.fecha_evento or not cotizacion.hora_inicio or not cotizacion.hora_fin:
         raise CotizacionServiceError('La cotización requiere fecha y horario del evento.')
-    if not cotizacion.conceptos.exists() and cotizacion.tipo in ('NORMAL', 'RALLY'):
+    if not cotizacion.conceptos.exists() and cotizacion.tipo == 'NORMAL':
         raise CotizacionServiceError('Agrega al menos un concepto/producto.')
 
     anticipo_dec = _money(anticipo)
@@ -352,23 +363,41 @@ def convertir_a_renta(
         if libres:
             comentarios_extra.append(libres)
     else:
-        # NORMAL y RALLY: líneas ligadas a catálogo (Base Rally N horas, Traslado, etc.)
+        # NORMAL y RALLY: líneas ligadas a catálogo.
+        # En RALLY solo se convierten líneas confirmadas (no sugerencias).
+        conceptos_all = list(cotizacion.conceptos.select_related('producto').all())
         if cotizacion.tipo == 'RALLY':
-            conceptos_rally = list(cotizacion.conceptos.select_related('producto').all())
+            conceptos_conv = [c for c in conceptos_all if not c.es_sugerencia]
+            sugeridos = [c for c in conceptos_all if c.es_sugerencia]
             tiene_base = any(
                 (c.producto and c.producto.nombre in BASE_RALLY_POR_HORAS.values())
-                for c in conceptos_rally
+                for c in conceptos_conv
             )
             if not tiene_base:
                 raise CotizacionServiceError(
-                    'La cotización rally requiere al menos un producto "Base Rally N horas".'
+                    'Antes de convertir, edita la cotización y confirma al menos un '
+                    '"Base Rally N horas" (cantidad = bases/grupos). Los brincolines '
+                    'sugeridos no cuentan hasta marcarlos como cobro.'
+                )
+            if cotizacion.total <= 0:
+                raise CotizacionServiceError(
+                    'La propuesta aún no tiene cobro confirmado. Edita la cotización '
+                    'con las bases/duración y brincolines elegidos antes de convertir.'
                 )
             paquetes = list(cotizacion.zonas.values_list('titulo', flat=True))
             if paquetes:
                 comentarios_extra.append(
                     'Paquetes / actividades:\n' + '\n'.join(f'- {t}' for t in paquetes)
                 )
-        for c in cotizacion.conceptos.select_related('producto').all():
+            if sugeridos:
+                comentarios_extra.append(
+                    'Sugerencias de la propuesta (no convertidas):\n'
+                    + '\n'.join(f'- {c.nombre}' for c in sugeridos)
+                )
+        else:
+            conceptos_conv = conceptos_all
+
+        for c in conceptos_conv:
             if not c.producto_id:
                 raise CotizacionServiceError(
                     f'El concepto "{c.nombre}" debe estar ligado a un producto del catálogo.'
@@ -481,6 +510,15 @@ def render_pdf_bytes(cotizacion: Cotizacion) -> bytes:
         template = 'core/cotizacion_normal_pdf.html'
     hoy = timezone.localdate()
     conceptos = list(cotizacion.conceptos.all())
+    confirmados = [c for c in conceptos if not c.es_sugerencia]
+    sugeridos = [c for c in conceptos if c.es_sugerencia]
+    tarifas_rally = []
+    if cotizacion.tipo == 'RALLY':
+        for p in listar_productos_base_rally():
+            tarifas_rally.append({
+                'nombre': p.nombre,
+                'precio': _fmt_money(p.precio),
+            })
     zonas_fmt = []
     for z in cotizacion.zonas.prefetch_related('imagenes').all():
         imgs = []
@@ -493,10 +531,27 @@ def render_pdf_bytes(cotizacion: Cotizacion) -> bytes:
             'descripcion': z.descripcion,
             'imagenes': imgs,
         })
+
+    def _fmt_concepto(c):
+        unit = _money(c.monto) / Decimal(c.cantidad or 1)
+        return {
+            'nombre': c.nombre,
+            'descripcion': c.descripcion,
+            'cantidad': c.cantidad,
+            'monto': _fmt_money(c.monto),
+            'precio_unitario': _fmt_money(unit),
+            'es_servicio': c.producto_id is None,
+            'es_sugerencia': bool(c.es_sugerencia),
+        }
+
     html_string = render_to_string(template, {
         'cotizacion': cotizacion,
         'zonas': zonas_fmt,
         'conceptos': conceptos,
+        'tarifas_rally': tarifas_rally,
+        'conceptos_confirmados': [_fmt_concepto(c) for c in confirmados],
+        'conceptos_sugeridos': [_fmt_concepto(c) for c in sugeridos],
+        'tiene_cobro_confirmado': bool(confirmados) and cotizacion.total > 0,
         'fecha': hoy,
         'lugar_fecha': f'Colima, Col., a {_fmt_fecha(hoy, "largo")}',
         'logo_url': _logo_file_uri(),
@@ -505,16 +560,7 @@ def render_pdf_bytes(cotizacion: Cotizacion) -> bytes:
         'iva_fmt': _fmt_money(cotizacion.monto_iva),
         'isr_fmt': _fmt_money(cotizacion.monto_isr),
         'total_fmt': _fmt_money(cotizacion.total),
-        'conceptos_fmt': [
-            {
-                'nombre': c.nombre,
-                'descripcion': c.descripcion,
-                'cantidad': c.cantidad,
-                'monto': _fmt_money(c.monto),
-                'es_servicio': c.producto_id is None,
-            }
-            for c in conceptos
-        ],
+        'conceptos_fmt': [_fmt_concepto(c) for c in conceptos],
     })
     try:
         from weasyprint import HTML

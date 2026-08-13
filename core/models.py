@@ -1593,6 +1593,8 @@ class CotizacionConcepto(models.Model):
     descripcion = models.TextField(blank=True, default='')
     cantidad = models.PositiveIntegerField(default=1)
     monto = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    # En RALLY: brincolines/sugerencias de la propuesta no suman al total.
+    es_sugerencia = models.BooleanField(default=False, db_index=True)
     producto = models.ForeignKey(
         Producto,
         null=True,
