@@ -249,6 +249,27 @@
   <div class="note">El total se calcula al confirmar cantidad de bases/grupos y duración. Esta propuesta no fija un monto final.</div>
   {% endif %}
 
+  <h2>Traslado</h2>
+  <div class="note">{{ texto_traslado }}</div>
+  {% if conceptos_traslado %}
+  <table class="conceptos">
+    <thead>
+      <tr>
+        <th>Concepto</th>
+        <th class="right">Precio ref.</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for c in conceptos_traslado %}
+      <tr>
+        <td>{{ c.nombre }}</td>
+        <td class="right">${{ c.precio_unitario }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
   {% if conceptos_sugeridos %}
   <h2>Complementos sugeridos (brincolines / extras)</h2>
   <table class="conceptos">

@@ -13,6 +13,7 @@ from django.utils import timezone
 from core.models import (
     BASE_RALLY_POR_HORAS,
     NOMBRE_PRODUCTO_PROYECTO,
+    TEXTO_TRASLADO_RALLY,
     AsignacionCoordinador,
     CoordinadorApoyo,
     Cotizacion,
@@ -500,6 +501,10 @@ def _imagen_file_uri(field_file) -> str:
         return ''
 
 
+def _es_concepto_traslado(nombre: str) -> bool:
+    return (nombre or '').strip().lower().startswith('traslado')
+
+
 def render_pdf_bytes(cotizacion: Cotizacion) -> bytes:
     recalcular_totales(cotizacion)
     if cotizacion.tipo == 'PROYECTO':
@@ -511,7 +516,11 @@ def render_pdf_bytes(cotizacion: Cotizacion) -> bytes:
     hoy = timezone.localdate()
     conceptos = list(cotizacion.conceptos.all())
     confirmados = [c for c in conceptos if not c.es_sugerencia]
-    sugeridos = [c for c in conceptos if c.es_sugerencia]
+    traslados = [c for c in conceptos if _es_concepto_traslado(c.nombre)]
+    sugeridos = [
+        c for c in conceptos
+        if c.es_sugerencia and not _es_concepto_traslado(c.nombre)
+    ]
     tarifas_rally = []
     if cotizacion.tipo == 'RALLY':
         for p in listar_productos_base_rally():
@@ -549,9 +558,16 @@ def render_pdf_bytes(cotizacion: Cotizacion) -> bytes:
         'zonas': zonas_fmt,
         'conceptos': conceptos,
         'tarifas_rally': tarifas_rally,
-        'conceptos_confirmados': [_fmt_concepto(c) for c in confirmados],
+        'conceptos_confirmados': [
+            _fmt_concepto(c) for c in confirmados
+            if not _es_concepto_traslado(c.nombre)
+        ],
         'conceptos_sugeridos': [_fmt_concepto(c) for c in sugeridos],
-        'tiene_cobro_confirmado': bool(confirmados) and cotizacion.total > 0,
+        'conceptos_traslado': [_fmt_concepto(c) for c in traslados],
+        'texto_traslado': TEXTO_TRASLADO_RALLY,
+        'tiene_cobro_confirmado': any(
+            not _es_concepto_traslado(c.nombre) for c in confirmados
+        ) and cotizacion.total > 0,
         'fecha': hoy,
         'lugar_fecha': f'Colima, Col., a {_fmt_fecha(hoy, "largo")}',
         'logo_url': _logo_file_uri(),

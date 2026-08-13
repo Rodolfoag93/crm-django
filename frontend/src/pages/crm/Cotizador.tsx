@@ -340,14 +340,17 @@ export default function CotizadorCRM() {
     const cant = Math.max(1, parseInt(cantidadProd || '1', 10))
     const unit = Number(p.precio) || 0
     const esBaseRally = (p.nombre || '').startsWith('Base Rally')
+    const esTraslado = (p.nombre || '').toLowerCase().startsWith('traslado')
     // RALLY propuesta: lo agregado en modo "sugerido" no suma al total.
-    // Al cerrar el pedido (modo confirmado) sí cuenta para convertir a renta.
+    // Traslado se guarda igual (sin sumar) pero en PDF va en sección propia, no como sugerencia.
     const esSugerencia = tipoNueva === 'RALLY' && modoAgregarRally === 'sugerido'
+    let descripcion = ''
+    if (esBaseRally) descripcion = 'Precio por base/grupo'
+    else if (esTraslado) descripcion = 'Traslado fuera de zona conurbada (cliente)'
+    else if (esSugerencia) descripcion = 'Sugerencia (no suma al total)'
     setConceptos(prev => [...prev, {
       nombre: p.nombre,
-      descripcion: esBaseRally
-        ? 'Precio por base/grupo'
-        : (esSugerencia ? 'Sugerencia (no suma al total)' : ''),
+      descripcion,
       cantidad: cant,
       monto: String((unit * cant).toFixed(2)),
       producto_id: p.id,
@@ -1047,12 +1050,18 @@ export default function CotizadorCRM() {
                       onClick={() => toggleSugerencia(i)}
                       className="text-xs px-2 py-0.5 rounded-full"
                       style={{
-                        background: c.es_sugerencia ? '#ffedd5' : '#dcfce7',
-                        color: c.es_sugerencia ? '#c2410c' : '#15803d',
+                        background: (c.nombre || '').toLowerCase().startsWith('traslado')
+                          ? '#e0e7ff'
+                          : c.es_sugerencia ? '#ffedd5' : '#dcfce7',
+                        color: (c.nombre || '').toLowerCase().startsWith('traslado')
+                          ? '#3730a3'
+                          : c.es_sugerencia ? '#c2410c' : '#15803d',
                       }}
                       title="Clic para alternar sugerencia / cobro"
                     >
-                      {c.es_sugerencia ? 'Sugerido' : 'Confirmado'}
+                      {(c.nombre || '').toLowerCase().startsWith('traslado')
+                        ? (c.es_sugerencia ? 'Traslado' : 'Traslado ✓')
+                        : (c.es_sugerencia ? 'Sugerido' : 'Confirmado')}
                     </button>
                   ) : (
                     <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: c.producto_id ? '#dcfce7' : '#fef3c7', color: c.producto_id ? '#15803d' : '#b45309' }}>

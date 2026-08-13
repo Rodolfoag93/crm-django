@@ -1476,6 +1476,12 @@ CONDICIONES_PAGO_RALLY = (
     'Los precios son por base/grupo y sin IVA; si requiere factura, notificar.'
 )
 
+TEXTO_TRASLADO_RALLY = (
+    'Es importante aclararle que los gastos generados de las horas extras por el traslado de '
+    'materiales y del personal en carretera, así como desgaste de vehículos y gasolina fuera de la zona '
+    'conurbada de Colima y Villa de Álvarez se deberán cubrir por el cliente.'
+)
+
 
 class Cotizacion(models.Model):
     TIPO = [
