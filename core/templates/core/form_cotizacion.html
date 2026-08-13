@@ -59,16 +59,16 @@
     {% endif %}
 
     <fieldset style="margin-bottom:16px; padding:12px;">
-        <legend>{% if tipo == 'RALLY' %}Cobro (Base Rally × bases/grupos + traslado){% else %}Conceptos cobrables{% endif %}</legend>
+        <legend>{% if tipo == 'RALLY' %}Cobro (Base Rally × bases + complementos){% else %}Conceptos cobrables{% endif %}</legend>
         {% if tipo == 'RALLY' %}
         <p style="color:#555; margin-top:0;">
-            Usa <strong>Base Rally 2/3/4 horas</strong> con cantidad = número de bases/grupos.
-            Agrega un <strong>Traslado …</strong> si aplica. No uses Rally Pista (brincolín).
+            Obligatorio: <strong>Base Rally 2/3/4 horas</strong> con cantidad = número de bases/grupos.
+            Opcional: <strong>Traslado …</strong> y <strong>brincolines u otros</strong> del catálogo como complemento.
         </p>
         {% endif %}
         <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
             <select id="producto_select" style="min-width:220px;"></select>
-            <input type="number" id="producto_cantidad" value="{% if tipo == 'RALLY' %}6{% else %}1{% endif %}" min="1" style="width:70px;" title="{% if tipo == 'RALLY' %}Bases / grupos{% else %}Cantidad{% endif %}">
+            <input type="number" id="producto_cantidad" value="{% if tipo == 'RALLY' %}6{% else %}1{% endif %}" min="1" style="width:70px;" title="{% if tipo == 'RALLY' %}Cantidad (bases si es Base Rally){% else %}Cantidad{% endif %}">
             <button type="button" onclick="addProducto()">+ Del catálogo</button>
             {% if tipo != 'RALLY' %}
             <button type="button" onclick="addConceptoLibre()">+ Concepto libre</button>
@@ -133,7 +133,12 @@ function fillProductos() {
   PRODUCTOS.forEach(p => {
     const opt = document.createElement('option');
     opt.value = p.id;
-    opt.textContent = `${p.nombre} — $${money(p.precio)}`;
+    const tag = (p.nombre || '').startsWith('Base Rally')
+      ? ' [base]'
+      : (p.nombre || '').toLowerCase().startsWith('traslado')
+        ? ' [traslado]'
+        : (p.tipo === 'BR' ? ' [brincolín]' : '');
+    opt.textContent = `${p.nombre}${tag} — $${money(p.precio)}`;
     sel.appendChild(opt);
   });
 }

@@ -153,14 +153,25 @@ def obtener_producto_base_rally(horas: int) -> Producto:
 
 
 def productos_catalogo_rally_qs():
-    """Selector de catálogo para cotización RALLY: bases + traslados."""
-    from django.db.models import Q
+    """
+    Catálogo para cotización RALLY: todo el activo (bases, traslados, brincolines…).
+    Base Rally y Traslados van primero para facilitar el armado.
+    """
+    from django.db.models import Case, IntegerField, Value, When
+
     nombres_base = list(BASE_RALLY_POR_HORAS.values())
     return (
         Producto.objects.filter(activo=True)
-        .filter(Q(nombre__in=nombres_base) | Q(nombre__istartswith='Traslado'))
-        .exclude(nombre__iexact='Rally Pista')
-        .order_by('nombre')
+        .exclude(nombre='Proyecto recreativo')
+        .annotate(
+            _prio=Case(
+                When(nombre__in=nombres_base, then=Value(0)),
+                When(nombre__istartswith='Traslado', then=Value(1)),
+                default=Value(2),
+                output_field=IntegerField(),
+            )
+        )
+        .order_by('_prio', 'nombre')
     )
 
 

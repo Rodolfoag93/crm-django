@@ -127,7 +127,7 @@
         {% if cotizacion.tipo == 'PROYECTO' %}
         En proyectos: se crea línea “Proyecto recreativo” con el total y se reservan solo productos de inventario.
         {% elif cotizacion.tipo == 'RALLY' %}
-        En rally: se convierten las líneas Base Rally (cantidad = bases/grupos) y Traslado del catálogo. Anticipo sugerido $1,000.
+        En rally: Base Rally (cantidad = bases/grupos) es obligatorio; puedes sumar traslados y brincolines del catálogo. Anticipo sugerido $1,000.
         {% else %}
         Se convierten los conceptos ligados al catálogo con su cantidad y precio.
         {% endif %}

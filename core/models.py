@@ -1413,7 +1413,8 @@ class Factura(models.Model):
 
 NOMBRE_PRODUCTO_PROYECTO = 'Proyecto recreativo'
 
-# Productos de catálogo para cotización RALLY (no incluir "Rally Pista": es brincolín).
+# Productos base de cobro para cotización RALLY (cantidad = bases/grupos).
+# Brincolines y otros del catálogo se pueden agregar como complemento.
 BASE_RALLY_POR_HORAS = {
     2: 'Base Rally 2 horas',
     3: 'Base Rally 3 horas',
