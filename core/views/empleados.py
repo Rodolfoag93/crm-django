@@ -82,6 +82,12 @@ def aprobar_solicitud(request, solicitud_id):
 
         if empleado:
             empleado.user = user
+            empleado.tipo_empleado = solicitud.tipo_empleado
+            empleado.activo = True
+            if not (empleado.nombre or '').strip():
+                empleado.nombre = solicitud.nombre
+            if solicitud.email and not empleado.correo:
+                empleado.correo = solicitud.email
             empleado.save()
         else:
             empleado = Empleado.objects.create(
@@ -93,6 +99,17 @@ def aprobar_solicitud(request, solicitud_id):
                 activo=True,
                 user=user
             )
+
+        from django.contrib.auth.models import Group
+        grupo_por_tipo = {
+            'COORDINADOR': 'Coordinador',
+            'REPARTIDOR': 'Cargador',
+            'ENCARGADO': 'Encargado Material',
+        }
+        grupo_nombre = grupo_por_tipo.get(solicitud.tipo_empleado)
+        if grupo_nombre:
+            grupo, _ = Group.objects.get_or_create(name=grupo_nombre)
+            user.groups.add(grupo)
 
         # Actualizar solicitud
         solicitud.estado = 'APROBADA'
