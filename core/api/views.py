@@ -1155,11 +1155,17 @@ class SolicitudRegistroViewSet(viewsets.GenericViewSet):
         empleado = Empleado.objects.filter(telefono=solicitud.telefono).first()
 
         if empleado:
-        # Vincular usuario al empleado existente
+            # Vincular usuario al empleado existente y sincronizar rol de la solicitud
             empleado.user = user
+            empleado.tipo_empleado = solicitud.tipo_empleado
+            empleado.activo = True
+            if not (empleado.nombre or '').strip():
+                empleado.nombre = solicitud.nombre
+            if solicitud.email and not empleado.correo:
+                empleado.correo = solicitud.email
             empleado.save()
         else:
-         # Crear empleado nuevo
+            # Crear empleado nuevo
             empleado = Empleado.objects.create(
                 nombre=solicitud.nombre,
                 telefono=solicitud.telefono,
@@ -1167,8 +1173,20 @@ class SolicitudRegistroViewSet(viewsets.GenericViewSet):
                 tipo_empleado=solicitud.tipo_empleado,
                 sueldo_diario=0,
                 activo=True,
-                user=user
-        )
+                user=user,
+            )
+
+        # Grupo Django usado por /auth/me/ (es_coordinador, es_cargador, etc.)
+        from django.contrib.auth.models import Group
+        grupo_por_tipo = {
+            'COORDINADOR': 'Coordinador',
+            'REPARTIDOR': 'Cargador',
+            'ENCARGADO': 'Encargado Material',
+        }
+        grupo_nombre = grupo_por_tipo.get(solicitud.tipo_empleado)
+        if grupo_nombre:
+            grupo, _ = Group.objects.get_or_create(name=grupo_nombre)
+            user.groups.add(grupo)
 
         # Actualizar solicitud
         solicitud.estado = 'APROBADA'
