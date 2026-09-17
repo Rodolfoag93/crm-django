@@ -1756,3 +1756,61 @@ class SolicitudCambioMaterial(models.Model):
 
     def __str__(self):
         return f"{self.get_tipo_display()} {self.material} ({self.estado})"
+
+
+class SitioWebContenido(models.Model):
+    datos = models.JSONField(blank=True, default=dict)
+    actualizado_en = models.DateTimeField(auto_now=True)
+    actualizado_por = models.ForeignKey(
+        User,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='sitio_web_ediciones',
+    )
+
+    class Meta:
+        verbose_name = 'Contenido sitio web'
+        verbose_name_plural = 'Contenido sitio web'
+
+    @classmethod
+    def get_solo(cls):
+        obj, _ = cls.objects.get_or_create(pk=1, defaults={'datos': {}})
+        return obj
+
+
+class SitioWebMedia(models.Model):
+    clave = models.CharField(max_length=40, unique=True)
+    imagen = models.ImageField(upload_to='sitio/')
+    actualizado_en = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Imagen sitio web'
+        verbose_name_plural = 'Imagenes sitio web'
+
+    def __str__(self):
+        return self.clave
+
+
+class WhatsAppBotPause(models.Model):
+    telefono = models.CharField(max_length=20, unique=True, db_index=True)
+    reason = models.CharField(max_length=40, default='smb_echo')
+    paused_at = models.DateTimeField(auto_now=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        verbose_name = 'Pausa bot WhatsApp'
+        verbose_name_plural = 'Pausas bot WhatsApp'
+
+
+class WhatsAppMessageBuffer(models.Model):
+    telefono = models.CharField(max_length=20, unique=True, db_index=True)
+    textos = models.JSONField(default=list, blank=True)
+    profile_name = models.CharField(max_length=120, blank=True, default='')
+    last_message_id = models.CharField(max_length=120, blank=True, default='')
+    process_after = models.DateTimeField(db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Buffer mensaje WhatsApp'
+        verbose_name_plural = 'Buffers mensaje WhatsApp'
