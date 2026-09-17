@@ -16,12 +16,12 @@ curl -s -X POST https://bot.app.trotacrm.com/webhook/br-test-search \
   -H "Content-Type: application/json" \
   -d "{
     \"telefono\": \"5512345678\",
-    \"user_text\": \"spiderman chico tobogan\",
+    \"user_text\": \"mini slider\",
     \"session\": {
       \"fecha_renta\": \"2026-08-15\",
       \"hora_inicio\": \"14:00\",
       \"hora_fin\": \"22:00\",
-      \"cliente_nombre\": \"María López\",
+      \"cliente_nombre\": \"TEST María López\",
       \"direccion\": \"Calle A 10\",
       \"colonia\": \"Jardines\",
       \"ciudad\": \"Colima\"
@@ -48,3 +48,5 @@ curl -s -X POST https://bot.app.trotacrm.com/webhook/br-test-select \
 - HTTP usa `disponibilidad_query.*` (objeto), no string `disponibilidad_qs`
 - `choice: 0` manejado
 - Payload motor con `accion` + `telefono` top-level
+- **Armar Payload Motor** toma `telefono`/`session` de `T1b Cargar Search State` (no del `$input` de Session To CRM: `cotizacion_body` no lleva teléfono)
+- Query de ejemplo usa catálogo real (`mini slider`); `spiderman…` hoy da `no_matches` en prod

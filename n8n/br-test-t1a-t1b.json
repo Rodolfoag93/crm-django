@@ -250,7 +250,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const s = $input.first().json;\n\nif (s.skip_motor) {\n  return [{ json: s }];\n}\n\nconst mapped = $('Session To CRM Query (T1b)').item.json;\nconst purpose = mapped.purpose;\nlet payload;\n\nif (purpose === 'renta_crear') {\n  payload = mapped.renta_crear_body;\n} else {\n  payload = mapped.cotizacion_body;\n}\n\nif (!payload) {\n  throw new Error('Armar Payload Motor: body null para purpose=' + purpose);\n}\n\n// Motor trotacrm-crear-plan espera top-level accion + telefono + horario + productos\nconst motorBody = {\n  ...payload,\n  accion: purpose === 'renta_crear' ? 'crear' : 'cotizar',\n  telefono: s.telefono || payload.telefono,\n  nombre: payload.cliente_nombre || s.session?.cliente_nombre || '',\n  direccion: payload.calle_y_numero || s.session?.direccion || '',\n  colonia: payload.colonia || s.session?.colonia || '',\n  ciudad: payload.ciudad_o_municipio || s.session?.ciudad || '',\n};\n\nreturn [{\n  json: {\n    skip_motor: false,\n    purpose,\n    motor_body: motorBody,\n    producto_elegido: s.producto_elegido,\n  }\n}];"
+        "jsCode": "// $input = salida de Session To CRM (solo shapes). Estado conversacional\n// vive en T1b Cargar Search State (telefono, session, producto_elegido).\nconst mapped = $input.first().json;\nconst state = $('T1b Cargar Search State').item.json;\n\nif (state.skip_motor) {\n  return [{ json: state }];\n}\n\nconst purpose = mapped.purpose;\nlet payload;\n\nif (purpose === 'renta_crear') {\n  payload = mapped.renta_crear_body;\n} else {\n  payload = mapped.cotizacion_body;\n}\n\nif (!payload) {\n  throw new Error('Armar Payload Motor: body null para purpose=' + purpose);\n}\n\nconst telefono = String(\n  state.telefono || state.session?.telefono || payload.telefono || ''\n).replace(/\\D/g, '');\nif (!telefono) {\n  throw new Error(\n    'Armar Payload Motor: falta telefono (Session To CRM no lo pasa en cotizacion_body; debe venir de T1b Cargar Search State)'\n  );\n}\n\nconst session = state.session || {};\n\n// Motor trotacrm-crear-plan espera top-level accion + telefono + horario + productos\nconst motorBody = {\n  ...payload,\n  accion: purpose === 'renta_crear' ? 'crear' : 'cotizar',\n  telefono,\n  nombre: payload.cliente_nombre || session.cliente_nombre || '',\n  direccion: payload.calle_y_numero || session.direccion || '',\n  colonia: payload.colonia || session.colonia || '',\n  ciudad: payload.ciudad_o_municipio || session.ciudad || '',\n};\n\nreturn [{\n  json: {\n    skip_motor: false,\n    purpose,\n    motor_body: motorBody,\n    producto_elegido: state.producto_elegido,\n  }\n}];"
       },
       "id": "t1b-0004",
       "name": "Armar Payload Motor",
@@ -524,5 +524,7 @@
   ],
   "meta": {
     "templateCredsSetupCompleted": false
-  }
+  },
+  "id": "brTestT1aT1b001",
+  "active": true
 }

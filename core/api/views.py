@@ -20,6 +20,7 @@ from core.models import (
     BitacoraMantenimiento, TurnoAsistencia,
     Cuenta, PedidoFinanzas, TemporadaAlta,
     CoordinadorApoyo, SolicitudCambioMaterial, Cotizacion,
+    EncuestaClienteAnimacion,
 )
 from core.services.coordinacion import (
     CoordinacionError,
@@ -1065,19 +1066,94 @@ class AsistenciaViewSet(viewsets.ModelViewSet):
 
         return Response(data)
 
-class HorasExtraViewSet(viewsets.ReadOnlyModelViewSet):
+class HorasExtraViewSet(viewsets.ModelViewSet):
     serializer_class = HorasExtraSerializer
     permission_classes = [IsAuthenticated]
+    http_method_names = ['get', 'post', 'head', 'options']
 
     def get_queryset(self):
         user = self.request.user
         if user.is_staff or user.is_superuser:
-            return HorasExtra.objects.select_related('empleado').order_by('-semana_inicio')
+            qs = HorasExtra.objects.select_related('empleado').order_by('-semana_inicio')
+        else:
+            try:
+                empleado = user.empleado
+                qs = HorasExtra.objects.filter(empleado=empleado).order_by('-semana_inicio')
+            except Exception:
+                return HorasExtra.objects.none()
+
+        semana = self.request.query_params.get('semana_inicio') or self.request.query_params.get('inicio')
+        if semana:
+            qs = qs.filter(semana_inicio=semana)
+        empleado_id = self.request.query_params.get('empleado')
+        if empleado_id and (user.is_staff or user.is_superuser):
+            qs = qs.filter(empleado_id=empleado_id)
+        return qs
+
+    def create(self, request, *args, **kwargs):
+        if not (request.user.is_staff or request.user.is_superuser):
+            return Response({'error': 'No autorizado'}, status=status.HTTP_403_FORBIDDEN)
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        empleado = serializer.validated_data['empleado']
+        semana_inicio = serializer.validated_data['semana_inicio']
+        if HorasExtra.objects.filter(empleado=empleado, semana_inicio=semana_inicio).exists():
+            return Response(
+                {'error': 'Ya existe un reporte de horas extra para ese empleado y semana.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        horas = HorasExtra(
+            empleado=empleado,
+            semana_inicio=semana_inicio,
+            pago_hora=Decimal(str(request.data.get('pago_hora') or '55.0')),
+        )
+        horas.save()  # calcular() en save()
+        # El gasto se registra al pagar (vía nómina), no al crear el reporte
+        out = self.get_serializer(horas)
+        return Response(out.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=['get'])
+    def preview(self, request):
+        """Preview staff: ?empleado=&semana_inicio= (o inicio=)."""
+        if not (request.user.is_staff or request.user.is_superuser):
+            return Response({'error': 'No autorizado'}, status=status.HTTP_403_FORBIDDEN)
+        empleado_id = request.query_params.get('empleado')
+        inicio = request.query_params.get('semana_inicio') or request.query_params.get('inicio')
+        if not empleado_id or not inicio:
+            return Response(
+                {'error': 'Se requieren empleado y semana_inicio'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         try:
-            empleado = user.empleado
-            return HorasExtra.objects.filter(empleado=empleado).order_by('-semana_inicio')
-        except Exception:
-            return HorasExtra.objects.none()
+            empleado = Empleado.objects.get(id=empleado_id)
+            semana_inicio = date.fromisoformat(inicio)
+        except (Empleado.DoesNotExist, ValueError):
+            return Response({'error': 'Empleado o fecha inválidos'}, status=status.HTTP_400_BAD_REQUEST)
+
+        domingo = semana_inicio + timedelta(days=6)
+        preview = HorasExtra(
+            empleado=empleado,
+            semana_inicio=semana_inicio,
+            semana_fin=domingo,
+        )
+        preview.calcular()
+        existente = HorasExtra.objects.filter(empleado=empleado, semana_inicio=semana_inicio).first()
+        return Response({
+            'empleado': empleado.id,
+            'empleado_nombre': empleado.nombre,
+            'es_eventual': empleado.es_eventual,
+            'semana_inicio': semana_inicio,
+            'semana_fin': domingo,
+            'horas_trabajadas': preview.horas_trabajadas,
+            'horas_descontadas': preview.horas_descontadas,
+            'horas_computables': preview.horas_computables,
+            'horas_extra': preview.horas_extra,
+            'pago_hora': preview.pago_hora,
+            'total_pago': preview.total_pago,
+            'ya_existe': bool(existente),
+            'existente_id': existente.id if existente else None,
+            'pagado': existente.pagado if existente else False,
+        })
 
     @action(detail=False, methods=['get'])
     def semana_actual(self, request):
@@ -1109,15 +1185,86 @@ class HorasExtraViewSet(viewsets.ReadOnlyModelViewSet):
             'es_eventual': empleado.es_eventual,
         })
 
+    @action(detail=True, methods=['post'])
+    def pagar(self, request, pk=None):
+        if not (request.user.is_staff or request.user.is_superuser):
+            return Response({'error': 'No autorizado'}, status=status.HTTP_403_FORBIDDEN)
+        from core.services.horas_extra import HorasExtraPagoError, pagar_horas_extra_en_nomina
+        horas = self.get_object()
+        try:
+            result = pagar_horas_extra_en_nomina(horas)
+        except HorasExtraPagoError as exc:
+            return Response({'error': exc.message}, status=exc.status)
+
+        nomina = result.get('nomina')
+        data = self.get_serializer(result['horas']).data
+        data['agregado_a_nomina'] = bool(nomina)
+        data['nomina_id'] = nomina.id if nomina else None
+        data['nomina_total'] = str(nomina.total) if nomina else None
+        data['ya_pagado'] = bool(result.get('ya_pagado'))
+        data['creada_nomina'] = bool(result.get('creada_nomina'))
+        return Response(data)
+
+    @action(detail=True, methods=['get'])
+    def recibo(self, request, pk=None):
+        from django.template.loader import render_to_string
+        from django.http import HttpResponse
+        from weasyprint import HTML
+
+        horas = self.get_object()
+        user = request.user
+        if not (user.is_staff or user.is_superuser):
+            try:
+                if horas.empleado_id != user.empleado.id:
+                    return Response({'error': 'No autorizado'}, status=status.HTTP_403_FORBIDDEN)
+            except Exception:
+                return Response({'error': 'No autorizado'}, status=status.HTTP_403_FORBIDDEN)
+
+        html_string = render_to_string('nomina/recibo_horas_extra.html', {
+            'horas': horas,
+            'fecha': date.today(),
+        })
+        response = HttpResponse(content_type='application/pdf')
+        response['Content-Disposition'] = f'inline; filename="recibo_horas_extra_{horas.id}.pdf"'
+        HTML(string=html_string).write_pdf(response)
+        return response
+
 class SolicitudRegistroViewSet(viewsets.GenericViewSet):
     serializer_class = SolicitudRegistroSerializer
     permission_classes = [AllowAny]
+    queryset = SolicitudRegistro.objects.all().order_by('-fecha_solicitud')
+
+    def list(self, request):
+        if not request.user.is_authenticated or not (request.user.is_staff or request.user.is_superuser):
+            return Response({'error': 'No tienes permiso'}, status=status.HTTP_403_FORBIDDEN)
+        estado = request.query_params.get('estado', 'PENDIENTE')
+        qs = self.get_queryset()
+        if estado:
+            qs = qs.filter(estado=estado)
+        serializer = self.get_serializer(qs, many=True)
+        return Response(serializer.data)
 
     @action(detail=False, methods=['post'], permission_classes=[AllowAny])
     def registro(self, request):
         serializer = SolicitudRegistroSerializer(data=request.data)
         if serializer.is_valid():
-            serializer.save()
+            solicitud = serializer.save()
+            # Avisar a admins para que aprueben desde la PWA
+            try:
+                from django.contrib.auth.models import User
+                from core.push_notifications import enviar_notificacion
+                admins = User.objects.filter(is_active=True).filter(
+                    Q(is_staff=True) | Q(is_superuser=True)
+                ).distinct()
+                for admin in admins:
+                    enviar_notificacion(
+                        admin,
+                        'Nueva solicitud de registro',
+                        f'{solicitud.nombre} ({solicitud.get_tipo_empleado_display()}) espera aprobación',
+                        url='/admin/solicitudes',
+                    )
+            except Exception:
+                pass
             return Response(
                 {'mensaje': 'Solicitud enviada correctamente. El administrador revisará tu solicitud.'},
                 status=status.HTTP_201_CREATED
@@ -1200,6 +1347,23 @@ class SolicitudRegistroViewSet(viewsets.GenericViewSet):
             'user_id': user.id,
             'empleado_id': empleado.id
         })
+
+    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
+    def rechazar(self, request, pk=None):
+        if not (request.user.is_staff or request.user.is_superuser):
+            return Response({'error': 'No tienes permiso'}, status=status.HTTP_403_FORBIDDEN)
+
+        solicitud = get_object_or_404(SolicitudRegistro, pk=pk)
+        if solicitud.estado != 'PENDIENTE':
+            return Response({'error': 'Esta solicitud ya fue procesada'}, status=status.HTTP_400_BAD_REQUEST)
+
+        from django.utils import timezone as tz
+        solicitud.estado = 'RECHAZADA'
+        solicitud.revisada_por = request.user
+        solicitud.fecha_revision = tz.now()
+        solicitud.notas_admin = (request.data.get('notas') or '').strip() or None
+        solicitud.save()
+        return Response({'mensaje': f'Solicitud de {solicitud.nombre} rechazada.'})
 
 #---------push notificacions---------------
 
@@ -2188,6 +2352,38 @@ def api_revisar_solicitud_material(request, solicitud_id):
         return Response({'error': exc.message}, status=exc.status)
 
 
+def _puede_editar_catalogo_material(user):
+    if user.is_staff or user.is_superuser:
+        return True
+    if user.groups.filter(name='Encargado Material').exists():
+        return True
+    try:
+        return user.empleado.tipo_empleado == 'ENCARGADO' and user.empleado.activo
+    except Exception:
+        return False
+
+
+def _materiales_staging_dir():
+    from pathlib import Path
+
+    from django.conf import settings
+
+    d = Path(settings.MEDIA_ROOT) / 'materiales_staging'
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _material_catalogo_dict(request, material):
+    return {
+        'id': material.id,
+        'nombre': material.nombre,
+        'descripcion': material.descripcion or '',
+        'tipo': material.tipo,
+        'stock_disponible': material.stock_disponible,
+        'foto': request.build_absolute_uri(material.foto.url) if material.foto else None,
+    }
+
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def api_catalogo_materiales(request):
@@ -2198,18 +2394,100 @@ def api_catalogo_materiales(request):
     if q:
         materiales = materiales.filter(nombre__icontains=q)
 
-    data = [
-        {
-            'id': m.id,
-            'nombre': m.nombre,
-            'descripcion': m.descripcion or '',
-            'tipo': m.tipo,
-            'stock_disponible': m.stock_disponible,
-            'foto': request.build_absolute_uri(m.foto.url) if m.foto else None,
-        }
-        for m in materiales.order_by('nombre')
-    ]
+    data = [_material_catalogo_dict(request, m) for m in materiales.order_by('nombre')]
     return Response(data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def api_materiales_staging_fotos(request):
+    """Fotos pendientes de asignar (carpeta media/materiales_staging/)."""
+    if not _puede_editar_catalogo_material(request.user):
+        return Response({'error': 'No autorizado'}, status=403)
+
+    base = _materiales_staging_dir()
+    exts = {'.jpg', '.jpeg', '.png', '.webp', '.gif'}
+    items = []
+    for path in sorted(base.iterdir()):
+        if not path.is_file() or path.suffix.lower() not in exts:
+            continue
+        rel = f'materiales_staging/{path.name}'
+        items.append({
+            'nombre': path.name,
+            'url': request.build_absolute_uri(f'/media/{rel}'),
+        })
+    return Response(items)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def api_material_subir_foto(request, material_id):
+    """Foto principal del material: archivo nuevo o copia desde staging."""
+    if not _puede_editar_catalogo_material(request.user):
+        return Response({'error': 'No autorizado'}, status=403)
+
+    material = get_object_or_404(MaterialAnimacion, id=material_id, activo=True)
+    foto = request.FILES.get('foto')
+    staging = (request.data.get('staging_file') or '').strip()
+
+    if foto:
+        if material.foto:
+            material.foto.delete(save=False)
+        material.foto.save(foto.name, foto, save=True)
+    elif staging:
+        from pathlib import Path
+
+        from django.core.files import File
+
+        base = _materiales_staging_dir()
+        path = base / Path(staging).name
+        if not path.is_file():
+            return Response({'error': 'Archivo no encontrado en biblioteca'}, status=404)
+        if material.foto:
+            material.foto.delete(save=False)
+        with path.open('rb') as img:
+            material.foto.save(path.name, File(img), save=True)
+    else:
+        return Response({'error': 'Envía foto o staging_file'}, status=400)
+
+    return Response(_material_catalogo_dict(request, material))
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def api_material_quitar_fondo(request, material_id):
+    """Quita el fondo de la foto actual (o de un archivo enviado) y deja fondo blanco."""
+    if not _puede_editar_catalogo_material(request.user):
+        return Response({'error': 'No autorizado'}, status=403)
+
+    from django.core.files.base import ContentFile
+
+    from core.services.material_foto import MaterialFotoError, quitar_fondo_fondo_blanco
+
+    material = get_object_or_404(MaterialAnimacion, id=material_id, activo=True)
+    upload = request.FILES.get('foto')
+
+    if upload:
+        raw = upload.read()
+    elif material.foto:
+        with material.foto.open('rb') as f:
+            raw = f.read()
+    else:
+        return Response({'error': 'El material no tiene foto para procesar'}, status=400)
+
+    try:
+        processed = quitar_fondo_fondo_blanco(raw)
+    except MaterialFotoError as exc:
+        return Response({'error': exc.message}, status=exc.status)
+
+    if material.foto:
+        material.foto.delete(save=False)
+    material.foto.save(
+        f'material_{material.id}_fondo_blanco.jpg',
+        ContentFile(processed),
+        save=True,
+    )
+    return Response(_material_catalogo_dict(request, material))
 
 # ── Encargado de Material PWA ──────────────────────────────────────────────────
 
@@ -2586,73 +2864,39 @@ def api_calificar_coordinador(request, animador_evento_id):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def api_ranking_coordinadores(request):
-    """Ranking top 10 de coordinadores por calificación."""
-    from core.models import CalificacionCoordinador, AnimadorEvento
-    from django.db.models import Avg, Count
-    from django.contrib.auth.models import User
+    """Ranking top 10 de coordinadores (70% encuesta cliente + 30% eventos)."""
+    from core.services.ranking_coordinadores import ranking_coordinadores
 
-    ranking = CalificacionCoordinador.objects.values(
-        'animador_evento__asignacion__coordinador'
-    ).annotate(
-        promedio=Avg('comunicacion') + Avg('organizacion') + Avg('trato') +
-                 Avg('respeto') + Avg('puntualidad') + Avg('innovacion'),
-        total_eventos=Count('id')
-    ).order_by('-promedio')[:10]
+    anio = request.query_params.get('anio') or request.query_params.get('año')
+    mes = request.query_params.get('mes')
+    anio_int = int(anio) if anio else timezone.now().year
+    mes_int = int(mes) if mes else None
 
+    filas = ranking_coordinadores(anio=anio_int, mes=mes_int, limit=10)
     data = []
-    for r in ranking:
-        user_id = r['animador_evento__asignacion__coordinador']
-        try:
-            user = User.objects.get(id=user_id)
-            nombre = user.get_full_name() or user.username
-            try:
-                nombre = user.empleado.nombre
-            except Exception:
-                pass
-        except User.DoesNotExist:
-            continue
-
+    for r in filas:
         data.append({
-            'coordinador': nombre,
-            'promedio': round(r['promedio'] / 6, 2),
+            'coordinador': r['nombre'],
+            'promedio': r['puntaje_final'],
+            'puntaje_final': r['puntaje_final'],
+            'promedio_encuesta': r['promedio_encuesta'],
             'total_eventos': r['total_eventos'],
+            'puntaje_encuesta_componente': r['puntaje_encuesta_componente'],
+            'puntaje_eventos_componente': r['puntaje_eventos_componente'],
         })
-
     return Response(data)
 
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def api_mi_calificacion_coordinador(request):
-    """El coordinador ve su propia calificación promedio."""
-    from core.models import CalificacionCoordinador
-    from django.db.models import Avg
+    """El coordinador ve promedios de encuesta cliente y puntaje compuesto del periodo."""
+    from core.services.ranking_coordinadores import mi_calificacion_coordinador
 
-    promedios = CalificacionCoordinador.objects.filter(
-        animador_evento__asignacion__coordinador=request.user
-    ).aggregate(
-        comunicacion=Avg('comunicacion'),
-        organizacion=Avg('organizacion'),
-        trato=Avg('trato'),
-        respeto=Avg('respeto'),
-        puntualidad=Avg('puntualidad'),
-        innovacion=Avg('innovacion'),
-        total=Count('id'),
-    )
-
-    if not promedios['total']:
-        return Response({'sin_calificaciones': True})
-
-    from django.db.models import Count
-    campos = ['comunicacion', 'organizacion', 'trato', 'respeto', 'puntualidad', 'innovacion']
-    promedio_general = sum(promedios[c] or 0 for c in campos) / 6
-
-    return Response({
-        'sin_calificaciones': False,
-        'promedio_general': round(promedio_general, 2),
-        'detalle': {c: round(promedios[c] or 0, 2) for c in campos},
-        'total_evaluaciones': promedios['total'],
-    })
+    anio = request.query_params.get('anio') or request.query_params.get('año')
+    anio_int = int(anio) if anio else timezone.now().year
+    payload = mi_calificacion_coordinador(request.user, anio=anio_int)
+    return Response(payload)
 
 
 @api_view(['GET'])
@@ -2828,7 +3072,22 @@ def api_registro_solicitud(request):
     from core.api.serializers import SolicitudRegistroSerializer
     serializer = SolicitudRegistroSerializer(data=request.data)
     if serializer.is_valid():
-        serializer.save()
+        solicitud = serializer.save()
+        try:
+            from django.contrib.auth.models import User
+            from core.push_notifications import enviar_notificacion
+            admins = User.objects.filter(is_active=True).filter(
+                Q(is_staff=True) | Q(is_superuser=True)
+            ).distinct()
+            for admin in admins:
+                enviar_notificacion(
+                    admin,
+                    'Nueva solicitud de registro',
+                    f'{solicitud.nombre} ({solicitud.get_tipo_empleado_display()}) espera aprobación',
+                    url='/admin/solicitudes',
+                )
+        except Exception:
+            pass
         return Response(
             {'mensaje': 'Solicitud enviada correctamente. El administrador revisará tu solicitud.'},
             status=status.HTTP_201_CREATED
@@ -2848,22 +3107,24 @@ def api_rankings_eventos(request):
     mes = request.query_params.get('mes')
 
     if rol == 'coordinadores':
-        filtros = {}
-        if año:
-            filtros['renta__fecha_renta__year'] = int(año)
-        if mes:
-            filtros['renta__fecha_renta__month'] = int(mes)
+        from core.services.ranking_coordinadores import ranking_coordinadores
 
-        qs = (AsignacionCoordinador.objects
-              .filter(**filtros, coordinador__isnull=False)
-              .values('coordinador__id', 'coordinador__first_name', 'coordinador__last_name')
-              .annotate(total_eventos=Count('id'))
-              .order_by('-total_eventos'))
-
-        data = [{'id': r['coordinador__id'],
-                 'nombre': f"{r['coordinador__first_name']} {r['coordinador__last_name']}".strip(),
-                 'total_eventos': r['total_eventos'],
-                 'total_monto': None} for r in qs]
+        anio_int = int(año) if año else None
+        mes_int = int(mes) if mes else None
+        filas = ranking_coordinadores(anio=anio_int, mes=mes_int)
+        data = [
+            {
+                'id': r['id'],
+                'nombre': r['nombre'],
+                'total_eventos': r['total_eventos'],
+                'total_monto': None,
+                'promedio_encuesta': r['promedio_encuesta'],
+                'puntaje_final': r['puntaje_final'],
+                'puntaje_encuesta_componente': r['puntaje_encuesta_componente'],
+                'puntaje_eventos_componente': r['puntaje_eventos_componente'],
+            }
+            for r in filas
+        ]
 
     elif rol == 'animadores':
         filtros = {'estado': 'ACEPTADO'}
@@ -2925,6 +3186,74 @@ def api_recibo_nomina(request, nomina_id):
     })
     response = HttpResponse(content_type='application/pdf')
     response['Content-Disposition'] = f'inline; filename="recibo_nomina_{nomina_id}.pdf"'
+    HTML(string=html_string).write_pdf(response)
+    return response
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def api_recibos_nomina_semana(request):
+    """PDF con recibos de nómina. Filtro: fecha_inicio (semana) y/o ids=1,2,3."""
+    if not (request.user.is_staff or request.user.is_superuser):
+        return Response({'error': 'No autorizado.'}, status=403)
+
+    from datetime import timedelta
+    from django.template.loader import render_to_string
+    from django.http import HttpResponse
+    from weasyprint import HTML
+
+    ids_raw = (request.query_params.get('ids') or '').strip()
+    id_list = []
+    if ids_raw:
+        for part in ids_raw.split(','):
+            part = part.strip()
+            if not part:
+                continue
+            try:
+                id_list.append(int(part))
+            except ValueError:
+                return Response({'error': f'id inválido: {part}'}, status=400)
+
+    fecha_inicio = request.query_params.get('fecha_inicio')
+    lunes = None
+    domingo = None
+    if fecha_inicio:
+        try:
+            lunes = date.fromisoformat(str(fecha_inicio)[:10])
+            domingo = lunes + timedelta(days=6)
+        except ValueError:
+            return Response({'error': 'fecha_inicio inválida.'}, status=400)
+
+    if not id_list and not lunes:
+        return Response({'error': 'Se requiere ids o fecha_inicio.'}, status=400)
+
+    qs = Nomina.objects.select_related('empleado').prefetch_related('pagos_extras__tipo')
+    if id_list:
+        qs = qs.filter(id__in=id_list)
+    if lunes and domingo:
+        qs = qs.filter(fecha_inicio__gte=lunes, fecha_fin__lte=domingo)
+    nominas = qs.order_by('empleado__nombre', 'id')
+
+    if not nominas.exists():
+        return Response({'error': 'No hay nóminas para imprimir.'}, status=404)
+
+    items = []
+    for n in nominas:
+        sueldo_base = n.dias_trabajados * n.empleado.sueldo_diario
+        total_extra = n.pago_eventos_extra()
+        items.append({
+            'nomina': n,
+            'sueldo_base': sueldo_base,
+            'total_pagado': sueldo_base + total_extra,
+        })
+
+    html_string = render_to_string('nomina/recibos_nomina_semana_pdf.html', {
+        'items': items,
+        'fecha': date.today(),
+    })
+    response = HttpResponse(content_type='application/pdf')
+    stamp = lunes.isoformat() if lunes else 'seleccion'
+    response['Content-Disposition'] = f'inline; filename="recibos_nomina_{stamp}.pdf"'
     HTML(string=html_string).write_pdf(response)
     return response
 
@@ -3082,7 +3411,11 @@ def api_eventos_animacion(request):
 
     rentas = (Renta.objects
               .filter(**filtros)
-              .select_related('cliente', 'asignacion_coordinador__coordinador')
+              .select_related(
+                  'cliente',
+                  'asignacion_coordinador__coordinador',
+                  'asignacion_coordinador__encuesta_cliente',
+              )
               .prefetch_related('asignacion_coordinador__lista_material',
                                 'asignacion_coordinador__animadores',
                                 'rentaproductos__producto')
@@ -3102,6 +3435,14 @@ def api_eventos_animacion(request):
             .distinct()
         )
 
+        encuesta = None
+        if asignacion:
+            try:
+                enc = asignacion.encuesta_cliente
+                encuesta = {'capturada': True, 'promedio': enc.promedio}
+            except EncuestaClienteAnimacion.DoesNotExist:
+                encuesta = {'capturada': False, 'promedio': None}
+
         data.append({
             'id': renta.id,
             'folio': renta.folio,
@@ -3115,9 +3456,104 @@ def api_eventos_animacion(request):
             } if asignacion and asignacion.coordinador else None,
             'lista_estado': lista.estado if lista else None,
             'animadores_count': animadores_count,
+            'encuesta_cliente': encuesta,
         })
 
     return Response(data)
+
+
+def _encuesta_cliente_payload(encuesta=None):
+    from core.services.ranking_coordinadores import (
+        ENCUESTA_CLIENTE_PREGUNTAS,
+        ENCUESTA_FIELD_NAMES,
+    )
+
+    base = {
+        'preguntas': list(ENCUESTA_CLIENTE_PREGUNTAS),
+        'capturada': encuesta is not None,
+    }
+    if encuesta is None:
+        return {
+            **base,
+            'valores': None,
+            'comentario': '',
+            'promedio': None,
+            'fecha': None,
+        }
+    valores = {f: getattr(encuesta, f) for f in ENCUESTA_FIELD_NAMES}
+    return {
+        **base,
+        'valores': valores,
+        'comentario': encuesta.comentario or '',
+        'promedio': encuesta.promedio,
+        'fecha': encuesta.fecha.isoformat() if encuesta.fecha else None,
+    }
+
+
+def _parse_encuesta_cliente_body(data):
+    from core.services.ranking_coordinadores import ENCUESTA_FIELD_NAMES
+
+    parsed = {}
+    for field in ENCUESTA_FIELD_NAMES:
+        if field not in data:
+            return None, f'Campo requerido: {field}'
+        try:
+            val = int(data[field])
+        except (TypeError, ValueError):
+            return None, f'{field} debe ser un entero del 1 al 5'
+        if val < 1 or val > 5:
+            return None, f'{field} debe estar entre 1 y 5'
+        parsed[field] = val
+    comentario = data.get('comentario', '')
+    if comentario is None:
+        comentario = ''
+    parsed['comentario'] = str(comentario)
+    return parsed, None
+
+
+@api_view(['GET', 'POST', 'PUT'])
+@permission_classes([IsAuthenticated])
+def api_encuesta_cliente_animacion(request, asignacion_id):
+    if not request.user.is_staff:
+        return Response({'error': 'No autorizado.'}, status=403)
+
+    asignacion = get_object_or_404(AsignacionCoordinador, id=asignacion_id)
+    if not asignacion.coordinador_id:
+        return Response({'error': 'Asigna un coordinador antes de capturar la encuesta.'}, status=400)
+
+    try:
+        encuesta = asignacion.encuesta_cliente
+    except EncuestaClienteAnimacion.DoesNotExist:
+        encuesta = None
+
+    if request.method == 'GET':
+        return Response(_encuesta_cliente_payload(encuesta))
+
+    parsed, err = _parse_encuesta_cliente_body(request.data)
+    if err:
+        return Response({'error': err}, status=400)
+
+    if request.method == 'POST':
+        if encuesta is not None:
+            return Response({'error': 'Ya existe encuesta; usa PUT para editar.'}, status=409)
+        encuesta = EncuestaClienteAnimacion.objects.create(
+            asignacion=asignacion,
+            capturada_por=request.user,
+            **parsed,
+        )
+        return Response(_encuesta_cliente_payload(encuesta), status=201)
+
+    # PUT
+    if encuesta is None:
+        encuesta = EncuestaClienteAnimacion(
+            asignacion=asignacion,
+            capturada_por=request.user,
+        )
+    for field, val in parsed.items():
+        setattr(encuesta, field, val)
+    encuesta.capturada_por = request.user
+    encuesta.save()
+    return Response(_encuesta_cliente_payload(encuesta))
 
 
 @api_view(['GET'])
@@ -3656,3 +4092,51 @@ def api_reporte_negocio_pdf(request):
     response = HttpResponse(content, content_type='application/pdf' if is_pdf else 'text/html')
     response['Content-Disposition'] = f'inline; filename="{fname}"'
     return response
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def api_reporte_productos(request):
+    """
+    Productos rentados en un rango de fechas.
+    Params: fecha_inicio, fecha_fin, producto_ids (1,2,3), q (nombre), tipo (BR/ME/SI/MT/…)
+    """
+    if not (request.user.is_staff or request.user.is_superuser):
+        return Response({'error': 'No autorizado'}, status=status.HTTP_403_FORBIDDEN)
+    from core.services.reportes import ReporteError, build_reporte_productos
+    producto_ids = request.query_params.getlist('producto_ids') or request.query_params.getlist('producto_id')
+    if not producto_ids:
+        raw = request.query_params.get('producto_ids') or request.query_params.get('producto_id')
+        if raw:
+            producto_ids = [raw]
+    try:
+        data = build_reporte_productos(
+            request.query_params.get('fecha_inicio'),
+            request.query_params.get('fecha_fin'),
+            q=request.query_params.get('q') or '',
+            tipo_producto=request.query_params.get('tipo') or '',
+            producto_ids=producto_ids or None,
+        )
+    except ReporteError as exc:
+        return Response({'error': exc.message}, status=exc.status)
+
+    out = {
+        'fecha_inicio': data['fecha_inicio'],
+        'fecha_fin': data['fecha_fin'],
+        'q': data['q'],
+        'producto_ids': data['producto_ids'],
+        'productos_filtro': data['productos_filtro'],
+        'tipo_producto': data['tipo_producto'],
+        'count_productos': data['count_productos'],
+        'total_veces': data['total_veces'],
+        'total_unidades': data['total_unidades'],
+        'total_ingreso': str(data['total_ingreso']),
+        'productos': [
+            {
+                **{k: v for k, v in p.items() if k != 'ingreso'},
+                'ingreso': str(p['ingreso']),
+            }
+            for p in data['productos']
+        ],
+    }
+    return Response(out)

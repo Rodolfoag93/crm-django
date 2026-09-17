@@ -1,0 +1,11 @@
+[Unit]
+Description=Run WhatsApp debounce flush every 10 seconds
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=10s
+AccuracySec=1s
+Unit=whatsapp-debounce-flush.service
+
+[Install]
+WantedBy=timers.target

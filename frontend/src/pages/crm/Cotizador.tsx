@@ -105,6 +105,7 @@ export default function CotizadorCRM() {
   const [statusFiltro, setStatusFiltro] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
+  const [copiaDeFolio, setCopiaDeFolio] = useState<string | null>(null)
   const [tipoNueva, setTipoNueva] = useState<Tipo>('NORMAL')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -257,6 +258,7 @@ export default function CotizadorCRM() {
 
   const abrirNueva = (tipo: Tipo) => {
     setEditingId(null)
+    setCopiaDeFolio(null)
     setTipoNueva(tipo)
     setShowForm(true)
     setDetalle(null)
@@ -280,19 +282,29 @@ export default function CotizadorCRM() {
     resetServicioForm()
   }
 
-  const cargarEnFormulario = (data: any) => {
-    setEditingId(data.id)
+  const cargarEnFormulario = (data: any, opts?: { comoCopia?: boolean }) => {
+    const copia = Boolean(opts?.comoCopia)
+    setEditingId(copia ? null : data.id)
+    setCopiaDeFolio(copia ? (data.folio || null) : null)
     setTipoNueva(data.tipo)
     setShowForm(true)
     setDetalle(null)
     setError('')
-    setClienteId(data.cliente_id)
-    setClienteNuevo(false)
-    setNombreCliente(data.cliente_nombre || '')
-    setTelefonoCliente('')
-    setBusquedaCliente('')
-    setSugerencias([])
-    setDestinatario(data.destinatario || data.cliente_nombre || '')
+    if (copia) {
+      limpiarCliente()
+      setDestinatario('')
+    } else {
+      setClienteId(data.cliente_id)
+      setClienteNuevo(false)
+      setNombreCliente(data.cliente_nombre || '')
+      setTelefonoCliente('')
+      setCalleCliente('')
+      setColoniaCliente('')
+      setCiudadCliente('')
+      setBusquedaCliente('')
+      setSugerencias([])
+      setDestinatario(data.destinatario || data.cliente_nombre || '')
+    }
     setNombreEvento(data.nombre_evento || '')
     setAsistentes(data.asistentes != null ? String(data.asistentes) : '')
     setSede(data.sede || '')
@@ -310,15 +322,16 @@ export default function CotizadorCRM() {
       es_sugerencia: Boolean(c.es_sugerencia),
     })))
     setZonas((data.zonas || []).map((z: any) => ({
-      id: z.id,
+      // En copia no reutilizar IDs de zona/imagen: se crean al guardar
+      ...(copia ? {} : { id: z.id }),
       titulo: z.titulo || '',
       descripcion: z.descripcion || '',
-      imagenes: z.imagenes || [],
+      imagenes: copia ? [] : (z.imagenes || []),
       pendingFiles: [],
     })))
     setQueryProducto('')
     setResultProductos([])
-    setCantidadProd('1')
+    setCantidadProd(data.tipo === 'RALLY' ? '6' : '1')
     setModoAgregarRally('sugerido')
     resetServicioForm()
   }
@@ -333,6 +346,15 @@ export default function CotizadorCRM() {
       cargarEnFormulario(data)
     } catch (e: any) {
       alert(e?.response?.data?.error || 'No se pudo cargar la cotización')
+    }
+  }
+
+  const copiarCotizacion = async (id: number) => {
+    try {
+      const { data } = await api.get(`/crm/cotizaciones/${id}/`)
+      cargarEnFormulario(data, { comoCopia: true })
+    } catch (e: any) {
+      alert(e?.response?.data?.error || 'No se pudo copiar la cotización')
     }
   }
 
@@ -470,6 +492,7 @@ export default function CotizadorCRM() {
       }
       setShowForm(false)
       setEditingId(null)
+      setCopiaDeFolio(null)
       fetchList()
     } catch (e: any) {
       const data = e?.response?.data
@@ -594,8 +617,13 @@ export default function CotizadorCRM() {
       {showForm && (
         <div className="bg-white rounded-xl border p-5 flex flex-col gap-4" style={{ borderColor: '#ddeadd' }}>
           <h2 className="font-semibold" style={{ color: '#162016' }}>
-            {editingId ? 'Editar' : 'Nueva'} cotización {tipoNueva.toLowerCase()}
+            {editingId ? 'Editar' : copiaDeFolio ? 'Copiar' : 'Nueva'} cotización {tipoNueva.toLowerCase()}
           </h2>
+          {copiaDeFolio && !editingId && (
+            <p className="text-sm" style={{ color: '#5a7060' }}>
+              Copia de <strong>{copiaDeFolio}</strong> — se generará un folio nuevo. Selecciona o crea el cliente.
+            </p>
+          )}
           {error && <div className="text-sm text-red-600">{error}</div>}
 
           <div className="flex flex-col gap-3">
@@ -1095,7 +1123,7 @@ export default function CotizadorCRM() {
             <button disabled={saving || !clienteListo || !fecha} onClick={guardar} className="px-4 py-2 rounded-lg text-white text-sm font-semibold disabled:opacity-50" style={{ background: '#16a34a' }}>
               {saving ? 'Guardando...' : editingId ? 'Guardar cambios' : 'Guardar'}
             </button>
-            <button onClick={() => { setShowForm(false); setEditingId(null) }} className="px-4 py-2 rounded-lg text-sm border" style={{ borderColor: '#ddeadd' }}>Cancelar</button>
+            <button onClick={() => { setShowForm(false); setEditingId(null); setCopiaDeFolio(null) }} className="px-4 py-2 rounded-lg text-sm border" style={{ borderColor: '#ddeadd' }}>Cancelar</button>
           </div>
         </div>
       )}
@@ -1111,6 +1139,7 @@ export default function CotizadorCRM() {
               {detalle.status !== 'CONVERTIDA' && (
                 <button onClick={() => abrirEditar(detalle.id)} className="px-3 py-1.5 rounded-lg text-sm text-white" style={{ background: '#16a34a' }}>Editar</button>
               )}
+              <button onClick={() => copiarCotizacion(detalle.id)} className="px-3 py-1.5 rounded-lg text-sm text-white" style={{ background: '#0f766e' }}>Copiar</button>
               <button onClick={abrirPdf} className="px-3 py-1.5 rounded-lg text-sm text-white" style={{ background: '#7c3aed' }}>PDF</button>
               {detalle.status !== 'CONVERTIDA' && (
                 <button onClick={abrirConvertir} className="px-3 py-1.5 rounded-lg text-sm text-white" style={{ background: '#ea580c' }}>Convertir a renta</button>
@@ -1341,6 +1370,7 @@ export default function CotizadorCRM() {
                     {c.status !== 'CONVERTIDA' && (
                       <button onClick={() => abrirEditar(c.id)} className="text-sm font-semibold" style={{ color: '#16a34a' }}>Editar</button>
                     )}
+                    <button onClick={() => copiarCotizacion(c.id)} className="text-sm font-semibold" style={{ color: '#0f766e' }}>Copiar</button>
                   </div>
                 </td>
               </tr>

@@ -6,23 +6,28 @@ import api from '../lib/api'
 interface RankingItem {
   coordinador: string
   promedio: number
+  puntaje_final?: number
+  promedio_encuesta?: number | null
   total_eventos: number
+  puntaje_encuesta_componente?: number
+  puntaje_eventos_componente?: number
 }
 
 interface MiCalificacion {
   sin_calificaciones: boolean
-  promedio_general?: number
-  detalle?: Record<string, number>
-  total_evaluaciones?: number
+  promedio_general?: number | null
+  detalle?: Record<string, number | null>
+  total_encuestas?: number
+  puntaje_final?: number | null
+  total_eventos?: number
 }
 
 const CRITERIOS: Record<string, { label: string; emoji: string }> = {
-  comunicacion: { label: 'Comunicación', emoji: '💬' },
-  organizacion: { label: 'Organización', emoji: '📋' },
-  trato: { label: 'Trato', emoji: '🤝' },
-  respeto: { label: 'Respeto', emoji: '🙏' },
-  puntualidad: { label: 'Puntualidad', emoji: '⏰' },
-  innovacion: { label: 'Innovación', emoji: '💡' },
+  comunicacion_previo: { label: 'Comunicación previa', emoji: '💬' },
+  atencion_coordinador: { label: 'Atención en evento', emoji: '👀' },
+  juegos_aceptacion: { label: 'Juegos y dinámicas', emoji: '🎮' },
+  staff_servicio: { label: 'Servicio del staff', emoji: '🤝' },
+  material_estado: { label: 'Estado del material', emoji: '📦' },
 }
 
 export default function RankingCoordinadores() {
@@ -68,7 +73,7 @@ export default function RankingCoordinadores() {
         <button onClick={() => navigate(-1)} className="text-green-300 text-xl">←</button>
         <div className="flex-1">
           <h1 className="text-lg font-bold">Ranking Coordinadores</h1>
-          <p className="text-green-300 text-xs">Top 10</p>
+          <p className="text-green-300 text-xs">Top 10 · 70% encuesta + 30% eventos</p>
         </div>
       </div>
 
@@ -123,13 +128,18 @@ export default function RankingCoordinadores() {
                         <span className="text-2xl w-8 text-center">{getMedalla(index)}</span>
                         <div className="flex-1">
                           <p className="font-bold text-gray-900">{item.coordinador}</p>
-                          <p className="text-xs text-gray-400">{item.total_eventos} evaluaciones</p>
+                          <p className="text-xs text-gray-400">
+                            {item.total_eventos} eventos
+                            {item.promedio_encuesta != null && (
+                              <> · encuesta {item.promedio_encuesta.toFixed(1)}</>
+                            )}
+                          </p>
                         </div>
                         <div className="text-right">
                           <p className={`text-2xl font-bold ${getColor(item.promedio)}`}>
-                            {item.promedio.toFixed(1)}
+                            {(item.puntaje_final ?? item.promedio).toFixed(2)}
                           </p>
-                          <p className="text-xs text-gray-400">/ 5.0</p>
+                          <p className="text-xs text-gray-400">puntaje</p>
                         </div>
                       </div>
                     ))}
@@ -144,31 +154,30 @@ export default function RankingCoordinadores() {
                 {miCalificacion.sin_calificaciones ? (
                   <div className="text-center py-10 text-gray-400">
                     <p className="text-4xl mb-3">⭐</p>
-                    <p className="text-sm">Aún no tienes calificaciones</p>
+                    <p className="text-sm">Aún no hay encuestas de clientes</p>
+                    {miCalificacion.puntaje_final != null && (
+                      <p className="text-sm mt-3 text-gray-600">
+                        Puntaje por eventos: <strong>{miCalificacion.puntaje_final.toFixed(2)}</strong>
+                      </p>
+                    )}
                   </div>
                 ) : (
                   <>
                     {/* Promedio general */}
                     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 text-center">
-                      <p className="text-xs text-gray-500 mb-1">Tu promedio general</p>
-                      <p className={`text-5xl font-bold ${getColor(miCalificacion.promedio_general || 0)}`}>
-                        {miCalificacion.promedio_general?.toFixed(1)}
+                      <p className="text-xs text-gray-500 mb-1">Puntaje compuesto (año)</p>
+                      <p className={`text-5xl font-bold ${getColor(miCalificacion.puntaje_final || 0)}`}>
+                        {miCalificacion.puntaje_final?.toFixed(2)}
                       </p>
-                      <div className="flex justify-center gap-1 mt-2">
-                        {[1, 2, 3, 4, 5].map(s => (
-                          <span key={s} className="text-xl">
-                            {s <= Math.round(miCalificacion.promedio_general || 0) ? '⭐' : '☆'}
-                          </span>
-                        ))}
-                      </div>
                       <p className="text-xs text-gray-400 mt-2">
-                        Basado en {miCalificacion.total_evaluaciones} evaluaciones
+                        Promedio encuesta: {miCalificacion.promedio_general?.toFixed(1)} ·{' '}
+                        {miCalificacion.total_encuestas} encuesta(s) · {miCalificacion.total_eventos} evento(s)
                       </p>
                     </div>
 
                     {/* Detalle por criterio */}
                     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 flex flex-col gap-3">
-                      <p className="text-xs text-gray-500 font-medium">Detalle por criterio</p>
+                      <p className="text-xs text-gray-500 font-medium">Encuesta cliente por criterio</p>
                       {Object.entries(CRITERIOS).map(([key, { label, emoji }]) => {
                         const val = miCalificacion.detalle?.[key] || 0
                         return (

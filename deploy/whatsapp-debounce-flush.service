@@ -1,0 +1,14 @@
+[Unit]
+Description=Flush WhatsApp inbound debounce buffers to n8n
+After=network.target postgresql.service
+
+[Service]
+Type=oneshot
+User=trota
+Group=www-data
+WorkingDirectory=/home/trota/crm-django
+Environment=DJANGO_SETTINGS_MODULE=crm_trota.settings
+# Cargar .env del CRM si existe (gunicorn suele tenerlo vía EnvironmentFile)
+EnvironmentFile=-/home/trota/crm-django/.env
+ExecStart=/home/trota/crm-django/venv/bin/python /home/trota/crm-django/manage.py flush_whatsapp_buffers
+Nice=10

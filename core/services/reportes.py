@@ -7,7 +7,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from django.db.models import Avg, Count, Max, Min, Q, Sum
 from django.template.loader import render_to_string
 
-from core.models import Gasto, MovimientoContable, Renta
+from core.models import Gasto, MovimientoContable, Producto, Renta, RentaProducto
 from core.services.cotizaciones import _fmt_money, _logo_file_uri, _nexoo_file_uri
 
 MESES_ES = (
@@ -334,3 +334,113 @@ def generar_reporte(tipo='semana', fecha=None):
     inicio, fin, etiqueta, tipo_norm = resolver_periodo(tipo, fecha)
     data = build_reporte_negocio(inicio, fin, tipo=tipo_norm, etiqueta=etiqueta)
     return data
+
+
+def _parse_producto_ids(*values):
+    """IDs únicos en orden, desde coma-separados o listas."""
+    ids = []
+    seen = set()
+    for value in values:
+        if value in (None, ''):
+            continue
+        if isinstance(value, (list, tuple)):
+            for item in value:
+                for pid in _parse_producto_ids(item):
+                    if pid not in seen:
+                        seen.add(pid)
+                        ids.append(pid)
+            continue
+        for part in str(value).split(','):
+            part = part.strip()
+            if not part.isdigit():
+                continue
+            pid = int(part)
+            if pid not in seen:
+                seen.add(pid)
+                ids.append(pid)
+    return ids
+
+
+def build_reporte_productos(
+    fecha_inicio,
+    fecha_fin,
+    *,
+    q: str = '',
+    tipo_producto: str = '',
+    producto_ids=None,
+):
+    """
+    Cuántas veces se rentó cada producto en un rango de fechas.
+    - veces: rentas ACTIVAS distintas que incluyeron el producto
+    - unidades: suma de cantidades pedidas
+    Filtro por producto_ids (uno o más) o, si no hay ids, por q (nombre).
+    """
+    inicio = _parse_fecha(fecha_inicio)
+    fin = _parse_fecha(fecha_fin)
+    if fin < inicio:
+        raise ReporteError('fecha_fin debe ser >= fecha_inicio')
+
+    qs = RentaProducto.objects.filter(
+        renta__status='ACTIVO',
+        renta__fecha_renta__gte=inicio,
+        renta__fecha_renta__lte=fin,
+    ).select_related('producto')
+
+    producto_ids = _parse_producto_ids(producto_ids)
+    q = (q or '').strip()
+    if producto_ids:
+        qs = qs.filter(producto_id__in=producto_ids)
+    elif q:
+        qs = qs.filter(producto__nombre__icontains=q)
+    tipo_producto = (tipo_producto or '').strip().upper()
+    if tipo_producto:
+        qs = qs.filter(producto__tipo=tipo_producto)
+
+    rows = (
+        qs.values('producto_id', 'producto__nombre', 'producto__tipo')
+        .annotate(
+            veces=Count('renta_id', distinct=True),
+            unidades=Sum('cantidad'),
+            ingreso=Sum('subtotal'),
+        )
+        .order_by('-veces', '-unidades', 'producto__nombre')
+    )
+
+    tipo_labels = dict(Producto.TIPO_PRODUCTO)
+    productos = [
+        {
+            'producto_id': row['producto_id'],
+            'nombre': row['producto__nombre'],
+            'tipo': row['producto__tipo'],
+            'tipo_label': tipo_labels.get(row['producto__tipo'], row['producto__tipo']),
+            'veces': int(row['veces'] or 0),
+            'unidades': int(row['unidades'] or 0),
+            'ingreso': _money(row['ingreso']),
+        }
+        for row in rows
+    ]
+
+    productos_filtro = []
+    if producto_ids:
+        nombres = {
+            p['id']: p['nombre']
+            for p in Producto.objects.filter(id__in=producto_ids).values('id', 'nombre')
+        }
+        productos_filtro = [
+            {'id': pid, 'nombre': nombres.get(pid, f'#{pid}')}
+            for pid in producto_ids
+        ]
+
+    return {
+        'fecha_inicio': inicio.isoformat(),
+        'fecha_fin': fin.isoformat(),
+        'q': q,
+        'producto_ids': producto_ids,
+        'productos_filtro': productos_filtro,
+        'tipo_producto': tipo_producto,
+        'count_productos': len(productos),
+        'total_veces': sum(p['veces'] for p in productos),
+        'total_unidades': sum(p['unidades'] for p in productos),
+        'total_ingreso': _money(sum((p['ingreso'] for p in productos), Decimal('0'))),
+        'productos': productos,
+    }

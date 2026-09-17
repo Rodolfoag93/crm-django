@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import api from '../../lib/api'
 
 // ── Interfaces ─────────────────────────────────────────────────────────────────
@@ -26,6 +27,21 @@ interface TipoPagoExtra {
   monto: string
 }
 
+interface AsistenciaItem {
+  id: number
+  fecha: string
+  hora_entrada: string | null
+  hora_salida: string | null
+  horas_trabajadas: string | null
+  tipo_jornada: string
+}
+
+const JORNADA_LABEL: Record<string, string> = {
+  COMPLETA: 'Completa',
+  MEDIO_TIEMPO: 'Medio tiempo',
+  EVENTO: 'Evento',
+}
+
 // ── Helpers de fecha ───────────────────────────────────────────────────────────
 function getLunes(fecha?: Date): Date {
   const d = fecha ? new Date(fecha) : new Date()
@@ -47,6 +63,16 @@ function formatFechaCorta(iso: string) {
   const [y, m, d] = iso.split('-').map(Number)
   return new Date(y, m - 1, d).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })
 }
+function formatFechaAsistencia(iso: string) {
+  const [y, m, d] = iso.split('-').map(Number)
+  return new Date(y, m - 1, d).toLocaleDateString('es-MX', {
+    weekday: 'short', day: 'numeric', month: 'short',
+  })
+}
+function formatHora(dt: string | null) {
+  if (!dt) return '—'
+  return new Date(dt).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })
+}
 function formatMonto(s: string | number) {
   return `$${parseFloat(String(s)).toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`
 }
@@ -59,6 +85,7 @@ function avatarColor(id: number) { return AVATAR_COLORS[id % AVATAR_COLORS.lengt
 
 // ── Componente principal ───────────────────────────────────────────────────────
 export default function Nomina() {
+  const navigate = useNavigate()
   const [lunes, setLunes] = useState<Date>(getLunes())
   const [nominas, setNominas] = useState<NominaItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -71,6 +98,8 @@ export default function Nomina() {
   const [form, setForm] = useState({ empleado: '', dias_trabajados: '', fecha_inicio: '', fecha_fin: '' })
   const [guardando, setGuardando] = useState(false)
   const [errorForm, setErrorForm] = useState('')
+  const [asistencias, setAsistencias] = useState<AsistenciaItem[]>([])
+  const [cargandoAsistencias, setCargandoAsistencias] = useState(false)
 
   // Pagos extra
   const [tiposPago, setTiposPago] = useState<TipoPagoExtra[]>([])
@@ -78,10 +107,13 @@ export default function Nomina() {
   const [pagoForm, setPagoForm] = useState({ tipo_id: '', monto: '' })
   const [guardandoPago, setGuardandoPago] = useState(false)
 
+  const [seleccion, setSeleccion] = useState<number[]>([])
+
   const domingo = sumarDias(lunes, 6)
 
   const cargar = useCallback(() => {
     setLoading(true)
+    setSeleccion([])
     api.get('/nomina/', { params: { fecha_inicio: toISO(lunes) } })
       .then(r => {
         const data = Array.isArray(r.data) ? r.data : (r.data.results ?? [])
@@ -100,6 +132,36 @@ export default function Nomina() {
     api.get('/nomina/pagos-extra-catalogo/').then(r => setTiposPago(r.data))
   }, [])
 
+  // Preload check-ins → días trabajados (igual que PWA admin)
+  useEffect(() => {
+    if (!showForm || !form.empleado || !form.fecha_inicio || !form.fecha_fin) {
+      setAsistencias([])
+      return
+    }
+    let cancelled = false
+    setCargandoAsistencias(true)
+    api.get('/asistencias/', {
+      params: {
+        empleado: form.empleado,
+        fecha_inicio: form.fecha_inicio,
+        fecha_fin: form.fecha_fin,
+      },
+    })
+      .then(r => {
+        if (cancelled) return
+        const data: AsistenciaItem[] = Array.isArray(r.data) ? r.data : (r.data.results ?? [])
+        setAsistencias(data)
+        setForm(prev => ({ ...prev, dias_trabajados: String(data.length) }))
+      })
+      .catch(() => {
+        if (!cancelled) setAsistencias([])
+      })
+      .finally(() => {
+        if (!cancelled) setCargandoAsistencias(false)
+      })
+    return () => { cancelled = true }
+  }, [showForm, form.empleado, form.fecha_inicio, form.fecha_fin])
+
   // Stats
   const totalSemana = nominas.reduce((s, n) => s + parseFloat(n.total), 0)
   const totalExtras = nominas.reduce((s, n) => s + (n.pagos_extra ?? []).reduce((a, p) => a + parseFloat(p.monto), 0), 0)
@@ -110,6 +172,7 @@ export default function Nomina() {
 
   function abrirNueva() {
     setEditando(null)
+    setAsistencias([])
     setForm({ empleado: '', dias_trabajados: '', fecha_inicio: toISO(lunes), fecha_fin: toISO(domingo) })
     setErrorForm('')
     setShowForm(true)
@@ -117,6 +180,7 @@ export default function Nomina() {
 
   function abrirEditar(n: NominaItem) {
     setEditando(n)
+    setAsistencias([])
     setForm({ empleado: String(n.empleado), dias_trabajados: String(n.dias_trabajados), fecha_inicio: n.fecha_inicio, fecha_fin: n.fecha_fin })
     setErrorForm('')
     setShowForm(true)
@@ -188,6 +252,37 @@ export default function Nomina() {
     }
   }
 
+  async function imprimirSeleccionadas() {
+    if (seleccion.length === 0) {
+      alert('Selecciona al menos una nómina.')
+      return
+    }
+    try {
+      const resp = await api.get('/nomina/recibos-semana/', {
+        params: {
+          fecha_inicio: toISO(lunes),
+          ids: seleccion.join(','),
+        },
+        responseType: 'blob',
+      })
+      const url = URL.createObjectURL(new Blob([resp.data], { type: 'application/pdf' }))
+      window.open(url, '_blank')
+      setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    } catch {
+      alert('No se pudieron generar los recibos seleccionados.')
+    }
+  }
+
+  function toggleSeleccion(id: number) {
+    setSeleccion(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
+  }
+
+  function toggleTodas() {
+    if (seleccion.length === nominas.length) setSeleccion([])
+    else setSeleccion(nominas.map(n => n.id))
+  }
+
+  const todasSeleccionadas = nominas.length > 0 && seleccion.length === nominas.length
   const lunesHoy = toISO(getLunes())
   const esHoy = toISO(lunes) === lunesHoy
 
@@ -205,12 +300,32 @@ export default function Nomina() {
               {formatFechaCorta(toISO(lunes))} — {formatFechaCorta(toISO(domingo))}
             </p>
           </div>
-          <button
-            onClick={abrirNueva}
-            style={{ background: '#16a34a', color: 'white', border: 'none', borderRadius: 8, padding: '9px 18px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}
-          >
-            + Nueva nómina
-          </button>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button
+              onClick={abrirNueva}
+              style={{ background: '#16a34a', color: 'white', border: 'none', borderRadius: 8, padding: '9px 18px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}
+            >
+              + Nueva nómina
+            </button>
+            <button
+              onClick={imprimirSeleccionadas}
+              disabled={seleccion.length === 0}
+              style={{
+                background: seleccion.length === 0 ? '#f3f4f6' : 'white',
+                color: seleccion.length === 0 ? '#9ca3af' : '#162016',
+                border: '1px solid #d1e0d1', borderRadius: 8, padding: '9px 14px', fontSize: 14, fontWeight: 600,
+                cursor: seleccion.length === 0 ? 'not-allowed' : 'pointer',
+              }}
+            >
+              Imprimir{seleccion.length > 0 ? ` (${seleccion.length})` : ''}
+            </button>
+            <button
+              onClick={() => navigate(`/crm/horas-extra?inicio=${toISO(lunes)}`)}
+              style={{ background: 'white', color: '#162016', border: '1px solid #d1e0d1', borderRadius: 8, padding: '9px 14px', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}
+            >
+              Horas extras
+            </button>
+          </div>
         </div>
 
         {/* Navegación semanas */}
@@ -264,14 +379,24 @@ export default function Nomina() {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid #e5ede5' }}>
+                  <th style={{ textAlign: 'left', padding: '10px 12px', fontSize: 12, fontWeight: 600, color: '#8fa890', background: '#f9fdf9', width: 44 }}>
+                    <input
+                      type="checkbox"
+                      checked={todasSeleccionadas}
+                      onChange={toggleTodas}
+                      title="Seleccionar todas"
+                      style={{ width: 16, height: 16, cursor: 'pointer' }}
+                    />
+                  </th>
                   {['Empleado', 'Periodo', 'Días', 'Pagos extra', 'Total', ''].map(h => (
-                    <th key={h} style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, fontWeight: 600, color: '#8fa890', background: '#f9fdf9', letterSpacing: '0.04em' }}>{h}</th>
+                    <th key={h || 'acciones'} style={{ textAlign: 'left', padding: '10px 16px', fontSize: 12, fontWeight: 600, color: '#8fa890', background: '#f9fdf9', letterSpacing: '0.04em' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {nominas.map(n => {
                   const extras = (n.pagos_extra ?? []).reduce((s, p) => s + parseFloat(p.monto), 0)
+                  const checked = seleccion.includes(n.id)
                   return (
                     <tr
                       key={n.id}
@@ -280,6 +405,14 @@ export default function Nomina() {
                       onMouseEnter={e => { if (detalle?.id !== n.id) (e.currentTarget as HTMLElement).style.background = '#f9fdf9' }}
                       onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = detalle?.id === n.id ? '#f0fdf4' : 'white' }}
                     >
+                      <td style={{ padding: '12px', width: 44 }} onClick={e => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleSeleccion(n.id)}
+                          style={{ width: 16, height: 16, cursor: 'pointer' }}
+                        />
+                      </td>
                       {/* Empleado */}
                       <td style={{ padding: '12px 16px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -400,6 +533,12 @@ export default function Nomina() {
               Editar nómina
             </button>
             <button
+              onClick={() => navigate(`/crm/horas-extra?empleado=${detalle.empleado}&inicio=${detalle.fecha_inicio}`)}
+              style={{ background: 'white', border: '1px solid #d1e0d1', borderRadius: 8, padding: 10, fontSize: 14, cursor: 'pointer', color: '#374151' }}
+            >
+              Calcular horas extras
+            </button>
+            <button
               onClick={() => abrirRecibo(detalle)}
               style={{ background: 'white', border: '1px solid #d1e0d1', borderRadius: 8, padding: 10, fontSize: 14, cursor: 'pointer', color: '#374151' }}
             >
@@ -412,7 +551,7 @@ export default function Nomina() {
       {/* ── Overlay formulario nómina ────────────────────────── */}
       {showForm && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: 20 }}>
-          <div style={{ background: 'white', borderRadius: 16, width: '100%', maxWidth: 480, padding: 28 }}>
+          <div style={{ background: 'white', borderRadius: 16, width: '100%', maxWidth: 520, padding: 28, maxHeight: '90vh', overflowY: 'auto' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
               <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#162016' }}>
                 {editando ? 'Editar nómina' : 'Nueva nómina'}
@@ -432,16 +571,6 @@ export default function Nomina() {
                 </select>
               </label>
 
-              <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <span style={{ fontSize: 12, fontWeight: 600, color: '#8fa890' }}>DÍAS TRABAJADOS</span>
-                <input
-                  type="number" min="0" max="7"
-                  value={form.dias_trabajados} onChange={e => setForm(f => ({ ...f, dias_trabajados: e.target.value }))}
-                  placeholder="0"
-                  style={{ border: '1px solid #d1e0d1', borderRadius: 8, padding: '9px 12px', fontSize: 14, outline: 'none' }}
-                />
-              </label>
-
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   <span style={{ fontSize: 12, fontWeight: 600, color: '#8fa890' }}>FECHA INICIO</span>
@@ -454,6 +583,56 @@ export default function Nomina() {
                     style={{ border: '1px solid #d1e0d1', borderRadius: 8, padding: '9px 12px', fontSize: 14, outline: 'none' }} />
                 </label>
               </div>
+
+              {form.empleado && (
+                <div style={{ border: '1px solid #e5ede5', borderRadius: 10, padding: 12, background: '#f9fdf9' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: '#8fa890', letterSpacing: '0.04em' }}>ASISTENCIAS DEL PERIODO</span>
+                    {cargandoAsistencias
+                      ? <span style={{ fontSize: 12, color: '#8fa890' }}>Cargando…</span>
+                      : <span style={{ fontSize: 12, fontWeight: 600, color: '#16a34a', background: '#dcfce7', borderRadius: 999, padding: '2px 8px' }}>
+                          {asistencias.length} día{asistencias.length !== 1 ? 's' : ''}
+                        </span>}
+                  </div>
+                  {cargandoAsistencias ? (
+                    <div style={{ fontSize: 13, color: '#8fa890' }}>Consultando check-ins…</div>
+                  ) : asistencias.length === 0 ? (
+                    <div style={{ fontSize: 13, color: '#9ca3af' }}>Sin registros de asistencia en este periodo.</div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 180, overflowY: 'auto' }}>
+                      {asistencias.map(a => (
+                        <div key={a.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'white', border: '1px solid #e5ede5', borderRadius: 8, padding: '8px 10px' }}>
+                          <div>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: '#162016', textTransform: 'capitalize' }}>{formatFechaAsistencia(a.fecha)}</div>
+                            <div style={{ fontSize: 12, color: '#6b7280' }}>
+                              {formatHora(a.hora_entrada)} – {formatHora(a.hora_salida)}
+                              {a.horas_trabajadas && (
+                                <span style={{ marginLeft: 6, color: '#16a34a' }}>({parseFloat(a.horas_trabajadas).toFixed(1)}h)</span>
+                              )}
+                            </div>
+                          </div>
+                          <span style={{ fontSize: 11, color: '#6b7280', background: '#f3f4f6', borderRadius: 999, padding: '2px 8px' }}>
+                            {JORNADA_LABEL[a.tipo_jornada] ?? a.tipo_jornada}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <span style={{ fontSize: 12, fontWeight: 600, color: '#8fa890' }}>DÍAS TRABAJADOS</span>
+                {asistencias.length > 0 && (
+                  <span style={{ fontSize: 12, color: '#16a34a' }}>Pre-calculado desde asistencias — puedes ajustar</span>
+                )}
+                <input
+                  type="number" min="0" max="31"
+                  value={form.dias_trabajados} onChange={e => setForm(f => ({ ...f, dias_trabajados: e.target.value }))}
+                  placeholder="0"
+                  style={{ border: '1px solid #d1e0d1', borderRadius: 8, padding: '9px 12px', fontSize: 14, outline: 'none' }}
+                />
+              </label>
             </div>
 
             {errorForm && (

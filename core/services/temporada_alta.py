@@ -117,10 +117,25 @@ def _payload(renta: Renta, **extra) -> dict:
 
 
 def _notify_cliente(renta: Renta, lineas: list[str]) -> None:
-    """Best-effort: avisa al cliente vía webhook n8n (Twilio)."""
+    """Best-effort: avisa al cliente vía Meta Cloud API o webhook n8n."""
     telefono = (renta.cliente.telefono if renta.cliente_id else '') or ''
     if not telefono:
         return
+    mensaje = '\n'.join(lineas)
+    try:
+        from core.services import whatsapp_ycloud as wa_yc
+        if wa_yc.configured():
+            wa_yc.send_text(telefono, mensaje)
+            return
+    except Exception:
+        pass
+    try:
+        from core.services import whatsapp_meta as wa
+        if wa.meta_configured():
+            wa.send_text(telefono, mensaje)
+            return
+    except Exception:
+        pass
     url = getattr(settings, 'BOT_NOTIFY_WEBHOOK_URL', '') or ''
     if not url:
         return
@@ -130,7 +145,7 @@ def _notify_cliente(renta: Renta, lineas: list[str]) -> None:
 
         body = json.dumps({
             'telefono': telefono,
-            'mensaje_whatsapp': '\n'.join(lineas),
+            'mensaje_whatsapp': mensaje,
         }).encode('utf-8')
         req = urllib.request.Request(
             url,

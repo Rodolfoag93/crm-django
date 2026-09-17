@@ -224,6 +224,9 @@ REST_FRAMEWORK = {
     'DEFAULT_RENDERER_CLASSES': [
         'rest_framework.renderers.JSONRenderer',
     ],
+    'DEFAULT_THROTTLE_RATES': {
+        'public': '60/min',
+    },
 }
 
 # ── JWT Configuration ─────────────────────────────────────────────────
@@ -241,6 +244,65 @@ SIMPLE_JWT = {
 CORS_ALLOWED_ORIGINS = [
     'http://localhost:5173',
     'http://localhost:4173',
+    'http://localhost:5174',
     'https://app.trotacrm.com',
+    'https://trotacrm.com',
+    'https://www.trotacrm.com',
 ]
 CORS_ALLOW_CREDENTIALS = True
+# Webhook n8n para avisar al cliente (aprobar/rechazar logistica desde CRM)
+BOT_NOTIFY_WEBHOOK_URL = os.environ.get(
+    'BOT_NOTIFY_WEBHOOK_URL',
+    'https://bot.app.trotacrm.com/webhook/bot-notify-cliente',
+)
+
+# ── WhatsApp Cloud API (Meta) ─────────────────────────────────────────
+# Webhook: GET/POST https://app.trotacrm.com/v1/bot/whatsapp-meta/
+META_WA_VERIFY_TOKEN = os.environ.get('META_WA_VERIFY_TOKEN', 'trota-wa-verify')
+META_WA_ACCESS_TOKEN = os.environ.get('META_WA_ACCESS_TOKEN', '')
+META_WA_PHONE_NUMBER_ID = os.environ.get('META_WA_PHONE_NUMBER_ID', '')
+META_WA_GRAPH_VERSION = os.environ.get('META_WA_GRAPH_VERSION', 'v21.0')
+META_WA_N8N_FORWARD_URL = os.environ.get(
+    'META_WA_N8N_FORWARD_URL',
+    'https://bot.app.trotacrm.com/webhook/whatsapp',
+)
+META_WA_DISPLAY_NUMBER = os.environ.get('META_WA_DISPLAY_NUMBER', '523121529952')
+
+# ── YCloud (BSP WhatsApp) ─────────────────────────────────────────────
+YCLOUD_API_KEY = os.environ.get('YCLOUD_API_KEY', '')
+YCLOUD_API_BASE = os.environ.get('YCLOUD_API_BASE', 'https://api.ycloud.com/v2')
+# E.164 del número conectado en YCloud (MX móvil WA: +521…)
+YCLOUD_FROM_NUMBER = os.environ.get('YCLOUD_FROM_NUMBER', '+5213121529952')
+# Segundos desde el primer mensaje del lote antes de reenviar a n8n (0 = inmediato)
+WA_DEBOUNCE_SECONDS = int(os.environ.get('WA_DEBOUNCE_SECONDS', '5') or '5')
+
+# ── Dominio público (usado para armar links absolutos, ej. proxy de media) ──
+PUBLIC_BASE_URL = os.environ.get('PUBLIC_BASE_URL', 'https://app.trotacrm.com')
+# Horas de vida del link firmado que ve el asesor para abrir comprobantes (YCloud
+# retiene el archivo original ~30 días de su lado; esto solo acorta la ventana
+# de exposición del link, no necesita acercarse a ese límite).
+WA_MEDIA_PROXY_MAX_AGE_HOURS = int(os.environ.get('WA_MEDIA_PROXY_MAX_AGE_HOURS', '168') or '168')
+
+# ── Anthropic (extracción de intención/slots del bot WhatsApp) ────────
+ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '')
+ANTHROPIC_MODEL = os.environ.get('ANTHROPIC_MODEL', 'claude-sonnet-5')
+# Segundos antes de abortar la llamada y caer al fallback (menú de siempre)
+ANTHROPIC_TIMEOUT_S = float(os.environ.get('ANTHROPIC_TIMEOUT_S', '8') or '8')
+
+# ── FiscalAPI (CFDI) ──────────────────────────────────────────────────
+# Sandbox: https://test.fiscalapi.com  |  Prod: https://live.fiscalapi.com
+FISCALAPI_BASE_URL = os.environ.get('FISCALAPI_BASE_URL', 'https://test.fiscalapi.com')
+FISCALAPI_API_KEY = os.environ.get('FISCALAPI_API_KEY', '')
+FISCALAPI_TENANT_KEY = os.environ.get('FISCALAPI_TENANT_KEY', '')
+FISCALAPI_ISSUER_ID = os.environ.get('FISCALAPI_ISSUER_ID', '')
+FISCALAPI_EXPEDITION_ZIP = os.environ.get('FISCALAPI_EXPEDITION_ZIP', '')
+FISCALAPI_SERIES = os.environ.get('FISCALAPI_SERIES', 'R')
+# ClaveProdServ y unidad fijas en facturacion.py: 90101602 / E48 Servicio
+FISCALAPI_TAX_RATE = os.environ.get('FISCALAPI_TAX_RATE', '0.160000')
+FISCALAPI_ISR_RETENTION_RATE = os.environ.get('FISCALAPI_ISR_RETENTION_RATE', '0.012500')
+# false = precio_total del CRM es subtotal ANTES de IVA (comportamiento Trotamundos)
+FISCALAPI_TOTAL_INCLUDES_TAX = os.environ.get('FISCALAPI_TOTAL_INCLUDES_TAX', 'false')
+FISCALAPI_PAYMENT_FORM = os.environ.get('FISCALAPI_PAYMENT_FORM', '03')
+FISCALAPI_TIMEZONE = os.environ.get('FISCALAPI_TIMEZONE', 'America/Mexico_City')
+# Copia de cada factura timbrada (además del correo del cliente, si lo hay)
+FISCALAPI_COPY_EMAIL = os.environ.get('FISCALAPI_COPY_EMAIL', '')

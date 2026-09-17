@@ -10,8 +10,11 @@ interface Producto {
   stock_total: number
   stock_disponible: number
   activo: boolean
+  categoria_web?: string
+  categoria_web_display?: string
   veces_rentado: number
   ultima_renta: string | null
+  foto_url?: string | null
 }
 
 interface StatsProductos {
@@ -27,12 +30,22 @@ interface FormData {
   tipo: string
   precio: string
   stock_total: string
+  categoria_web: string
 }
 
 const TIPOS: Record<string, string> = {
   BR: 'Brincolín', ME: 'Mesa', SI: 'Silla', AN: 'Animación',
   FL: 'Flete', LZ: 'Loza', MT: 'Mantelería', OT: 'Otro',
 }
+
+const CATEGORIAS_WEB: { value: string; label: string }[] = [
+  { value: '', label: 'Sin categoría' },
+  { value: 'chicos', label: 'Chicos' },
+  { value: 'medianos', label: 'Medianos' },
+  { value: 'acuaticos', label: 'Acuáticos' },
+  { value: 'extremos', label: 'Extremos' },
+  { value: 'mecanicos', label: 'Mecánicos' },
+]
 
 const TIPO_COLORS: Record<string, { bg: string; text: string }> = {
   BR: { bg: '#dcfce7', text: '#15803d' },
@@ -45,7 +58,16 @@ const TIPO_COLORS: Record<string, { bg: string; text: string }> = {
   OT: { bg: '#f3f4f6', text: '#6b7280' },
 }
 
-const FORM_EMPTY: FormData = { nombre: '', tipo: 'BR', precio: '', stock_total: '1' }
+const FORM_EMPTY: FormData = { nombre: '', tipo: 'BR', precio: '', stock_total: '1', categoria_web: 'medianos' }
+
+const PAGE_SIZE = 25
+
+interface PaginatedResponse {
+  count: number
+  next: string | null
+  previous: string | null
+  results: Producto[]
+}
 
 function formatMonto(n: number) {
   if (n >= 1000) return `$${(n / 1000).toFixed(n % 1000 === 0 ? 0 : 1)}k`
@@ -58,13 +80,14 @@ function formatFecha(iso: string) {
 }
 
 export default function Productos() {
-  const [productos, setProductos] = useState<Producto[]>([])
+  const [data, setData] = useState<PaginatedResponse | null>(null)
   const [stats, setStats] = useState<StatsProductos | null>(null)
   const [loading, setLoading] = useState(true)
   const [searchInput, setSearchInput] = useState('')
   const [busqueda, setBusqueda] = useState('')
   const [filtroTipo, setFiltroTipo] = useState('')
   const [filtroActivo, setFiltroActivo] = useState('true')
+  const [page, setPage] = useState(1)
 
   // Panel editar / crear
   const [panel, setPanel] = useState<'nuevo' | 'editar' | null>(null)
@@ -72,31 +95,38 @@ export default function Productos() {
   const [form, setForm] = useState<FormData>(FORM_EMPTY)
   const [guardando, setGuardando] = useState(false)
   const [errorForm, setErrorForm] = useState('')
+  const [fotoFile, setFotoFile] = useState<File | null>(null)
+  const [fotoPreview, setFotoPreview] = useState<string | null>(null)
+
+  const productos = data?.results ?? []
+  const totalPages = data ? Math.max(1, Math.ceil(data.count / PAGE_SIZE)) : 1
 
   useEffect(() => {
     api.get('/productos/stats/').then(r => setStats(r.data)).catch(console.error)
   }, [])
 
   useEffect(() => {
-    const t = setTimeout(() => { setBusqueda(searchInput) }, 350)
+    const t = setTimeout(() => { setBusqueda(searchInput); setPage(1) }, 350)
     return () => clearTimeout(t)
   }, [searchInput])
 
   const fetchProductos = useCallback(() => {
     setLoading(true)
-    const params: Record<string, string> = {}
+    const params: Record<string, string> = { page: String(page) }
     if (busqueda) params.search = busqueda
     if (filtroTipo) params.tipo = filtroTipo
     if (filtroActivo) params.activo = filtroActivo
     api.get('/productos/', { params })
       .then(r => {
-        // ViewSet puede devolver array o paginado
-        const results = Array.isArray(r.data) ? r.data : (r.data.results ?? r.data)
-        setProductos(results)
+        if (Array.isArray(r.data)) {
+          setData({ count: r.data.length, next: null, previous: null, results: r.data })
+        } else {
+          setData(r.data)
+        }
       })
       .catch(console.error)
       .finally(() => setLoading(false))
-  }, [busqueda, filtroTipo, filtroActivo])
+  }, [busqueda, filtroTipo, filtroActivo, page])
 
   useEffect(() => { fetchProductos() }, [fetchProductos])
 
@@ -104,13 +134,23 @@ export default function Productos() {
     setEditando(null)
     setForm(FORM_EMPTY)
     setErrorForm('')
+    setFotoFile(null)
+    setFotoPreview(null)
     setPanel('nuevo')
   }
 
   const abrirEditar = (p: Producto) => {
     setEditando(p)
-    setForm({ nombre: p.nombre, tipo: p.tipo, precio: p.precio, stock_total: String(p.stock_total) })
+    setForm({
+      nombre: p.nombre,
+      tipo: p.tipo,
+      precio: p.precio,
+      stock_total: String(p.stock_total),
+      categoria_web: p.categoria_web || '',
+    })
     setErrorForm('')
+    setFotoFile(null)
+    setFotoPreview(p.foto_url || null)
     setPanel('editar')
   }
 
@@ -125,17 +165,32 @@ export default function Productos() {
         precio: parseFloat(form.precio),
         stock_total: parseInt(form.stock_total) || 0,
         stock_disponible: parseInt(form.stock_total) || 0,
+        categoria_web: form.tipo === 'BR' ? form.categoria_web : '',
       }
+      let saved: Producto
       if (panel === 'nuevo') {
         const r = await api.post('/productos/', payload)
-        setProductos(prev => [r.data, ...prev].sort((a, b) => a.nombre.localeCompare(b.nombre)))
-        setStats(prev => prev ? { ...prev, total_activos: prev.total_activos + 1 } : prev)
+        saved = r.data
       } else if (editando) {
         const r = await api.patch(`/productos/${editando.id}/`, payload)
-        setProductos(prev => prev.map(p => p.id === editando.id ? r.data : p))
+        saved = r.data
+      } else {
+        return
+      }
+      if (fotoFile) {
+        const fd = new FormData()
+        fd.append('foto', fotoFile)
+        await api.post(`/productos/${saved.id}/foto/`, fd, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        })
       }
       setPanel(null)
-      // Refrescar stats
+      if (panel === 'nuevo') {
+        if (page !== 1) setPage(1)
+        else fetchProductos()
+      } else {
+        fetchProductos()
+      }
       api.get('/productos/stats/').then(r => setStats(r.data)).catch(console.error)
     } catch (e: unknown) {
       const data = (e as { response?: { data?: Record<string, string[]> } })?.response?.data
@@ -147,10 +202,7 @@ export default function Productos() {
   const toggleActivo = async (p: Producto) => {
     try {
       await api.patch(`/productos/${p.id}/`, { activo: !p.activo })
-      setProductos(prev => filtroActivo === 'true'
-        ? prev.filter(x => x.id !== p.id)
-        : prev.map(x => x.id === p.id ? { ...x, activo: !x.activo } : x)
-      )
+      fetchProductos()
       api.get('/productos/stats/').then(r => setStats(r.data)).catch(console.error)
     } catch { /* silent */ }
   }
@@ -224,8 +276,8 @@ export default function Productos() {
 
           {/* Filtro activo */}
           <div className="flex gap-1 p-1 rounded-lg" style={{ background: '#f2f6f2', border: '1px solid #ddeadd' }}>
-            {[['true', 'Activos'], ['false', 'Inactivos'], ['', 'Todos']].map(([v, l]) => (
-              <button key={v} onClick={() => setFiltroActivo(v)}
+            {([['true', 'Activos'], ['false', 'Inactivos'], ['', 'Todos']] as const).map(([v, l]) => (
+              <button key={v || 'all'} onClick={() => { setFiltroActivo(v); setPage(1) }}
                 className="text-xs px-3 py-1 rounded-md font-medium transition-colors"
                 style={{ background: filtroActivo === v ? 'white' : 'transparent', color: filtroActivo === v ? '#162016' : '#5a7060', boxShadow: filtroActivo === v ? '0 1px 3px rgba(0,0,0,0.08)' : 'none' }}>
                 {l}
@@ -234,7 +286,7 @@ export default function Productos() {
           </div>
 
           {/* Filtro tipo */}
-          <select value={filtroTipo} onChange={e => setFiltroTipo(e.target.value)}
+          <select value={filtroTipo} onChange={e => { setFiltroTipo(e.target.value); setPage(1) }}
             className="border rounded-lg px-3 py-1.5 text-xs" style={{ borderColor: '#ddeadd', color: '#162016' }}>
             <option value="">Todos los tipos</option>
             {Object.entries(TIPOS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
@@ -256,8 +308,8 @@ export default function Productos() {
           <table className="w-full" style={{ borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
               <tr style={{ background: '#f8fbf8', borderBottom: '1px solid #ddeadd' }}>
-                {['Nombre', 'Tipo', 'Precio', 'Stock', 'Veces rentado', 'Última renta', 'Estado', ''].map(h => (
-                  <th key={h} className="text-left px-4 py-2.5 font-semibold uppercase tracking-wide whitespace-nowrap"
+                {['', 'Nombre', 'Tipo', 'Categoría web', 'Precio', 'Stock', 'Veces rentado', 'Última renta', 'Estado', ''].map(h => (
+                  <th key={h || 'foto'} className="text-left px-4 py-2.5 font-semibold uppercase tracking-wide whitespace-nowrap"
                     style={{ fontSize: 11, color: '#5a7060', letterSpacing: '0.3px' }}>{h}</th>
                 ))}
               </tr>
@@ -271,7 +323,7 @@ export default function Productos() {
                 </tr>
               ))}
               {!loading && productos.length === 0 && (
-                <tr><td colSpan={8} className="text-center py-10 text-sm" style={{ color: '#8fa890' }}>Sin productos.</td></tr>
+                <tr><td colSpan={10} className="text-center py-10 text-sm" style={{ color: '#8fa890' }}>Sin productos.</td></tr>
               )}
               {!loading && productos.map(p => {
                 const tc = TIPO_COLORS[p.tipo] ?? { bg: '#f3f4f6', text: '#6b7280' }
@@ -279,11 +331,23 @@ export default function Productos() {
                   <tr key={p.id} style={{ borderBottom: '1px solid #f5f8f5', opacity: p.activo ? 1 : 0.55 }}
                     onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = '#f8fbf8'}
                     onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = ''}>
+                    <td className="px-4 py-3">
+                      <div className="rounded-md overflow-hidden" style={{ width: 40, height: 40, background: '#f2f6f2' }}>
+                        {p.foto_url ? (
+                          <img src={p.foto_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        ) : null}
+                      </div>
+                    </td>
                     <td className="px-4 py-3 font-medium" style={{ color: '#162016' }}>{p.nombre}</td>
                     <td className="px-4 py-3">
                       <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ background: tc.bg, color: tc.text }}>
                         {p.tipo_display}
                       </span>
+                    </td>
+                    <td className="px-4 py-3 text-sm" style={{ color: '#5a7060' }}>
+                      {p.tipo === 'BR'
+                        ? (p.categoria_web_display || CATEGORIAS_WEB.find(c => c.value === (p.categoria_web || ''))?.label || '—')
+                        : '—'}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap font-medium" style={{ fontVariantNumeric: 'tabular-nums', color: '#162016' }}>
                       ${parseFloat(p.precio).toLocaleString('es-MX')}
@@ -330,8 +394,45 @@ export default function Productos() {
           </table>
         </div>
 
-        <div className="px-5 py-3" style={{ borderTop: '1px solid #ddeadd', background: '#f8fbf8' }}>
-          <span className="text-xs" style={{ color: '#8fa890' }}>{productos.length} producto{productos.length !== 1 ? 's' : ''}</span>
+        <div className="flex items-center gap-3 px-5 py-3" style={{ borderTop: '1px solid #ddeadd', background: '#f8fbf8' }}>
+          <span className="text-xs" style={{ color: '#8fa890' }}>
+            {data
+              ? `${data.count} producto${data.count !== 1 ? 's' : ''}${totalPages > 1 ? ` · pág. ${page} de ${totalPages}` : ''}`
+              : '…'}
+          </span>
+          {totalPages > 1 && (
+            <div className="flex items-center gap-1.5 ml-auto">
+              <button type="button" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
+                className="w-7 h-7 flex items-center justify-center rounded-md border text-xs disabled:opacity-40"
+                style={{ borderColor: '#ddeadd', color: '#5a7060', background: 'white' }}>‹</button>
+              {Array.from({ length: Math.min(totalPages, 9) }, (_, i) => {
+                let p: number
+                if (totalPages <= 9) {
+                  p = i + 1
+                } else if (page <= 5) {
+                  p = i + 1
+                } else if (page >= totalPages - 4) {
+                  p = totalPages - 8 + i
+                } else {
+                  p = page - 4 + i
+                }
+                return (
+                  <button key={p} type="button" onClick={() => setPage(p)}
+                    className="w-7 h-7 flex items-center justify-center rounded-md border text-xs font-medium"
+                    style={{
+                      borderColor: page === p ? '#16a34a' : '#ddeadd',
+                      background: page === p ? '#16a34a' : 'white',
+                      color: page === p ? '#fff' : '#5a7060',
+                    }}>
+                    {p}
+                  </button>
+                )
+              })}
+              <button type="button" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}
+                className="w-7 h-7 flex items-center justify-center rounded-md border text-xs disabled:opacity-40"
+                style={{ borderColor: '#ddeadd', color: '#5a7060', background: 'white' }}>›</button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -370,6 +471,19 @@ export default function Productos() {
                 </select>
               </Field>
 
+              {form.tipo === 'BR' && (
+                <Field label="Categoría web (catálogo)">
+                  <select value={form.categoria_web}
+                    onChange={e => setForm(f => ({ ...f, categoria_web: e.target.value }))}
+                    className="w-full border rounded-lg px-3 py-2.5 text-sm"
+                    style={{ borderColor: '#ddeadd', color: '#162016' }}>
+                    {CATEGORIAS_WEB.map(c => (
+                      <option key={c.value || 'none'} value={c.value}>{c.label}</option>
+                    ))}
+                  </select>
+                </Field>
+              )}
+
               <Field label="Precio de renta ($)">
                 <input type="number" min="0" step="50" value={form.precio}
                   onChange={e => setForm(f => ({ ...f, precio: e.target.value }))}
@@ -383,6 +497,33 @@ export default function Productos() {
                   onChange={e => setForm(f => ({ ...f, stock_total: e.target.value }))}
                   className="w-full border rounded-lg px-3 py-2.5 text-sm outline-none"
                   style={{ borderColor: '#ddeadd', color: '#162016' }} />
+              </Field>
+
+              <Field label="Foto para la web">
+                <div className="flex flex-col gap-2">
+                  <div className="rounded-lg overflow-hidden flex items-center justify-center"
+                    style={{ height: 140, background: '#f2f6f2', border: '1px solid #ddeadd' }}>
+                    {fotoPreview ? (
+                      <img src={fotoPreview} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    ) : (
+                      <span className="text-xs" style={{ color: '#8fa890' }}>Sin foto</span>
+                    )}
+                  </div>
+                  <label className="text-center text-sm font-semibold py-2 rounded-lg cursor-pointer"
+                    style={{ background: '#f0fdf4', color: '#16a34a', border: '1px solid #bbf7d0' }}>
+                    Elegir foto
+                    <input type="file" accept="image/*" className="hidden"
+                      onChange={e => {
+                        const f = e.target.files?.[0] || null
+                        setFotoFile(f)
+                        if (f) setFotoPreview(URL.createObjectURL(f))
+                        e.target.value = ''
+                      }} />
+                  </label>
+                  <p className="text-xs" style={{ color: '#8fa890' }}>
+                    Se muestra en el catálogo de trotacrm.com
+                  </p>
+                </div>
               </Field>
 
               {errorForm && (

@@ -20,6 +20,7 @@ ssh $SERVER "sudo -u trota $VENV/bin/pip install -r $APP_DIR/requirements.txt -q
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 FRONTEND="$SCRIPT_DIR/frontend"
+WEBSITE="$SCRIPT_DIR/website"
 
 echo "==> Compilando PWA localmente..."
 (cd "$FRONTEND" && npm ci --silent && npm run build --silent)
@@ -28,6 +29,14 @@ echo "==> Subiendo PWA a produccion..."
 ssh $SERVER "rm -rf $APP_DIR/pwa && mkdir -p $APP_DIR/pwa"
 scp -r "$FRONTEND/dist/"* $SERVER:$APP_DIR/pwa/
 ssh $SERVER "chown -R trota:www-data $APP_DIR/pwa && chmod -R u=rwX,g=rX,o=rX $APP_DIR/pwa"
+
+echo "==> Compilando sitio publico (website/)..."
+(cd "$WEBSITE" && npm ci --silent && npm run build --silent)
+
+echo "==> Subiendo sitio publico a produccion..."
+ssh $SERVER "rm -rf $APP_DIR/website/dist && mkdir -p $APP_DIR/website/dist"
+scp -r "$WEBSITE/dist/"* $SERVER:$APP_DIR/website/dist/
+ssh $SERVER "chown -R trota:www-data $APP_DIR/website && chmod -R u=rwX,g=rX,o=rX $APP_DIR/website"
 
 echo "==> Aplicando migraciones..."
 ssh $SERVER "sudo -u trota $PYTHON $APP_DIR/manage.py migrate --noinput"

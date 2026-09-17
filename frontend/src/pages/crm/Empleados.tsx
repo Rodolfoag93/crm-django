@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import api from '../../lib/api'
 
 interface Empleado {
@@ -88,8 +89,22 @@ interface AsistenciaData {
   empleados: RegistroAsistencia[]
 }
 
+interface SolicitudRegistro {
+  id: number
+  nombre: string
+  telefono: string
+  email: string | null
+  tipo_empleado: string
+  estado: string
+  fecha_solicitud: string
+}
+
 export default function Empleados() {
-  const [tab, setTab] = useState<'empleados' | 'asistencia'>('empleados')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const tabParam = searchParams.get('tab')
+  const [tab, setTab] = useState<'empleados' | 'asistencia' | 'solicitudes'>(
+    tabParam === 'solicitudes' || tabParam === 'asistencia' ? tabParam : 'empleados',
+  )
 
   // ── Estado empleados ───────────────────────────────────────────────────────
   const [empleados, setEmpleados] = useState<Empleado[]>([])
@@ -113,6 +128,25 @@ export default function Empleados() {
   const [guardandoAsist, setGuardandoAsist] = useState(false)
   const [errorAsist, setErrorAsist] = useState('')
 
+  // ── Estado solicitudes ─────────────────────────────────────────────────────
+  const [solicitudes, setSolicitudes] = useState<SolicitudRegistro[]>([])
+  const [loadingSol, setLoadingSol] = useState(false)
+  const [procesandoSol, setProcesandoSol] = useState<number | null>(null)
+
+  const cambiarTab = (t: 'empleados' | 'asistencia' | 'solicitudes') => {
+    setTab(t)
+    if (t === 'empleados') setSearchParams({})
+    else setSearchParams({ tab: t })
+  }
+
+  const cargarSolicitudes = useCallback(() => {
+    setLoadingSol(true)
+    api.get('/solicitudes/', { params: { estado: 'PENDIENTE' } })
+      .then(r => setSolicitudes(Array.isArray(r.data) ? r.data : (r.data.results ?? [])))
+      .catch(console.error)
+      .finally(() => setLoadingSol(false))
+  }, [])
+
   const cargarAsistencia = useCallback(() => {
     setLoadingAsist(true)
     api.get('/asistencia-hoy/', { params: { fecha: fechaAsist } })
@@ -122,10 +156,39 @@ export default function Empleados() {
   }, [fechaAsist])
 
   useEffect(() => { if (tab === 'asistencia') cargarAsistencia() }, [tab, cargarAsistencia])
+  useEffect(() => { if (tab === 'solicitudes') cargarSolicitudes() }, [tab, cargarSolicitudes])
+  useEffect(() => { cargarSolicitudes() }, [cargarSolicitudes])
 
   const ausentes = useMemo(() =>
     asistData ? asistData.total - asistData.con_entrada : 0
   , [asistData])
+
+  async function aprobarSolicitud(s: SolicitudRegistro) {
+    if (!window.confirm(`¿Aprobar a ${s.nombre}? Se creará su usuario.`)) return
+    setProcesandoSol(s.id)
+    try {
+      await api.post(`/solicitudes/${s.id}/aprobar/`)
+      setSolicitudes(prev => prev.filter(x => x.id !== s.id))
+      cargar()
+    } catch (e: any) {
+      alert(e?.response?.data?.error || 'No se pudo aprobar')
+    } finally {
+      setProcesandoSol(null)
+    }
+  }
+
+  async function rechazarSolicitud(s: SolicitudRegistro) {
+    if (!window.confirm(`¿Rechazar a ${s.nombre}?`)) return
+    setProcesandoSol(s.id)
+    try {
+      await api.post(`/solicitudes/${s.id}/rechazar/`)
+      setSolicitudes(prev => prev.filter(x => x.id !== s.id))
+    } catch (e: any) {
+      alert(e?.response?.data?.error || 'No se pudo rechazar')
+    } finally {
+      setProcesandoSol(null)
+    }
+  }
 
   function abrirModalAsist(r: RegistroAsistencia) {
     setModalAsist(r)
@@ -245,26 +308,104 @@ export default function Empleados() {
 
         {/* Pestañas */}
         <div style={{ display: 'flex', gap: 4, marginBottom: 20, borderBottom: '2px solid #e5ede5', paddingBottom: 0 }}>
-          {(['empleados', 'asistencia'] as const).map(t => (
+          {([
+            { id: 'empleados', label: 'Empleados' },
+            { id: 'asistencia', label: 'Asistencia' },
+            { id: 'solicitudes', label: solicitudes.length ? `Solicitudes (${solicitudes.length})` : 'Solicitudes' },
+          ] as const).map(t => (
             <button
-              key={t}
-              onClick={() => setTab(t)}
+              key={t.id}
+              onClick={() => cambiarTab(t.id)}
               style={{
                 background: 'none', border: 'none', cursor: 'pointer',
-                padding: '8px 20px', fontSize: 14, fontWeight: tab === t ? 700 : 500,
-                color: tab === t ? '#16a34a' : '#8fa890',
-                borderBottom: tab === t ? '2px solid #16a34a' : '2px solid transparent',
-                marginBottom: -2, textTransform: 'capitalize',
+                padding: '8px 20px', fontSize: 14, fontWeight: tab === t.id ? 700 : 500,
+                color: tab === t.id ? '#16a34a' : '#8fa890',
+                borderBottom: tab === t.id ? '2px solid #16a34a' : '2px solid transparent',
+                marginBottom: -2,
               }}
             >
-              {t === 'empleados' ? 'Empleados' : 'Asistencia'}
+              {t.label}
             </button>
           ))}
         </div>
 
+        {/* ── VISTA SOLICITUDES ──────────────────────────── */}
+        {tab === 'solicitudes' && (
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+              <div>
+                <h1 style={{ fontSize: 22, fontWeight: 700, color: '#162016', margin: 0 }}>Solicitudes de registro</h1>
+                <p style={{ fontSize: 13, color: '#8fa890', margin: 0 }}>Pendientes de aprobación</p>
+              </div>
+              <button
+                onClick={cargarSolicitudes}
+                style={{
+                  background: 'white', border: '1px solid #ddeadd', borderRadius: 8,
+                  padding: '8px 14px', fontSize: 13, cursor: 'pointer', color: '#162016',
+                }}
+              >
+                Actualizar
+              </button>
+            </div>
+            {loadingSol ? (
+              <p style={{ color: '#8fa890', fontSize: 14 }}>Cargando…</p>
+            ) : solicitudes.length === 0 ? (
+              <div style={{
+                background: 'white', border: '1px solid #e5ede5', borderRadius: 12,
+                padding: 40, textAlign: 'center', color: '#8fa890', fontSize: 14,
+              }}>
+                No hay solicitudes pendientes.
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {solicitudes.map(s => (
+                  <div key={s.id} style={{
+                    background: 'white', border: '1px solid #e5ede5', borderRadius: 12,
+                    padding: '16px 18px', display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap',
+                  }}>
+                    <div style={{ flex: 1, minWidth: 200 }}>
+                      <div style={{ fontWeight: 700, color: '#162016', fontSize: 15 }}>{s.nombre}</div>
+                      <div style={{ fontSize: 13, color: '#5a7060', marginTop: 2 }}>
+                        {TIPOS[s.tipo_empleado] || s.tipo_empleado} · {s.telefono}
+                        {s.email ? ` · ${s.email}` : ''}
+                      </div>
+                      <div style={{ fontSize: 12, color: '#8fa890', marginTop: 4 }}>
+                        {s.fecha_solicitud ? new Date(s.fecha_solicitud).toLocaleString('es-MX') : ''}
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button
+                        disabled={procesandoSol === s.id}
+                        onClick={() => aprobarSolicitud(s)}
+                        style={{
+                          background: '#16a34a', color: 'white', border: 'none', borderRadius: 8,
+                          padding: '8px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                          opacity: procesandoSol === s.id ? 0.5 : 1,
+                        }}
+                      >
+                        Aprobar
+                      </button>
+                      <button
+                        disabled={procesandoSol === s.id}
+                        onClick={() => rechazarSolicitud(s)}
+                        style={{
+                          background: 'white', color: '#b91c1c', border: '1px solid #fecaca', borderRadius: 8,
+                          padding: '8px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                          opacity: procesandoSol === s.id ? 0.5 : 1,
+                        }}
+                      >
+                        Rechazar
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* ── VISTA ASISTENCIA ───────────────────────────── */}
-        {tab === 'asistencia' && (
-          <>
+        {tab === 'asistencia' && (          <>
             {/* Navegación fecha */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
               <button onClick={() => setFechaAsist(sumarDias(fechaAsist, -1))}

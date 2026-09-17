@@ -22,6 +22,8 @@ interface RankingItem {
   coordinador?: string
   animador?: string
   promedio: number
+  puntaje_final?: number
+  promedio_encuesta?: number | null
   total_eventos: number
 }
 
@@ -96,9 +98,16 @@ export default function HomeCoordinador() {
               <span className="text-lg w-6 text-center">{getMedalla(index)}</span>
               <div className="flex-1">
                 <p className="text-sm font-semibold text-gray-900">{item[campo]}</p>
-                <p className="text-xs text-gray-400">{item.total_eventos} evaluaciones</p>
+                <p className="text-xs text-gray-400">
+                  {item.total_eventos} eventos
+                  {campo === 'coordinador' && item.promedio_encuesta != null && (
+                    <> · enc. {item.promedio_encuesta.toFixed(1)}</>
+                  )}
+                </p>
               </div>
-              <p className={`text-lg font-bold ${getColor(item.promedio)}`}>{item.promedio.toFixed(1)}</p>
+              <p className={`text-lg font-bold ${getColor(item.promedio)}`}>
+                {(item.puntaje_final ?? item.promedio).toFixed(campo === 'coordinador' ? 2 : 1)}
+              </p>
             </div>
           ))}
         </div>

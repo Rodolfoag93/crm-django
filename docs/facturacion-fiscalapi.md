@@ -19,7 +19,14 @@ FISCALAPI_TAX_RATE=0.16
 FISCALAPI_TOTAL_INCLUDES_TAX=true
 FISCALAPI_PAYMENT_FORM=03
 FISCALAPI_TIMEZONE=America/Mexico_City
+# Copia interna de cada CFDI (además del email del cliente, si lo hay)
+FISCALAPI_COPY_EMAIL=trota.admon@gmail.com
 ```
+
+Envío por correo (FiscalAPI):
+- Tras timbrar, el CRM llama `POST /api/v4/invoices/send` con `{ invoiceId, toEmail }`.
+- Destinos: email del cliente en el modal + `FISCALAPI_COPY_EMAIL`.
+- La respuesta de `POST /v1/rentas/{id}/facturar/` incluye `email_enviado_a` y `email_errores`.
 
 Pasos en FiscalAPI:
 1. Crear cuenta y activar sandbox (test).
@@ -33,3 +40,6 @@ Pasos en FiscalAPI:
 Endpoint CRM:
 - `GET  /v1/rentas/{id}/facturar/`
 - `POST /v1/rentas/{id}/facturar/`  body: rfc, razon_social, regimen_fiscal, codigo_postal, email, uso_cfdi, forma_pago
+- `GET  /v1/rentas/{id}/factura-pdf/`  → PDF (auth staff; on-demand desde FiscalAPI)
+- `POST /v1/rentas/{id}/reenviar-factura/`  body: `{ email?, incluir_copia? }`
+- `POST /v1/rentas/{id}/cancelar-factura/`  body: motivo, replacement_uuid (si motivo 01)

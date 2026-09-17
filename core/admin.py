@@ -3,7 +3,33 @@ from django.contrib import admin
 from .models import (
     Cliente, Producto, Renta, PresupuestoCategoria, TemporadaAlta, Factura,
     Cotizacion, CotizacionZona, CotizacionConcepto, CoordinadorApoyo, SolicitudCambioMaterial,
+    MaterialAnimacion, FotoMaterial,
 )
+
+
+class FotoMaterialInline(admin.TabularInline):
+    model = FotoMaterial
+    extra = 1
+    fields = ('foto', 'orden')
+
+
+@admin.register(MaterialAnimacion)
+class MaterialAnimacionAdmin(admin.ModelAdmin):
+    list_display = ('id', 'nombre', 'tipo', 'stock_total', 'stock_disponible', 'activo', 'tiene_foto')
+    list_filter = ('tipo', 'activo')
+    search_fields = ('nombre', 'descripcion')
+    list_editable = ('activo',)
+    ordering = ('nombre',)
+    inlines = [FotoMaterialInline]
+    fields = (
+        'nombre', 'descripcion', 'tipo',
+        'stock_total', 'stock_disponible',
+        'foto', 'activo',
+    )
+
+    @admin.display(boolean=True, description='Foto')
+    def tiene_foto(self, obj):
+        return bool(obj.foto)
 
 
 @admin.register(PresupuestoCategoria)

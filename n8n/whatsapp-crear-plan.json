@@ -12,18 +12,24 @@
       "name": "Webhook Recibir Pedido",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [0, 300],
+      "position": [
+        0,
+        300
+      ],
       "webhookId": "trotacrm-crear-plan"
     },
     {
       "parameters": {
-        "jsCode": "const body = $input.first().json.body ?? $input.first().json;\n\nconst telefono = String(body.telefono || body.from || '').replace(/\\D/g, '');\nconst accion = String(body.accion || 'cotizar').toLowerCase();\n\nif (!telefono) throw new Error('Falta telefono');\nif (!body.fecha_renta) throw new Error('Falta fecha_renta (YYYY-MM-DD)');\nif (!body.hora_inicio) throw new Error('Falta hora_inicio (HH:MM)');\nif (!body.hora_fin) throw new Error('Falta hora_fin (HH:MM)');\nif (!Array.isArray(body.productos) || body.productos.length === 0) {\n  throw new Error('Falta arreglo productos con al menos un item {id, cantidad}');\n}\n\nreturn [{\n  json: {\n    accion,\n    telefono,\n    cliente_nombre: body.nombre || body.cliente_nombre || '',\n    cliente_direccion: body.direccion || body.calle_y_numero || '',\n    cliente_colonia: body.colonia || '',\n    cliente_ciudad: body.ciudad || body.ciudad_o_municipio || '',\n    fecha_renta: body.fecha_renta,\n    hora_inicio: body.hora_inicio,\n    hora_fin: body.hora_fin,\n    productos: body.productos,\n    manteles_regalo: body.manteles_regalo || null,\n    anticipo: body.anticipo || 0,\n    notas: body.notas || body.comentarios || '',\n    mismo_domicilio: body.mismo_domicilio ?? true,\n    crm_base: 'https://app.trotacrm.com/v1'\n  }\n}];"
+        "jsCode": "const body = $input.first().json.body ?? $input.first().json;\n\nconst telefono = String(body.telefono || body.from || '').replace(/\\D/g, '');\nconst accion = String(body.accion || 'cotizar').toLowerCase();\n\nif (!telefono) throw new Error('Falta telefono');\nif (!body.fecha_renta) throw new Error('Falta fecha_renta (YYYY-MM-DD)');\nif (!body.hora_inicio) throw new Error('Falta hora_inicio (HH:MM)');\nif (!body.hora_fin) throw new Error('Falta hora_fin (HH:MM)');\nif (!Array.isArray(body.productos) || body.productos.length === 0) {\n  throw new Error('Falta arreglo productos con al menos un item {id, cantidad}');\n}\n\nreturn [{\n  json: {\n    accion,\n    telefono,\n    cliente_nombre: body.nombre || body.cliente_nombre || '',\n    cliente_direccion: body.direccion || body.calle_y_numero || '',\n    cliente_colonia: body.colonia || '',\n    cliente_ciudad: body.ciudad || body.ciudad_o_municipio || '',\n    fecha_renta: body.fecha_renta,\n    hora_inicio: body.hora_inicio,\n    hora_fin: body.hora_fin,\n    productos: body.productos,\n    manteles_regalo: body.manteles_regalo || null,\n    omitir_promo_mantel: Boolean(body.omitir_promo_mantel),\n    anticipo: body.anticipo || 0,\n    notas: body.notas || body.comentarios || '',\n    mismo_domicilio: body.mismo_domicilio ?? true,\n    crm_base: 'https://app.trotacrm.com/v1'\n  }\n}];"
       },
       "id": "a1b2c3d4-0002-4000-8000-000000000002",
       "name": "Normalizar Datos",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [240, 300]
+      "position": [
+        240,
+        300
+      ]
     },
     {
       "parameters": {
@@ -38,7 +44,10 @@
       "name": "Obtener Token JWT",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [480, 300]
+      "position": [
+        480,
+        300
+      ]
     },
     {
       "parameters": {
@@ -68,7 +77,10 @@
       "name": "Buscar Cliente",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [720, 300]
+      "position": [
+        720,
+        300
+      ]
     },
     {
       "parameters": {
@@ -92,17 +104,23 @@
       "name": "Preview Promo Mantel",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [960, 300]
+      "position": [
+        960,
+        300
+      ]
     },
     {
       "parameters": {
-        "jsCode": "const pedido = $('Normalizar Datos').first().json;\nconst promo = $input.first().json;\n\nlet manteles = pedido.manteles_regalo;\n\nif (!manteles || !manteles.length) {\n  manteles = [];\n  const opciones = promo.opciones || {};\n\n  for (const [familia, data] of Object.entries(opciones)) {\n    const cantidad = data.cantidad_regalo || 0;\n    const colores = (data.colores_disponibles || [])\n      .filter((c) => (c.unidades_libres ?? 0) > 0)\n      .sort((a, b) => (b.unidades_libres || 0) - (a.unidades_libres || 0));\n\n    let restante = cantidad;\n    for (const color of colores) {\n      if (restante <= 0) break;\n      const tomar = Math.min(restante, color.unidades_libres || 0);\n      if (tomar <= 0) continue;\n      manteles.push({ producto_id: color.id, cantidad: tomar });\n      restante -= tomar;\n    }\n\n    if (restante > 0) {\n      throw new Error(`No hay stock suficiente de manteles ${familia} para el regalo (${restante} faltante).`);\n    }\n  }\n}\n\nreturn [{\n  json: {\n    ...pedido,\n    manteles_regalo: manteles,\n    promo\n  }\n}];"
+        "jsCode": "const pedido = $('Normalizar Datos').first().json;\nconst promo = $input.first().json;\n\nlet manteles = pedido.manteles_regalo;\n\nif (pedido.omitir_promo_mantel) {\n  manteles = [];\n} else if (!manteles || !manteles.length) {\n  manteles = [];\n  const opciones = promo.opciones || {};\n\n  for (const [familia, data] of Object.entries(opciones)) {\n    const cantidad = data.cantidad_regalo || 0;\n    const colores = (data.colores_disponibles || [])\n      .filter((c) => (c.unidades_libres ?? 0) > 0)\n      .sort((a, b) => (b.unidades_libres || 0) - (a.unidades_libres || 0));\n\n    let restante = cantidad;\n    for (const color of colores) {\n      if (restante <= 0) break;\n      const tomar = Math.min(restante, color.unidades_libres || 0);\n      if (tomar <= 0) continue;\n      manteles.push({ producto_id: color.id, cantidad: tomar });\n      restante -= tomar;\n    }\n\n    if (restante > 0) {\n      throw new Error(`No hay stock suficiente de manteles ${familia} para el regalo (${restante} faltante).`);\n    }\n  }\n}\n\nreturn [{\n  json: {\n    ...pedido,\n    manteles_regalo: manteles,\n    promo\n  }\n}];"
       },
       "id": "a1b2c3d4-0006-4000-8000-000000000006",
       "name": "Elegir Manteles Regalo",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1200, 300]
+      "position": [
+        1200,
+        300
+      ]
     },
     {
       "parameters": {
@@ -126,7 +144,10 @@
       "name": "Cotizar Plan",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1440, 300]
+      "position": [
+        1440,
+        300
+      ]
     },
     {
       "parameters": {
@@ -164,7 +185,10 @@
       "name": "Crear renta?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [1680, 300]
+      "position": [
+        1680,
+        300
+      ]
     },
     {
       "parameters": {
@@ -188,27 +212,36 @@
       "name": "Crear Renta",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1920, 180]
+      "position": [
+        1920,
+        180
+      ]
     },
     {
       "parameters": {
-        "jsCode": "const pedido = $('Elegir Manteles Regalo').first().json;\nconst cotizacion = $('Cotizar Plan').first().json;\nconst renta = $input.first().json;\n\nconst lineas = (cotizacion.lineas || []).map((l) => {\n  const regalo = l.es_regalo ? ' (REGALO)' : '';\n  return `- ${l.cantidad}x ${l.nombre}${regalo}: $${l.subtotal}`;\n}).join('\\n');\n\nconst mensaje = [\n  '✅ *Plan confirmado en TROTA CRM*',\n  '',\n  `Folio: *${renta.folio}*`,\n  `Cliente: ${renta.cliente?.nombre || pedido.cliente_nombre}`,\n  `Fecha: ${pedido.fecha_renta} ${pedido.hora_inicio}-${pedido.hora_fin}`,\n  '',\n  '*Detalle:*',\n  lineas,\n  '',\n  `Total: *$${renta.total}*`,\n  `Anticipo: $${renta.anticipo}`,\n  `Saldo: *$${renta.saldo_pendiente}*`,\n].join('\\n');\n\nreturn [{\n  json: {\n    ok: true,\n    tipo: 'renta_creada',\n    mensaje_whatsapp: mensaje,\n    folio: renta.folio,\n    renta_id: renta.renta_id,\n    total: renta.total,\n    saldo_pendiente: renta.saldo_pendiente,\n    cotizacion,\n    renta\n  }\n}];"
+        "jsCode": "const pedido = $('Elegir Manteles Regalo').first().json;\nconst cotizacion = $('Cotizar Plan').first().json;\nconst renta = $input.first().json;\n\nconst lineas = (cotizacion.lineas || []).map((l) => {\n  const regalo = l.es_regalo ? ' (REGALO)' : '';\n  return `- ${l.cantidad}x ${l.nombre}${regalo}: $${l.subtotal}`;\n}).join('\\n');\n\nconst pagoInfo = [\n  '',\n  '*Forma de pago*',\n  'Se paga al recibir en efectivo para poder ser instalado o bien previo al evento con transferencia o depósito *ÚNICAMENTE* a la cuenta de Trotamundos.',\n  '',\n  'Banco: *Ban Bajío*',\n  'Nombre: Rossana Tamara Medina Valencia',\n  'Cuenta: 324294170201',\n  'Clabe: 030098900026671210',\n  '',\n  'TROTAMUNDOS no tiene ninguna otra cuenta bancaria ni recibe anticipos en efectivo sin entregar la nota del anticipo o pago del pedido.',\n  '',\n  'Si necesitas factura, avísanos *antes* de hacer el pago.',\n  '',\n  '*NOTA:* Queda totalmente prohibido subir o utilizar confeti, papel de colores o silicón en los *BRINCOLINES* y/o *MANTELERÍA*, porque mancha y daña el material y no se repara. De ser utilizado será bajo su responsabilidad y se cobrará el daño correspondiente.',\n].join('\\n');\n\nconst mensaje = [\n  '✅ *¡Listo! Pedido confirmado en Trotamundos*',\n  '',\n  `Folio: *${renta.folio}*`,\n  `Cliente: ${renta.cliente?.nombre || pedido.cliente_nombre}`,\n  `Fecha: ${pedido.fecha_renta} ${pedido.hora_inicio}-${pedido.hora_fin}`,\n  '',\n  '*Tu pedido:*',\n  lineas,\n  '',\n  `Total: *$${renta.total}*`,\n  `Anticipo: $${renta.anticipo}`,\n  `Saldo: *$${renta.saldo_pendiente}*`,\n  pagoInfo,\n].join('\\n');\n\nreturn [{\n  json: {\n    ok: true,\n    tipo: 'renta_creada',\n    mensaje_whatsapp: mensaje,\n    folio: renta.folio,\n    renta_id: renta.renta_id,\n    total: renta.total,\n    saldo_pendiente: renta.saldo_pendiente,\n    validacion_logistica: renta.validacion_logistica || 'NO_REQUIERE',\n    requiere_validacion_logistica: Boolean(renta.requiere_validacion_logistica),\n    temporada_alta: renta.temporada_alta || null,\n    fecha_renta: renta.fecha_renta || pedido.fecha_renta,\n    hora_inicio: renta.hora_inicio || pedido.hora_inicio,\n    hora_fin: renta.hora_fin || pedido.hora_fin,\n    direccion: renta.direccion || '',\n    cliente: renta.cliente || { nombre: pedido.cliente_nombre, telefono: pedido.telefono },\n    productos: (cotizacion.lineas || []).map((l) => ({\n      id: l.producto_id || l.id,\n      nombre: l.nombre,\n      cantidad: l.cantidad,\n    })),\n    cotizacion,\n    renta\n  }\n}];"
       },
       "id": "a1b2c3d4-0010-4000-8000-000000000010",
       "name": "Respuesta Renta Creada",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2160, 180]
+      "position": [
+        2160,
+        180
+      ]
     },
     {
       "parameters": {
-        "jsCode": "const pedido = $('Elegir Manteles Regalo').first().json;\nconst cotizacion = $('Cotizar Plan').first().json;\n\nconst lineas = (cotizacion.lineas || []).map((l) => {\n  const regalo = l.es_regalo ? ' (REGALO)' : '';\n  return `- ${l.cantidad}x ${l.nombre}${regalo}: $${l.subtotal}`;\n}).join('\\n');\n\nlet titulo = '📋 *Cotización TROTA*';\nlet extra = '';\n\nif (!cotizacion.disponible) {\n  titulo = '⚠️ *Cotización con faltantes de stock*';\n  extra = (cotizacion.productos_no_disponibles || [])\n    .map((p) => `- ${p.nombre}: solo ${p.unidades_libres} libre(s)`)\n    .join('\\n');\n}\n\nif (pedido.accion === 'crear' && !cotizacion.disponible) {\n  extra += '\\n\\nNo se creó la renta porque falta inventario.';\n}\n\nconst promo = cotizacion.promo_mantel || {};\nconst regalos = promo.total_regalos || 0;\n\nconst mensaje = [\n  titulo,\n  '',\n  `Fecha evento: ${pedido.fecha_renta} ${pedido.hora_inicio}-${pedido.hora_fin}`,\n  regalos > 0 ? `Manteles regalo incluidos: ${regalos}` : 'Sin promo de mantel',\n  '',\n  '*Detalle:*',\n  lineas,\n  '',\n  `Total: *$${cotizacion.total}*`,\n  extra ? ['', extra].join('\\n') : '',\n  pedido.accion === 'cotizar' ? '\\nResponde *CONFIRMAR* para crear el pedido.' : ''\n].filter(Boolean).join('\\n');\n\nreturn [{\n  json: {\n    ok: cotizacion.disponible,\n    tipo: pedido.accion === 'crear' ? 'renta_no_creada' : 'cotizacion',\n    mensaje_whatsapp: mensaje,\n    disponible: cotizacion.disponible,\n    total: cotizacion.total,\n    cotizacion\n  }\n}];"
+        "jsCode": "const pedido = $('Elegir Manteles Regalo').first().json;\nconst cotizacion = $('Cotizar Plan').first().json;\n\nconst lineas = (cotizacion.lineas || []).map((l) => {\n  const regalo = l.es_regalo ? ' (REGALO)' : '';\n  return `- ${l.cantidad}x ${l.nombre}${regalo}: $${l.subtotal}`;\n}).join('\\n');\n\nlet titulo = '📋 *Cotización Trotamundos*';\nlet extra = '';\n\nif (!cotizacion.disponible) {\n  titulo = '⚠️ *Cotización con algunos faltantes*';\n  extra = (cotizacion.productos_no_disponibles || [])\n    .map((p) => `- ${p.nombre}: solo ${p.unidades_libres} libre(s)`)\n    .join('\\n');\n}\n\nif (pedido.accion === 'crear' && !cotizacion.disponible) {\n  extra += '\\n\\nPor ahora no pudimos crear el pedido: falta inventario en esa fecha.';\n}\n\nconst regalos = (cotizacion.lineas || []).filter((l) => l.es_regalo).reduce((a, l) => a + Number(l.cantidad || 0), 0);\n\nconst mensaje = [\n  titulo,\n  '',\n  `Fecha evento: ${pedido.fecha_renta} ${pedido.hora_inicio}-${pedido.hora_fin}`,\n  ...(regalos > 0 ? [`Manteles regalo incluidos: ${regalos}`] : []),\n  '',\n  '*Incluye:*',\n  lineas,\n  '',\n  `Total: *$${cotizacion.total}*`,\n  extra ? ['', extra].join('\\n') : '',\n  pedido.accion === 'cotizar' ? '\\nSi te late, responde *CONFIRMAR* y lo agendamos.' : ''\n].filter(Boolean).join('\\n');\n\nreturn [{\n  json: {\n    ok: cotizacion.disponible,\n    tipo: pedido.accion === 'crear' ? 'renta_no_creada' : 'cotizacion',\n    mensaje_whatsapp: mensaje,\n    disponible: cotizacion.disponible,\n    total: cotizacion.total,\n    cotizacion\n  }\n}];"
       },
       "id": "a1b2c3d4-0011-4000-8000-000000000011",
       "name": "Respuesta Cotizacion",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1920, 420]
+      "position": [
+        1920,
+        420
+      ]
     },
     {
       "parameters": {
@@ -220,7 +253,10 @@
       "name": "Responder Webhook",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [2400, 300]
+      "position": [
+        2400,
+        300
+      ]
     }
   ],
   "connections": {
@@ -368,5 +404,7 @@
   ],
   "meta": {
     "templateCredsSetupCompleted": false
-  }
+  },
+  "id": "8oqddIFkn25UDqde",
+  "active": true
 }

@@ -9,6 +9,8 @@ interface RankingItem {
   total_eventos: number
   total_monto?: number
   promedio_calificacion?: number
+  puntaje_final?: number
+  promedio_encuesta?: number | null
 }
 
 const ROLES: { key: Rol; label: string; icon: string; color: string }[] = [
@@ -43,7 +45,10 @@ export default function Rankings() {
   const rolInfo = ROLES.find(r => r.key === rol)!
   const top3 = data.slice(0, 3)
   const resto = data.slice(3)
-  const max = data[0]?.total_eventos ?? 1
+  const esCoordinadores = rol === 'coordinadores'
+  const metric = (item: RankingItem) =>
+    esCoordinadores ? (item.puntaje_final ?? 0) : item.total_eventos
+  const max = Math.max(...data.map(metric), 1)
 
   return (
     <div className="p-6 flex flex-col gap-6">
@@ -51,7 +56,11 @@ export default function Rankings() {
       <div className="flex items-baseline justify-between">
         <div>
           <h1 className="font-bold" style={{ fontSize: 20, letterSpacing: '-0.4px', color: '#162016' }}>Rankings</h1>
-          <p className="text-sm mt-0.5" style={{ color: '#5a7060' }}>Empleados destacados por número de eventos</p>
+          <p className="text-sm mt-0.5" style={{ color: '#5a7060' }}>
+            {rol === 'coordinadores'
+              ? 'Coordinadores: 70% encuesta cliente + 30% eventos'
+              : 'Empleados destacados por número de eventos'}
+          </p>
         </div>
         <select
           value={año}
@@ -140,9 +149,17 @@ export default function Rankings() {
                       className="font-black tabular-nums mt-0.5"
                       style={{ fontSize: rank === 0 ? 28 : 22, color: rolInfo.color, letterSpacing: '-1px' }}
                     >
-                      {item.total_eventos}
+                      {esCoordinadores ? (item.puntaje_final ?? 0).toFixed(2) : item.total_eventos}
                     </div>
-                    <div style={{ fontSize: 11, color: '#8fa890' }}>eventos</div>
+                    <div style={{ fontSize: 11, color: '#8fa890' }}>
+                      {esCoordinadores ? 'puntaje' : 'eventos'}
+                    </div>
+                    {esCoordinadores && (
+                      <div className="mt-1 text-xs" style={{ color: '#8fa890' }}>
+                        {item.total_eventos} ev.
+                        {item.promedio_encuesta != null && ` · enc. ${item.promedio_encuesta.toFixed(1)}`}
+                      </div>
+                    )}
                     {item.total_monto && (
                       <div className="mt-1 text-xs font-semibold" style={{ color: '#5a7060' }}>
                         ${Number(item.total_monto).toLocaleString('es-MX')}
@@ -159,7 +176,7 @@ export default function Rankings() {
             <div className="bg-white rounded-xl border overflow-hidden" style={{ borderColor: '#ddeadd' }}>
               {resto.map((item, idx) => {
                 const rank = idx + 3
-                const pct = max > 0 ? (item.total_eventos / max) * 100 : 0
+                const pct = max > 0 ? (metric(item) / max) * 100 : 0
                 return (
                   <div
                     key={item.id}
@@ -180,9 +197,16 @@ export default function Rankings() {
                     </div>
                     <div className="flex-shrink-0 text-right">
                       <div className="font-bold tabular-nums" style={{ fontSize: 18, color: rolInfo.color, letterSpacing: '-0.5px' }}>
-                        {item.total_eventos}
+                        {esCoordinadores ? (item.puntaje_final ?? 0).toFixed(2) : item.total_eventos}
                       </div>
-                      <div style={{ fontSize: 10.5, color: '#8fa890' }}>eventos</div>
+                      <div style={{ fontSize: 10.5, color: '#8fa890' }}>
+                        {esCoordinadores ? 'puntaje' : 'eventos'}
+                      </div>
+                      {esCoordinadores && (
+                        <div style={{ fontSize: 10, color: '#8fa890' }}>
+                          {item.total_eventos} ev.
+                        </div>
+                      )}
                     </div>
                     {item.total_monto !== undefined && (
                       <div className="flex-shrink-0 text-right min-w-[80px]">

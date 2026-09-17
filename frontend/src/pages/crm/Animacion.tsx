@@ -1,9 +1,15 @@
 import { useEffect, useState } from 'react'
 import api from '../../lib/api'
+import MaterialCatalogoPanel from '../../components/MaterialCatalogoPanel'
 
 interface Coordinador {
   id: number
   nombre: string
+}
+
+interface EncuestaClienteResumen {
+  capturada: boolean
+  promedio: number | null
 }
 
 interface Evento {
@@ -16,6 +22,20 @@ interface Evento {
   coordinador: { id: number; nombre: string } | null
   lista_estado: string | null
   animadores_count: number
+  encuesta_cliente: EncuestaClienteResumen | null
+}
+
+interface EncuestaPregunta {
+  key: string
+  texto: string
+}
+
+interface EncuestaClienteDetalle {
+  preguntas: EncuestaPregunta[]
+  capturada: boolean
+  valores: Record<string, number> | null
+  comentario: string
+  promedio: number | null
 }
 
 const PIPELINE_STEPS = [
@@ -132,12 +152,121 @@ function ModalAsignar({ evento, coordinadores, onClose, onGuardado }: ModalAsign
   )
 }
 
+function ModalEncuestaCliente({
+  asignacionId,
+  folio,
+  onClose,
+  onGuardado,
+}: {
+  asignacionId: number
+  folio: string
+  onClose: () => void
+  onGuardado: () => void
+}) {
+  const [detalle, setDetalle] = useState<EncuestaClienteDetalle | null>(null)
+  const [valores, setValores] = useState<Record<string, number>>({})
+  const [comentario, setComentario] = useState('')
+  const [cargando, setCargando] = useState(true)
+  const [guardando, setGuardando] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    setCargando(true)
+    api.get(`/crm/animacion/asignaciones/${asignacionId}/encuesta-cliente/`)
+      .then(r => {
+        const d = r.data as EncuestaClienteDetalle
+        setDetalle(d)
+        const init: Record<string, number> = {}
+        d.preguntas.forEach(p => {
+          init[p.key] = d.valores?.[p.key] ?? 5
+        })
+        setValores(init)
+        setComentario(d.comentario || '')
+      })
+      .catch(() => setError('No se pudo cargar la encuesta'))
+      .finally(() => setCargando(false))
+  }, [asignacionId])
+
+  async function guardar() {
+    setGuardando(true)
+    setError('')
+    const body = { ...valores, comentario }
+    try {
+      const method = detalle?.capturada ? 'put' : 'post'
+      await api[method](`/crm/animacion/asignaciones/${asignacionId}/encuesta-cliente/`, body)
+      onGuardado()
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { error?: string } } })?.response?.data?.error
+      setError(msg || 'Error al guardar')
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6">
+        <h3 className="font-semibold text-lg mb-1">Encuesta cliente</h3>
+        <p className="text-sm text-gray-500 mb-4">{folio}</p>
+
+        {cargando ? (
+          <p className="text-sm text-gray-400">Cargando...</p>
+        ) : detalle ? (
+          <div className="space-y-4">
+            {detalle.preguntas.map(p => (
+              <div key={p.key}>
+                <label className="text-sm text-gray-700 block mb-1">{p.texto}</label>
+                <select
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  value={valores[p.key] ?? 5}
+                  onChange={e => setValores(v => ({ ...v, [p.key]: Number(e.target.value) }))}
+                >
+                  {[1, 2, 3, 4, 5].map(n => (
+                    <option key={n} value={n}>{n} — {n === 5 ? 'Excelente' : n === 1 ? 'Muy malo' : ''}</option>
+                  ))}
+                </select>
+              </div>
+            ))}
+            <div>
+              <label className="text-sm text-gray-700 block mb-1">Comentario (opcional)</label>
+              <textarea
+                className="w-full border rounded-lg px-3 py-2 text-sm min-h-[80px] focus:outline-none focus:ring-2 focus:ring-blue-400"
+                value={comentario}
+                onChange={e => setComentario(e.target.value)}
+                placeholder="Comentarios del cliente..."
+              />
+            </div>
+            {error && <p className="text-sm text-red-600">{error}</p>}
+          </div>
+        ) : (
+          <p className="text-sm text-red-600">{error || 'Error'}</p>
+        )}
+
+        <div className="flex gap-2 justify-end mt-6">
+          <button onClick={onClose} className="px-4 py-2 rounded-lg text-sm border hover:bg-gray-50">
+            Cancelar
+          </button>
+          <button
+            onClick={guardar}
+            disabled={guardando || cargando || !detalle}
+            className="px-4 py-2 rounded-lg text-sm bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+          >
+            {guardando ? 'Guardando...' : detalle?.capturada ? 'Actualizar' : 'Guardar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function EventoCard({
   evento,
   onAsignar,
+  onEncuesta,
 }: {
   evento: Evento
   onAsignar: (ev: Evento) => void
+  onEncuesta: (ev: Evento) => void
 }) {
   const step = getPipelineStep(evento)
   const fecha = new Date(evento.fecha_renta + 'T12:00:00').toLocaleDateString('es-MX', {
@@ -154,12 +283,22 @@ function EventoCard({
           <p className="font-semibold text-gray-800 leading-tight">{evento.cliente_nombre}</p>
           <p className="text-sm text-gray-500">{fecha}</p>
         </div>
-        <button
-          onClick={() => onAsignar(evento)}
-          className="text-xs px-2 py-1 rounded-lg border border-blue-300 text-blue-600 hover:bg-blue-50"
-        >
-          {evento.coordinador ? 'Cambiar' : 'Asignar'}
-        </button>
+        <div className="flex flex-col gap-1 items-end">
+          <button
+            onClick={() => onAsignar(evento)}
+            className="text-xs px-2 py-1 rounded-lg border border-blue-300 text-blue-600 hover:bg-blue-50"
+          >
+            {evento.coordinador ? 'Cambiar' : 'Asignar'}
+          </button>
+          {evento.asignacion_id && evento.coordinador && (
+            <button
+              onClick={() => onEncuesta(evento)}
+              className="text-xs px-2 py-1 rounded-lg border border-green-300 text-green-700 hover:bg-green-50"
+            >
+              Encuesta cliente
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-1 mt-2">
@@ -172,11 +311,16 @@ function EventoCard({
 
       <Pipeline step={step} />
 
-      <div className="flex gap-4 mt-3 text-xs text-gray-500">
+      <div className="flex flex-wrap gap-4 mt-3 text-xs text-gray-500">
         {evento.coordinador ? (
           <span className="text-blue-700 font-medium">👤 {evento.coordinador.nombre}</span>
         ) : (
           <span className="text-red-500">Sin coordinador</span>
+        )}
+        {evento.encuesta_cliente?.capturada && evento.encuesta_cliente.promedio != null && (
+          <span className="text-green-700 font-medium">
+            ⭐ Encuesta {evento.encuesta_cliente.promedio.toFixed(1)}
+          </span>
         )}
         {evento.animadores_count > 0 && (
           <span>🎭 {evento.animadores_count} animador{evento.animadores_count !== 1 ? 'es' : ''}</span>
@@ -190,6 +334,8 @@ interface RankingEntry {
   id: number
   nombre: string
   total_eventos: number
+  puntaje_final?: number
+  promedio_encuesta?: number | null
 }
 
 function RankingTab() {
@@ -228,7 +374,8 @@ function RankingTab() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
-            <h3 className="font-semibold text-gray-700 mb-3">Coordinadores</h3>
+            <h3 className="font-semibold text-gray-700 mb-1">Coordinadores</h3>
+            <p className="text-xs text-gray-400 mb-3">70% encuesta cliente + 30% eventos</p>
             {coordinadores.length === 0 ? (
               <p className="text-sm text-gray-400">Sin datos</p>
             ) : (
@@ -237,7 +384,14 @@ function RankingTab() {
                   <li key={c.id} className="flex items-center gap-3 bg-white border rounded-lg px-4 py-2">
                     <span className="text-lg font-bold text-gray-300 w-6">{i + 1}</span>
                     <span className="flex-1 text-sm font-medium text-gray-800">{c.nombre}</span>
-                    <span className="text-sm text-blue-600 font-semibold">{c.total_eventos} eventos</span>
+                    <div className="text-right">
+                      <span className="text-sm text-blue-700 font-bold block">
+                        {(c.puntaje_final ?? 0).toFixed(2)} pts
+                      </span>
+                      <span className="text-xs text-gray-500">
+                        enc. {c.promedio_encuesta != null ? c.promedio_encuesta.toFixed(1) : '—'} · {c.total_eventos} ev.
+                      </span>
+                    </div>
                   </li>
                 ))}
               </ol>
@@ -266,11 +420,12 @@ function RankingTab() {
 }
 
 export default function Animacion() {
-  const [tab, setTab] = useState<'eventos' | 'rankings'>('eventos')
+  const [tab, setTab] = useState<'eventos' | 'rankings' | 'catalogo'>('eventos')
   const [eventos, setEventos] = useState<Evento[]>([])
   const [coordinadores, setCoordinadores] = useState<Coordinador[]>([])
   const [cargando, setCargando] = useState(false)
   const [modalEvento, setModalEvento] = useState<Evento | null>(null)
+  const [modalEncuesta, setModalEncuesta] = useState<Evento | null>(null)
 
   const [filtroAño, setFiltroAño] = useState<string>(String(new Date().getFullYear()))
   const [filtroMes, setFiltroMes] = useState<string>('')
@@ -304,17 +459,21 @@ export default function Animacion() {
 
       {/* Tabs */}
       <div className="flex gap-1 mb-6 border-b">
-        {(['eventos', 'rankings'] as const).map(t => (
+        {([
+          { id: 'eventos' as const, label: 'Eventos' },
+          { id: 'catalogo' as const, label: 'Catálogo material' },
+          { id: 'rankings' as const, label: 'Rankings' },
+        ]).map(t => (
           <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={`px-4 py-2 text-sm font-medium capitalize border-b-2 -mb-px transition-colors ${
-              tab === t
+            key={t.id}
+            onClick={() => setTab(t.id)}
+            className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+              tab === t.id
                 ? 'border-blue-600 text-blue-600'
                 : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
           >
-            {t === 'eventos' ? 'Eventos' : 'Rankings'}
+            {t.label}
           </button>
         ))}
       </div>
@@ -377,11 +536,20 @@ export default function Animacion() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {eventos.map(ev => (
-                <EventoCard key={ev.id} evento={ev} onAsignar={setModalEvento} />
+                <EventoCard
+                  key={ev.id}
+                  evento={ev}
+                  onAsignar={setModalEvento}
+                  onEncuesta={setModalEncuesta}
+                />
               ))}
             </div>
           )}
         </>
+      )}
+
+      {tab === 'catalogo' && (
+        <MaterialCatalogoPanel puedeEditar variant="crm" />
       )}
 
       {tab === 'rankings' && <RankingTab />}
@@ -392,6 +560,15 @@ export default function Animacion() {
           coordinadores={coordinadores}
           onClose={() => setModalEvento(null)}
           onGuardado={() => { setModalEvento(null); cargar() }}
+        />
+      )}
+
+      {modalEncuesta && modalEncuesta.asignacion_id && (
+        <ModalEncuestaCliente
+          asignacionId={modalEncuesta.asignacion_id}
+          folio={modalEncuesta.folio}
+          onClose={() => setModalEncuesta(null)}
+          onGuardado={() => { setModalEncuesta(null); cargar() }}
         />
       )}
     </div>

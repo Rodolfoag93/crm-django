@@ -280,6 +280,15 @@ def crear_renta(data, generar_folio=True):
                 status='ACTIVO',
                 estado_entrega='PENDIENTE',
             )
+            lat_raw = data.get('lat', data.get('latitude'))
+            lon_raw = data.get('lon', data.get('longitude', data.get('lng')))
+            try:
+                if lat_raw not in (None, '') and lon_raw not in (None, ''):
+                    renta.lat = Decimal(str(lat_raw))
+                    renta.lon = Decimal(str(lon_raw))
+                    renta.save(update_fields=['lat', 'lon'])
+            except Exception:
+                pass
 
             total = Decimal('0')
             for linea in lineas:

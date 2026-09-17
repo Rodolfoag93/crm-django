@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<style>
+  @page {
+    size: 80mm auto;
+    margin: 10mm 8mm;
+  }
+  body {
+    font-family: Arial, sans-serif;
+    font-size: 11px;
+    margin: 0;
+  }
+  .recibo {
+    page-break-after: always;
+  }
+  .recibo:last-child {
+    page-break-after: auto;
+  }
+  .center { text-align: center; }
+  .bold { font-weight: bold; }
+  .line {
+    border-top: 1px dashed #000;
+    margin: 6px 0;
+  }
+  ul { padding-left: 16px; margin: 4px 0; }
+  li { margin-bottom: 2px; }
+</style>
+</head>
+<body>
+{% for item in items %}
+<div class="recibo">
+  <div class="center bold">
+    TROTAMUNDOS<br>
+    RECIBO DE NÓMINA
+  </div>
+  <div class="line"></div>
+
+  Empleado:<br>
+  <b>{{ item.nomina.empleado }}</b><br><br>
+
+  Periodo:<br>
+  {{ item.nomina.fecha_inicio }} al {{ item.nomina.fecha_fin }}<br><br>
+
+  <div class="line"></div>
+
+  Sueldo base:<br>
+  <b>${{ item.sueldo_base }}</b><br>
+
+  {% if item.nomina.pagos_extras.exists %}
+  <h5 style="margin:8px 0 4px;">Pagos extra</h5>
+  <ul>
+    {% for pago in item.nomina.pagos_extras.all %}
+      <li>{{ pago.tipo.nombre }}: ${{ pago.monto }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+
+  <div class="line"></div>
+
+  <div class="bold center">
+    TOTAL PAGADO<br>
+    ${{ item.total_pagado }}
+  </div>
+
+  <div class="line"></div>
+
+  Fecha de pago:<br>
+  {{ fecha }}<br><br>
+
+  Firma empleado:<br>
+  _________________________
+</div>
+{% endfor %}
+</body>
+</html>

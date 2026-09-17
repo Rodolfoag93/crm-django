@@ -52,17 +52,40 @@ def _patron_iregex_token(token: str) -> str:
 
 def aplicar_busqueda_nombre(qs: QuerySet, search: str) -> QuerySet:
     """
-    Filtra por nombre con AND de tokens, case/accent-insensitive.
-    "spiderman chico" exige ambos tokens en el nombre (no la frase completa).
+    Filtra por nombre, case/accent-insensitive.
+
+    - Tokens de un grupo: AND ("mini slider" exige ambos).
+    - Varios grupos separados por ``|``: OR entre grupos
+      ("mini slider|castillo unicornios" → match A o B).
     """
-    tokens = tokenizar_busqueda(search)
-    if not tokens:
+    from functools import reduce
+    import operator
+
+    from django.db.models import Q
+
+    raw = (search or '').strip()
+    if not raw:
         return qs
 
-    for token in tokens:
-        patron = _patron_iregex_token(token)
-        qs = qs.filter(nombre__iregex=patron)
-    return qs
+    grupos = [g.strip() for g in raw.split('|') if g.strip()]
+    if not grupos:
+        return qs
+
+    q_grupos: list[Q] = []
+    for grupo in grupos:
+        tokens = tokenizar_busqueda(grupo)
+        if not tokens:
+            continue
+        q = Q()
+        for token in tokens:
+            q &= Q(nombre__iregex=_patron_iregex_token(token))
+        q_grupos.append(q)
+
+    if not q_grupos:
+        return qs
+    if len(q_grupos) == 1:
+        return qs.filter(q_grupos[0])
+    return qs.filter(reduce(operator.or_, q_grupos))
 
 
 def detectar_familia_mesa(nombre: str) -> str | None:
@@ -107,6 +130,8 @@ def listar_manteles_por_familia(familia: str, fecha=None, hora_inicio=None, hora
 
     opciones = []
     for producto in Producto.objects.filter(tipo='MT', activo=True).order_by('nombre'):
+        if 'cubre' in _normalizar(producto.nombre):
+            continue
         if detectar_familia_mantel(producto.nombre) != familia:
             continue
         item = {

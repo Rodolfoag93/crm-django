@@ -39,14 +39,23 @@ class ClienteSerializer(serializers.ModelSerializer):
 
 class ProductoSerializer(serializers.ModelSerializer):
     tipo_display = serializers.CharField(source='get_tipo_display', read_only=True)
+    categoria_web_display = serializers.CharField(
+        source='get_categoria_web_display', read_only=True,
+    )
     veces_rentado = serializers.SerializerMethodField()
     ultima_renta   = serializers.SerializerMethodField()
+    foto_url = serializers.SerializerMethodField()
 
     class Meta:
         model = Producto
         fields = ['id', 'nombre', 'tipo', 'tipo_display', 'precio',
                   'stock_total', 'stock_disponible', 'activo',
-                  'veces_rentado', 'ultima_renta']
+                  'categoria_web', 'categoria_web_display',
+                  'veces_rentado', 'ultima_renta', 'foto', 'foto_url']
+        extra_kwargs = {
+            'foto': {'write_only': True, 'required': False, 'allow_null': True},
+            'categoria_web': {'required': False, 'allow_blank': True},
+        }
 
     def get_veces_rentado(self, obj):
         return getattr(obj, 'veces_rentado', None) or 0
@@ -54,6 +63,10 @@ class ProductoSerializer(serializers.ModelSerializer):
     def get_ultima_renta(self, obj):
         d = getattr(obj, 'ultima_renta', None)
         return str(d) if d else None
+
+    def get_foto_url(self, obj):
+        from core.api.sitio_web_views import media_url
+        return media_url(obj.foto) if obj.foto else None
 
 
 class RentaProductoSerializer(serializers.ModelSerializer):

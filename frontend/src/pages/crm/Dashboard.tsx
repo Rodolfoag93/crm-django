@@ -195,7 +195,7 @@ export default function Dashboard() {
       {data?.solicitudes_pendientes ? (
         <div
           className="flex items-center gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 cursor-pointer"
-          onClick={() => navigate('/crm/empleados')}
+          onClick={() => navigate('/crm/empleados?tab=solicitudes')}
         >
           <div className="w-2 h-2 rounded-full bg-amber-400 flex-shrink-0" />
           <p className="text-sm font-medium" style={{ color: '#92400e' }}>

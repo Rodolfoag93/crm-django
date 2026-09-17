@@ -1,7 +1,8 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../../lib/api'
 import TicketModal from '../../components/TicketModal'
+import TemporadaAltaWizard from '../../components/TemporadaAltaWizard'
 
 interface Renta {
   id: number; folio: string
@@ -10,7 +11,76 @@ interface Renta {
   calle_y_numero: string; colonia: string; ciudad_o_municipio: string
   precio_total: string; anticipo: string; pagado: boolean
   estado_entrega: string; productos: { id: number; producto_nombre: string; cantidad: number }[]
+  validacion_logistica?: string
+  factura?: FacturaResumen | null
+  datos_fiscales_cliente?: DatosFiscales | null
 }
+
+interface FacturaResumen {
+  id: number
+  estatus: string
+  uuid: string
+  serie: string
+  folio: string
+  total: string
+  rfc: string
+  razon_social: string
+  email?: string
+  pdf_url: string
+  xml_url: string
+  error_mensaje: string
+  timbrada_at: string | null
+}
+
+interface DatosFiscales {
+  rfc: string
+  razon_social: string
+  regimen_fiscal: string
+  codigo_postal: string
+  email: string
+  uso_cfdi: string
+  forma_pago?: string
+  /** PUE = pago en una sola exhibición; PPD = pago en parcialidades o diferido */
+  metodo_pago?: 'PUE' | 'PPD'
+  cobrar_iva?: boolean
+  retener_isr?: boolean
+  /** 'renta' = líneas del ticket; 'personalizado' = un solo concepto */
+  modo_conceptos?: 'renta' | 'personalizado'
+  concepto_descripcion?: string
+}
+
+const REGIMENES = [
+  { value: '601', label: '601 — General de Ley Personas Morales' },
+  { value: '603', label: '603 — Personas Morales con Fines no Lucrativos' },
+  { value: '605', label: '605 — Sueldos y Salarios' },
+  { value: '606', label: '606 — Arrendamiento' },
+  { value: '612', label: '612 — Personas Físicas Actividad Empresarial' },
+  { value: '616', label: '616 — Sin obligaciones fiscales' },
+  { value: '621', label: '621 — Incorporación Fiscal' },
+  { value: '625', label: '625 — Régimen de las Actividades Empresariales con ingresos a través de Plataformas Tecnológicas' },
+  { value: '626', label: '626 — Régimen Simplificado de Confianza' },
+]
+
+const USOS_CFDI = [
+  { value: 'G01', label: 'G01 — Adquisición de mercancías' },
+  { value: 'G03', label: 'G03 — Gastos en general' },
+  { value: 'D01', label: 'D01 — Honorarios médicos' },
+  { value: 'S01', label: 'S01 — Sin efectos fiscales' },
+]
+
+const FORMAS_PAGO = [
+  { value: '01', label: '01 — Efectivo' },
+  { value: '03', label: '03 — Transferencia' },
+  { value: '04', label: '04 — Tarjeta de crédito' },
+  { value: '28', label: '28 — Tarjeta de débito' },
+  { value: '99', label: '99 — Por definir' },
+]
+
+const METODOS_PAGO = [
+  { value: 'PUE', label: 'PUE — Pago en una sola exhibición' },
+  { value: 'PPD', label: 'PPD — Pago en parcialidades o diferido' },
+]
+
 
 interface Cuenta { id: number; nombre: string; banco?: string; tipo: string }
 
@@ -92,9 +162,143 @@ export default function Rentas() {
   const [cuentas, setCuentas] = useState<Cuenta[]>([])
   const [guardando, setGuardando] = useState(false)
   const [errorPago, setErrorPago] = useState('')
+  const [validandoLogistica, setValidandoLogistica] = useState(false)
+
+  // ── Modal facturar ─────────────────────────────────────────────────────────
+  const [modalFacturar, setModalFacturar] = useState(false)
+  const [formFiscal, setFormFiscal] = useState<DatosFiscales>({
+    rfc: '', razon_social: '', regimen_fiscal: '626', codigo_postal: '',
+    email: '', uso_cfdi: 'G03', forma_pago: '03', metodo_pago: 'PUE',
+    cobrar_iva: true, retener_isr: true,
+    modo_conceptos: 'renta', concepto_descripcion: '',
+  })
+  const [facturando, setFacturando] = useState(false)
+  const [errorFactura, setErrorFactura] = useState('')
+  const [itemsExcluidosFactura, setItemsExcluidosFactura] = useState<{ nombre: string; subtotal: string }[]>([])
+
+  const fmtMoney = (n: number) =>
+    n.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
+  /** CRM precio_total = subtotal antes de impuestos; IVA/ISR se calculan encima. */
+  const desgloseFactura = useMemo(() => {
+    if (!detalle) return null
+    const base = Math.round((parseFloat(detalle.precio_total) || 0) * 100) / 100
+    const ivaRate = formFiscal.cobrar_iva !== false ? 0.16 : 0
+    const isrRate = formFiscal.retener_isr !== false ? 0.0125 : 0
+    const iva = Math.round(base * ivaRate * 100) / 100
+    const isr = Math.round(base * isrRate * 100) / 100
+    const total = Math.round((base + iva - isr) * 100) / 100
+    return { base, iva, isr, total, ivaRate, isrRate }
+  }, [detalle, formFiscal.cobrar_iva, formFiscal.retener_isr])
+
+  const abrirModalFacturar = async () => {
+    if (!detalle) return
+    const d = detalle.datos_fiscales_cliente
+    setFormFiscal({
+      rfc: d?.rfc || '',
+      razon_social: d?.razon_social || detalle.cliente_nombre || '',
+      regimen_fiscal: d?.regimen_fiscal || '626',
+      codigo_postal: d?.codigo_postal || '',
+      email: d?.email || '',
+      uso_cfdi: d?.uso_cfdi || 'G03',
+      forma_pago: '03',
+      metodo_pago: 'PUE',
+      cobrar_iva: true,
+      retener_isr: true,
+      modo_conceptos: 'renta',
+      concepto_descripcion: '',
+    })
+    setErrorFactura('')
+    setItemsExcluidosFactura([])
+    setModalFacturar(true)
+    try {
+      const res = await api.get(`/rentas/${detalle.id}/facturar/`, {
+        params: { cobrar_iva: true, retener_isr: true },
+      })
+      const excl = (res.data?.desglose?.items_excluidos || []) as { nombre: string; subtotal: string }[]
+      setItemsExcluidosFactura(excl)
+      if (res.data?.datos_fiscales_cliente) {
+        const df = res.data.datos_fiscales_cliente as DatosFiscales
+        setFormFiscal(f => ({
+          ...f,
+          rfc: df.rfc || f.rfc,
+          razon_social: df.razon_social || f.razon_social,
+          regimen_fiscal: df.regimen_fiscal || f.regimen_fiscal,
+          codigo_postal: df.codigo_postal || f.codigo_postal,
+          email: df.email || f.email,
+          uso_cfdi: df.uso_cfdi || f.uso_cfdi,
+        }))
+      }
+    } catch {
+      // El desglose se calcula en cliente; exclusiones son informativas
+    }
+  }
+
+  const confirmarFacturar = async () => {
+    if (!detalle || facturando) return
+    if (formFiscal.modo_conceptos === 'personalizado') {
+      const desc = (formFiscal.concepto_descripcion || '').trim()
+      if (desc.length < 3) {
+        setErrorFactura('Escribe la descripción del concepto personalizado (mín. 3 caracteres).')
+        return
+      }
+    }
+    setFacturando(true)
+    setErrorFactura('')
+    try {
+      const res = await api.post(`/rentas/${detalle.id}/facturar/`, formFiscal)
+      const factura = res.data.factura as FacturaResumen
+      const emailEnviado = (res.data.email_enviado_a || []) as string[]
+      const emailErrores = (res.data.email_errores || []) as string[]
+      const actualizado = {
+        ...detalle,
+        factura,
+        datos_fiscales_cliente: {
+          rfc: formFiscal.rfc,
+          razon_social: formFiscal.razon_social,
+          regimen_fiscal: formFiscal.regimen_fiscal,
+          codigo_postal: formFiscal.codigo_postal,
+          email: formFiscal.email,
+          uso_cfdi: formFiscal.uso_cfdi,
+        },
+      }
+      setDetalle(actualizado)
+      setData(prev => prev ? {
+        ...prev,
+        results: prev.results.map(r => r.id === detalle.id ? { ...r, factura } : r),
+      } : prev)
+      setModalFacturar(false)
+      if (factura?.pdf_url) {
+        window.open(factura.pdf_url, '_blank')
+      }
+      const partes: string[] = []
+      if (factura?.uuid) partes.push(`Factura timbrada (UUID ${factura.uuid}).`)
+      else partes.push('Factura timbrada.')
+      if (!factura?.pdf_url) {
+        partes.push('No se recibió link de PDF; revisa el detalle de la renta.')
+      }
+      if (emailEnviado.length) {
+        partes.push(`Correo enviado a: ${emailEnviado.join(', ')}.`)
+      } else if (!(formFiscal.email || '').trim()) {
+        partes.push('Sin correo de cliente; no se envió CFDI por email (salvo copia interna si está configurada).')
+      }
+      if (emailErrores.length) {
+        partes.push(`No se pudo enviar correo: ${emailErrores.join(' | ')}`)
+      }
+      if (!factura?.pdf_url || emailErrores.length || emailEnviado.length) {
+        window.alert(partes.join(' '))
+      }
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { error?: string } } }
+      setErrorFactura(err.response?.data?.error || 'No se pudo timbrar la factura.')
+    } finally {
+      setFacturando(false)
+    }
+  }
 
   // ── Modal ticket ───────────────────────────────────────────────────────────
   const [ticketRenta, setTicketRenta] = useState<{ id: number; folio: string } | null>(null)
+  const [wizardTemporada, setWizardTemporada] = useState(false)
 
   // ── Cambiar estado entrega ─────────────────────────────────────────────────
   const [cambiandoEstado, setCambiandoEstado] = useState(false)
@@ -121,11 +325,55 @@ export default function Rentas() {
     }
   }
 
+  const confirmarValidacionLogistica = async (accion: 'aprobar' | 'rechazar') => {
+    if (!detalle || validandoLogistica) return
+    if (accion === 'rechazar') {
+      const ok = window.confirm(
+        `¿Rechazar logística de ${detalle.folio}? Se cancelará el pedido y se liberará el stock.`,
+      )
+      if (!ok) return
+    }
+    setValidandoLogistica(true)
+    try {
+      const res = await api.post(`/rentas/${detalle.id}/validacion_logistica/`, {
+        accion,
+        motivo: accion === 'rechazar' ? 'Sin disponibilidad logística (CRM)' : undefined,
+      })
+      const actualizado = {
+        ...detalle,
+        validacion_logistica: res.data.validacion_logistica,
+        ...(accion === 'rechazar' ? { estado_entrega: 'CANCELADO' } : {}),
+      }
+      setDetalle(actualizado)
+      setData(prev => prev
+        ? { ...prev, results: prev.results.map(r => r.id === detalle.id ? actualizado : r) }
+        : prev)
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { error?: string } } })?.response?.data?.error
+      alert(msg || 'No se pudo actualizar la validación.')
+    } finally {
+      setValidandoLogistica(false)
+    }
+  }
+
   // ── Modal cancelar ─────────────────────────────────────────────────────────
   const [modalCancelar, setModalCancelar] = useState(false)
   const [motivo, setMotivo] = useState('')
   const [cancelando, setCancelando] = useState(false)
   const [errorCancelar, setErrorCancelar] = useState('')
+
+  // ── Modal cancelar factura CFDI ────────────────────────────────────────────
+  const [modalCancelarFactura, setModalCancelarFactura] = useState(false)
+  const [motivoFactura, setMotivoFactura] = useState('02')
+  const [uuidSustitucion, setUuidSustitucion] = useState('')
+  const [cancelandoFactura, setCancelandoFactura] = useState(false)
+  const [errorCancelarFactura, setErrorCancelarFactura] = useState('')
+  const [abriendoPdf, setAbriendoPdf] = useState(false)
+  const [modalReenviarFactura, setModalReenviarFactura] = useState(false)
+  const [emailReenvio, setEmailReenvio] = useState('')
+  const [incluirCopiaReenvio, setIncluirCopiaReenvio] = useState(true)
+  const [reenviandoFactura, setReenviandoFactura] = useState(false)
+  const [errorReenviarFactura, setErrorReenviarFactura] = useState('')
 
   const confirmarCancelar = async () => {
     if (!detalle) return
@@ -146,6 +394,148 @@ export default function Rentas() {
       setErrorCancelar(msg ?? 'Error al cancelar.')
     } finally {
       setCancelando(false)
+    }
+  }
+
+  const abrirCancelarFactura = () => {
+    setMotivoFactura('02')
+    setUuidSustitucion('')
+    setErrorCancelarFactura('')
+    setModalCancelarFactura(true)
+  }
+
+  const confirmarCancelarFactura = async () => {
+    if (!detalle || cancelandoFactura) return
+    if (motivoFactura === '01' && uuidSustitucion.trim().length < 32) {
+      setErrorCancelarFactura('Con motivo 01 indica el UUID de la factura que sustituye (folio fiscal).')
+      return
+    }
+    setCancelandoFactura(true)
+    setErrorCancelarFactura('')
+    try {
+      const res = await api.post(`/rentas/${detalle.id}/cancelar-factura/`, {
+        motivo: motivoFactura,
+        ...(motivoFactura === '01' ? { replacement_uuid: uuidSustitucion.trim() } : {}),
+      })
+      const factura = res.data.factura as FacturaResumen
+      setDetalle(prev => prev ? { ...prev, factura } : prev)
+      setData(prev => prev ? {
+        ...prev,
+        results: prev.results.map(r => r.id === detalle.id ? { ...r, factura } : r),
+      } : prev)
+      setModalCancelarFactura(false)
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { error?: string } } }
+      setErrorCancelarFactura(err.response?.data?.error || 'No se pudo cancelar la factura.')
+    } finally {
+      setCancelandoFactura(false)
+    }
+  }
+
+  const verFacturaPdf = async () => {
+    if (!detalle || abriendoPdf) return
+    // Abrir YA (gesto del usuario): si se hace tras el await, el navegador bloquea y queda blank.
+    const w = window.open('about:blank', '_blank')
+    if (!w) {
+      window.alert('El navegador bloqueó la ventana. Permite pop-ups para app.trotacrm.com e inténtalo de nuevo.')
+      return
+    }
+    try {
+      w.document.write(
+        '<!doctype html><title>Factura</title><body style="font-family:system-ui;padding:24px;color:#334155">Cargando factura…</body>',
+      )
+    } catch { /* ignore cross-origin quirks */ }
+
+    setAbriendoPdf(true)
+    try {
+      const res = await api.get(`/rentas/${detalle.id}/factura-pdf/`, {
+        responseType: 'blob',
+      })
+      const blob = res.data instanceof Blob
+        ? res.data
+        : new Blob([res.data], { type: 'application/pdf' })
+
+      // Si el backend mandó JSON de error con status raro, o Content-Type no-pdf:
+      const ctype = String(res.headers?.['content-type'] || blob.type || '')
+      const headBuf = await blob.slice(0, 5).arrayBuffer()
+      const head = new TextDecoder().decode(headBuf)
+      if (!head.startsWith('%PDF')) {
+        let msg = 'No se pudo abrir el PDF de la factura.'
+        try {
+          const parsed = JSON.parse(await blob.text()) as { error?: string }
+          if (parsed.error) msg = parsed.error
+        } catch { /* ignore */ }
+        try { w.close() } catch { /* ignore */ }
+        window.alert(msg)
+        return
+      }
+
+      const pdfBlob = ctype.includes('pdf') ? blob : new Blob([blob], { type: 'application/pdf' })
+      const url = URL.createObjectURL(pdfBlob)
+      w.location.href = url
+      window.setTimeout(() => URL.revokeObjectURL(url), 120_000)
+    } catch (e: unknown) {
+      try { w.close() } catch { /* ignore */ }
+      const err = e as { response?: { data?: Blob | { error?: string }; status?: number } }
+      let msg = 'No se pudo abrir el PDF de la factura.'
+      if (err.response?.status === 403) {
+        msg = 'No tienes permiso para ver esta factura.'
+      }
+      const data = err.response?.data
+      if (data instanceof Blob) {
+        try {
+          const parsed = JSON.parse(await data.text()) as { error?: string }
+          if (parsed.error) msg = parsed.error
+        } catch { /* ignore */ }
+      } else if (data && typeof data === 'object' && 'error' in data && data.error) {
+        msg = String(data.error)
+      }
+      window.alert(msg)
+    } finally {
+      setAbriendoPdf(false)
+    }
+  }
+
+  const abrirReenviarFactura = () => {
+    const pref =
+      detalle?.factura?.email
+      || detalle?.datos_fiscales_cliente?.email
+      || ''
+    setEmailReenvio(pref)
+    setIncluirCopiaReenvio(true)
+    setErrorReenviarFactura('')
+    setModalReenviarFactura(true)
+  }
+
+  const confirmarReenviarFactura = async () => {
+    if (!detalle || reenviandoFactura) return
+    const email = emailReenvio.trim()
+    if (email && !email.includes('@')) {
+      setErrorReenviarFactura('Correo inválido.')
+      return
+    }
+    if (!email && !incluirCopiaReenvio) {
+      setErrorReenviarFactura('Indica un correo o deja marcada la copia a administración.')
+      return
+    }
+    setReenviandoFactura(true)
+    setErrorReenviarFactura('')
+    try {
+      const res = await api.post(`/rentas/${detalle.id}/reenviar-factura/`, {
+        email,
+        incluir_copia: incluirCopiaReenvio,
+      })
+      const enviados = (res.data.email_enviado_a || []) as string[]
+      const errores = (res.data.email_errores || []) as string[]
+      setModalReenviarFactura(false)
+      const partes = [`Correo enviado a: ${enviados.join(', ') || '—'}.`]
+      if (errores.length) partes.push(`Algunos fallaron: ${errores.join(' | ')}`)
+      window.alert(partes.join(' '))
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { error?: string } } }
+      setErrorReenviarFactura(err.response?.data?.error || 'No se pudo reenviar la factura.')
+    } finally {
+      setReenviandoFactura(false)
     }
   }
 
@@ -241,6 +631,7 @@ export default function Rentas() {
 
   return (
     <div className="p-6 flex flex-col gap-5">
+      <TemporadaAltaWizard open={wizardTemporada} onClose={() => setWizardTemporada(false)} />
       <div className="flex items-baseline justify-between">
         <div>
           <h1 className="font-bold" style={{ fontSize: 20, letterSpacing: '-0.4px', color: '#162016' }}>Rentas</h1>
@@ -248,7 +639,15 @@ export default function Rentas() {
             {data ? `${data.count} renta${data.count !== 1 ? 's' : ''} en el periodo` : '…'}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap justify-end">
+          <button
+            type="button"
+            onClick={() => setWizardTemporada(true)}
+            className="flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-lg border transition-colors"
+            style={{ borderColor: '#f59e0b', color: '#a16207', background: '#fffbeb' }}
+          >
+            Temporada alta
+          </button>
           <button onClick={() => navigate('/crm/rentas/nueva')}
             className="flex items-center gap-1.5 text-sm font-semibold px-4 py-1.5 rounded-lg transition-colors"
             style={{ background: '#16a34a', color: 'white' }}>
@@ -538,6 +937,31 @@ export default function Rentas() {
                 <Field label="Total" value={`$${parseFloat(detalle.precio_total).toLocaleString('es-MX')}`} />
                 <Field label="Anticipo" value={`$${parseFloat(detalle.anticipo || '0').toLocaleString('es-MX')}`} />
                 <Field label="Estado pago" value={detalle.pagado ? '✓ Pagado' : '✗ Sin pagar'} />
+                <Field
+                  label="Factura"
+                  value={
+                    detalle.factura?.estatus === 'TIMBRADA'
+                      ? `✓ ${detalle.factura.uuid || 'Timbrada'}`
+                      : detalle.factura?.estatus === 'CANCELADA'
+                        ? `Cancelada${detalle.factura.uuid ? ` · ${detalle.factura.uuid}` : ''}`
+                        : detalle.factura?.estatus === 'ERROR'
+                          ? 'Error al timbrar'
+                          : 'Sin factura'
+                  }
+                  full
+                />
+                {detalle.validacion_logistica && detalle.validacion_logistica !== 'NO_REQUIERE' && (
+                  <Field
+                    label="Logística"
+                    value={
+                      detalle.validacion_logistica === 'PENDIENTE' ? '⏳ Pendiente temporada alta'
+                        : detalle.validacion_logistica === 'APROBADA' ? '✓ Aprobada'
+                          : detalle.validacion_logistica === 'RECHAZADA' ? '✗ Rechazada'
+                            : detalle.validacion_logistica
+                    }
+                    full
+                  />
+                )}
               </Section>
 
               {detalle.estado_entrega !== 'CANCELADO' && (
@@ -579,6 +1003,28 @@ export default function Rentas() {
             </div>
 
             <div className="flex flex-col gap-2 p-4" style={{ borderTop: '1px solid #ddeadd' }}>
+              {detalle.validacion_logistica === 'PENDIENTE' && (
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    disabled={validandoLogistica}
+                    onClick={() => confirmarValidacionLogistica('aprobar')}
+                    className="flex-1 text-sm font-semibold py-2.5 rounded-lg disabled:opacity-50"
+                    style={{ background: '#16a34a', color: 'white' }}
+                  >
+                    {validandoLogistica ? '…' : 'Aprobar logística'}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={validandoLogistica}
+                    onClick={() => confirmarValidacionLogistica('rechazar')}
+                    className="flex-1 text-sm font-semibold py-2.5 rounded-lg disabled:opacity-50"
+                    style={{ background: '#dc2626', color: 'white' }}
+                  >
+                    Rechazar (libera stock)
+                  </button>
+                </div>
+              )}
               {!detalle.pagado ? (
                 <button
                   onClick={abrirModalPago}
@@ -592,6 +1038,57 @@ export default function Rentas() {
                   style={{ background: '#dcfce7', color: '#15803d' }}>
                   ✓ Renta pagada
                 </div>
+              )}
+              {detalle.estado_entrega !== 'CANCELADO' && (
+                detalle.factura?.estatus === 'TIMBRADA' ? (
+                  <div className="flex flex-col gap-2">
+                    <div className="flex-1 text-center text-sm font-semibold py-2.5 rounded-lg"
+                      style={{ background: '#eff6ff', color: '#1d4ed8' }}>
+                      Facturada
+                    </div>
+                    {detalle.factura.uuid && (
+                      <div className="text-xs px-1" style={{ color: '#5a7060', wordBreak: 'break-all' }}>
+                        UUID: <span style={{ fontFamily: 'monospace' }}>{detalle.factura.uuid}</span>
+                      </div>
+                    )}
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={verFacturaPdf}
+                        disabled={abriendoPdf}
+                        className="flex-1 text-sm font-medium py-2.5 rounded-lg border disabled:opacity-50"
+                        style={{ borderColor: '#bfdbfe', color: '#1d4ed8', background: '#f8fbff' }}
+                      >
+                        {abriendoPdf ? 'Abriendo…' : 'Ver factura'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={abrirReenviarFactura}
+                        className="flex-1 text-sm font-medium py-2.5 rounded-lg border"
+                        style={{ borderColor: '#bbf7d0', color: '#15803d', background: '#f0fdf4' }}
+                      >
+                        Reenviar
+                      </button>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={abrirCancelarFactura}
+                      className="w-full text-sm font-medium py-2 rounded-lg border"
+                      style={{ borderColor: '#fca5a5', color: '#b91c1c', background: '#fff1f2' }}
+                    >
+                      Cancelar factura
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={abrirModalFacturar}
+                    className="w-full text-sm font-semibold py-2.5 rounded-lg transition-colors"
+                    style={{ background: '#1d4ed8', color: 'white' }}
+                  >
+                    {detalle.factura?.estatus === 'CANCELADA' ? 'Facturar de nuevo' : 'Facturar'}
+                  </button>
+                )
               )}
               <div className="flex gap-2">
                 {detalle.estado_entrega !== 'CANCELADO' && (
@@ -623,6 +1120,429 @@ export default function Rentas() {
                   Cancelar renta
                 </button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal facturar */}
+      {modalFacturar && detalle && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.4)' }}
+          onClick={e => { if (e.target === e.currentTarget && !facturando) setModalFacturar(false) }}>
+          <div className="bg-white rounded-2xl shadow-xl" style={{ width: 460, maxWidth: '95vw', maxHeight: '90vh', overflow: 'auto' }}>
+            <div className="flex items-start justify-between px-6 pt-5 pb-4" style={{ borderBottom: '1px solid #ddeadd' }}>
+              <div>
+                <div className="font-bold" style={{ fontSize: 16, color: '#162016' }}>Facturar renta</div>
+                <div className="text-sm mt-0.5" style={{ color: '#5a7060' }}>
+                  {detalle.folio}
+                  {desgloseFactura && (
+                    <> · Total CFDI ${fmtMoney(desgloseFactura.total)}</>
+                  )}
+                </div>
+              </div>
+              <button onClick={() => !facturando && setModalFacturar(false)}
+                className="w-7 h-7 flex items-center justify-center rounded-md border text-sm mt-0.5"
+                style={{ borderColor: '#ddeadd', color: '#5a7060' }}>×</button>
+            </div>
+
+            <div className="px-6 py-5 flex flex-col gap-3">
+              <label className="text-xs font-medium" style={{ color: '#5a7060' }}>
+                RFC
+                <input
+                  value={formFiscal.rfc}
+                  onChange={e => setFormFiscal(f => ({ ...f, rfc: e.target.value.toUpperCase() }))}
+                  className="mt-1 w-full border rounded-xl px-3 py-2.5 text-sm"
+                  style={{ borderColor: '#ddeadd' }}
+                  placeholder="XAXX010101000"
+                  maxLength={13}
+                />
+              </label>
+              <label className="text-xs font-medium" style={{ color: '#5a7060' }}>
+                Razón social
+                <input
+                  value={formFiscal.razon_social}
+                  onChange={e => setFormFiscal(f => ({ ...f, razon_social: e.target.value }))}
+                  className="mt-1 w-full border rounded-xl px-3 py-2.5 text-sm"
+                  style={{ borderColor: '#ddeadd' }}
+                />
+              </label>
+              <label className="text-xs font-medium" style={{ color: '#5a7060' }}>
+                Régimen fiscal
+                <select
+                  value={formFiscal.regimen_fiscal}
+                  onChange={e => setFormFiscal(f => ({ ...f, regimen_fiscal: e.target.value }))}
+                  className="mt-1 w-full border rounded-xl px-3 py-2.5 text-sm"
+                  style={{ borderColor: '#ddeadd' }}
+                >
+                  {REGIMENES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                </select>
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="text-xs font-medium" style={{ color: '#5a7060' }}>
+                  C.P. fiscal
+                  <input
+                    value={formFiscal.codigo_postal}
+                    onChange={e => setFormFiscal(f => ({ ...f, codigo_postal: e.target.value.replace(/\D/g, '').slice(0, 5) }))}
+                    className="mt-1 w-full border rounded-xl px-3 py-2.5 text-sm"
+                    style={{ borderColor: '#ddeadd' }}
+                    inputMode="numeric"
+                    maxLength={5}
+                  />
+                </label>
+                <label className="text-xs font-medium" style={{ color: '#5a7060' }}>
+                  Uso CFDI
+                  <select
+                    value={formFiscal.uso_cfdi}
+                    onChange={e => setFormFiscal(f => ({ ...f, uso_cfdi: e.target.value }))}
+                    className="mt-1 w-full border rounded-xl px-3 py-2.5 text-sm"
+                    style={{ borderColor: '#ddeadd' }}
+                  >
+                    {USOS_CFDI.map(u => <option key={u.value} value={u.value}>{u.label}</option>)}
+                  </select>
+                </label>
+              </div>
+              <label className="text-xs font-medium" style={{ color: '#5a7060' }}>
+                Correo del cliente (opcional)
+                <input
+                  type="email"
+                  value={formFiscal.email}
+                  onChange={e => setFormFiscal(f => ({ ...f, email: e.target.value }))}
+                  className="mt-1 w-full border rounded-xl px-3 py-2.5 text-sm"
+                  style={{ borderColor: '#ddeadd' }}
+                  placeholder="cliente@correo.com"
+                />
+                <span className="block text-xs mt-1" style={{ color: '#64748b' }}>
+                  Se envía al cliente y una copia a administración. El PDF se abre al timbrar.
+                </span>
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="text-xs font-medium" style={{ color: '#5a7060' }}>
+                  Forma de pago
+                  <select
+                    value={formFiscal.forma_pago || '03'}
+                    onChange={e => setFormFiscal(f => ({ ...f, forma_pago: e.target.value }))}
+                    className="mt-1 w-full border rounded-xl px-3 py-2.5 text-sm"
+                    style={{ borderColor: '#ddeadd' }}
+                  >
+                    {FORMAS_PAGO.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+                  </select>
+                </label>
+                <label className="text-xs font-medium" style={{ color: '#5a7060' }}>
+                  Método de pago
+                  <select
+                    value={formFiscal.metodo_pago || 'PUE'}
+                    onChange={e => {
+                      const metodo = e.target.value as 'PUE' | 'PPD'
+                      setFormFiscal(f => ({
+                        ...f,
+                        metodo_pago: metodo,
+                        // Con PPD el SAT espera forma 99 (por definir)
+                        forma_pago: metodo === 'PPD' ? '99' : (f.forma_pago === '99' ? '03' : f.forma_pago),
+                      }))
+                    }}
+                    className="mt-1 w-full border rounded-xl px-3 py-2.5 text-sm"
+                    style={{ borderColor: '#ddeadd' }}
+                  >
+                    {METODOS_PAGO.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+                  </select>
+                </label>
+              </div>
+              {formFiscal.metodo_pago === 'PPD' && (
+                <p className="text-xs -mt-1" style={{ color: '#b45309' }}>
+                  Con PPD el SAT suele exigir complemento de pago cuando se cobre. Forma de pago en el CFDI suele ser 99 (por definir).
+                </p>
+              )}
+
+              <div className="rounded-xl px-3 py-3 flex flex-col gap-2" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                <div className="text-xs font-semibold" style={{ color: '#334155' }}>Conceptos del CFDI</div>
+                <label className="flex items-start gap-2 text-sm" style={{ color: '#162016' }}>
+                  <input
+                    type="radio"
+                    name="modo_conceptos"
+                    className="mt-1"
+                    checked={(formFiscal.modo_conceptos || 'renta') === 'renta'}
+                    onChange={() => setFormFiscal(f => ({ ...f, modo_conceptos: 'renta' }))}
+                  />
+                  <span>
+                    Usar conceptos de la renta
+                    <span className="block text-xs" style={{ color: '#64748b' }}>
+                      Productos del ticket (se omiten los de $0)
+                    </span>
+                  </span>
+                </label>
+                <label className="flex items-start gap-2 text-sm" style={{ color: '#162016' }}>
+                  <input
+                    type="radio"
+                    name="modo_conceptos"
+                    className="mt-1"
+                    checked={formFiscal.modo_conceptos === 'personalizado'}
+                    onChange={() => setFormFiscal(f => ({
+                      ...f,
+                      modo_conceptos: 'personalizado',
+                      concepto_descripcion: f.concepto_descripcion
+                        || `Servicio de renta para evento ${detalle.folio}`,
+                    }))}
+                  />
+                  <span>
+                    Un concepto personalizado
+                    <span className="block text-xs" style={{ color: '#64748b' }}>
+                      Ideal para instituciones; el importe = subtotal del ticket
+                    </span>
+                  </span>
+                </label>
+                {formFiscal.modo_conceptos === 'personalizado' && (
+                  <label className="text-xs font-medium mt-1" style={{ color: '#5a7060' }}>
+                    Descripción del concepto
+                    <textarea
+                      value={formFiscal.concepto_descripcion || ''}
+                      onChange={e => setFormFiscal(f => ({ ...f, concepto_descripcion: e.target.value }))}
+                      rows={3}
+                      maxLength={1000}
+                      className="mt-1 w-full border rounded-xl px-3 py-2.5 text-sm"
+                      style={{ borderColor: '#ddeadd', resize: 'vertical' }}
+                      placeholder="Ej. Arrendamiento de mobiliario y equipo para evento institucional"
+                    />
+                  </label>
+                )}
+              </div>
+
+              <div className="rounded-xl px-3 py-3 flex flex-col gap-2" style={{ background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                <div className="text-xs font-semibold" style={{ color: '#334155' }}>Impuestos</div>
+                <label className="flex items-center gap-2 text-sm" style={{ color: '#162016' }}>
+                  <input
+                    type="checkbox"
+                    checked={formFiscal.cobrar_iva !== false}
+                    onChange={e => setFormFiscal(f => ({ ...f, cobrar_iva: e.target.checked }))}
+                  />
+                  IVA traslado 16%
+                </label>
+                <label className="flex items-center gap-2 text-sm" style={{ color: '#162016' }}>
+                  <input
+                    type="checkbox"
+                    checked={formFiscal.retener_isr !== false}
+                    onChange={e => setFormFiscal(f => ({ ...f, retener_isr: e.target.checked }))}
+                  />
+                  Retención ISR 1.25%
+                </label>
+                {desgloseFactura && (
+                  <div className="mt-1 pt-2 flex flex-col gap-1 text-sm" style={{ borderTop: '1px solid #e2e8f0', color: '#162016' }}>
+                    <div className="flex justify-between gap-3">
+                      <span style={{ color: '#64748b' }}>Subtotal CRM (sin impuestos)</span>
+                      <span>${fmtMoney(desgloseFactura.base)}</span>
+                    </div>
+                    {desgloseFactura.ivaRate > 0 && (
+                      <div className="flex justify-between gap-3">
+                        <span style={{ color: '#64748b' }}>IVA {(desgloseFactura.ivaRate * 100).toFixed(0)}%</span>
+                        <span>+ ${fmtMoney(desgloseFactura.iva)}</span>
+                      </div>
+                    )}
+                    {desgloseFactura.isrRate > 0 && (
+                      <div className="flex justify-between gap-3">
+                        <span style={{ color: '#64748b' }}>Retención ISR {(desgloseFactura.isrRate * 100).toFixed(2)}%</span>
+                        <span>− ${fmtMoney(desgloseFactura.isr)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between gap-3 font-semibold pt-1" style={{ borderTop: '1px dashed #e2e8f0' }}>
+                      <span>Total a facturar (CFDI)</span>
+                      <span>${fmtMoney(desgloseFactura.total)}</span>
+                    </div>
+                  </div>
+                )}
+                {itemsExcluidosFactura.length > 0 && formFiscal.modo_conceptos !== 'personalizado' && (
+                  <p className="text-xs mt-1" style={{ color: '#b45309' }}>
+                    {itemsExcluidosFactura.length} producto(s) con precio $0 se omiten del CFDI
+                    {itemsExcluidosFactura.length <= 4
+                      ? `: ${itemsExcluidosFactura.map(i => i.nombre).join(', ')}`
+                      : ''}
+                    .
+                  </p>
+                )}
+                {formFiscal.modo_conceptos === 'personalizado' && (
+                  <p className="text-xs mt-1" style={{ color: '#64748b' }}>
+                    Se facturará un solo concepto por el subtotal CRM (${fmtMoney(desgloseFactura?.base || 0)}).
+                  </p>
+                )}
+                <p className="text-xs" style={{ color: '#64748b' }}>
+                  El monto del CRM es el subtotal. IVA y retención se calculan al timbrar.
+                </p>
+              </div>
+
+              {errorFactura && (
+                <div
+                  className="text-sm rounded-xl px-4 py-3"
+                  style={{ background: '#fef2f2', color: '#b91c1c', border: '1px solid #fecaca', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
+                >
+                  {errorFactura}
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-2 px-6 pb-5">
+              <button
+                type="button"
+                disabled={facturando}
+                onClick={() => setModalFacturar(false)}
+                className="flex-1 text-sm font-medium py-2.5 rounded-lg border"
+                style={{ borderColor: '#ddeadd', color: '#5a7060' }}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={facturando}
+                onClick={confirmarFacturar}
+                className="flex-1 text-sm font-semibold py-2.5 rounded-lg disabled:opacity-50"
+                style={{ background: '#1d4ed8', color: 'white' }}
+              >
+                {facturando ? 'Timbrando…' : 'Timbrar CFDI'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal cancelar factura CFDI */}
+      {modalCancelarFactura && detalle && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.4)' }}
+          onClick={e => { if (e.target === e.currentTarget && !cancelandoFactura) setModalCancelarFactura(false) }}>
+          <div className="bg-white rounded-2xl shadow-xl" style={{ width: 440, maxWidth: '95vw' }}>
+            <div className="flex items-start justify-between px-6 pt-5 pb-4" style={{ borderBottom: '1px solid #fde8e8' }}>
+              <div>
+                <div className="font-bold" style={{ fontSize: 16, color: '#162016' }}>Cancelar factura</div>
+                <div className="text-sm mt-0.5" style={{ color: '#5a7060' }}>
+                  {detalle.folio}
+                  {detalle.factura?.uuid ? (
+                    <> · <span style={{ fontFamily: 'monospace', fontSize: 11 }}>{detalle.factura.uuid}</span></>
+                  ) : null}
+                </div>
+              </div>
+              <button onClick={() => !cancelandoFactura && setModalCancelarFactura(false)}
+                className="w-7 h-7 flex items-center justify-center rounded-md border text-sm mt-0.5"
+                style={{ borderColor: '#ddeadd', color: '#5a7060' }}>×</button>
+            </div>
+
+            <div className="px-6 py-5 flex flex-col gap-4">
+              <div className="flex items-start gap-3 px-4 py-3 rounded-xl" style={{ background: '#fff1f2', border: '1px solid #fca5a5' }}>
+                <p className="text-sm" style={{ color: '#b91c1c' }}>
+                  Se enviará la cancelación al SAT vía FiscalAPI. Si el receptor debe aceptar, puede quedar pendiente ~72 h.
+                </p>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-wide block mb-1.5" style={{ color: '#8fa890', fontSize: 10.5 }}>
+                  Motivo SAT
+                </label>
+                <select
+                  value={motivoFactura}
+                  onChange={e => setMotivoFactura(e.target.value)}
+                  className="w-full border rounded-xl px-3 py-2.5 text-sm"
+                  style={{ borderColor: '#ddeadd', color: '#162016' }}
+                >
+                  <option value="02">02 — Emitida con errores (sin factura de reemplazo)</option>
+                  <option value="01">01 — Emitida con errores (con factura de reemplazo)</option>
+                  <option value="03">03 — No se llevó a cabo la operación</option>
+                  <option value="04">04 — Relacionada en factura global</option>
+                </select>
+              </div>
+
+              {motivoFactura === '01' && (
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-wide block mb-1.5" style={{ color: '#8fa890', fontSize: 10.5 }}>
+                    UUID de la factura que sustituye
+                  </label>
+                  <input
+                    value={uuidSustitucion}
+                    onChange={e => setUuidSustitucion(e.target.value.trim())}
+                    placeholder="Folio fiscal de la nueva factura"
+                    className="w-full border rounded-xl px-3 py-2.5 text-sm"
+                    style={{ borderColor: '#ddeadd', fontFamily: 'monospace' }}
+                  />
+                </div>
+              )}
+
+              {errorCancelarFactura && (
+                <p className="text-xs" style={{ color: '#b91c1c' }}>{errorCancelarFactura}</p>
+              )}
+            </div>
+
+            <div className="flex gap-2 px-6 pb-5">
+              <button onClick={() => !cancelandoFactura && setModalCancelarFactura(false)}
+                className="flex-1 text-sm font-medium py-2.5 rounded-xl border"
+                style={{ borderColor: '#ddeadd', color: '#5a7060' }}>
+                Volver
+              </button>
+              <button
+                onClick={confirmarCancelarFactura}
+                disabled={cancelandoFactura}
+                className="flex-1 text-sm font-semibold py-2.5 rounded-xl transition-colors disabled:opacity-50"
+                style={{ background: '#dc2626', color: 'white' }}
+              >
+                {cancelandoFactura ? 'Cancelando…' : 'Confirmar cancelación'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal reenviar factura */}
+      {modalReenviarFactura && detalle && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.4)' }}
+          onClick={e => { if (e.target === e.currentTarget && !reenviandoFactura) setModalReenviarFactura(false) }}>
+          <div className="bg-white rounded-2xl shadow-xl" style={{ width: 420, maxWidth: '95vw' }}>
+            <div className="flex items-start justify-between px-6 pt-5 pb-4" style={{ borderBottom: '1px solid #ddeadd' }}>
+              <div>
+                <div className="font-bold" style={{ fontSize: 16, color: '#162016' }}>Reenviar factura</div>
+                <div className="text-sm mt-0.5" style={{ color: '#5a7060' }}>
+                  {detalle.folio}
+                  {detalle.factura?.uuid ? (
+                    <> · <span style={{ fontFamily: 'monospace', fontSize: 11 }}>{detalle.factura.uuid}</span></>
+                  ) : null}
+                </div>
+              </div>
+              <button onClick={() => !reenviandoFactura && setModalReenviarFactura(false)}
+                className="w-7 h-7 flex items-center justify-center rounded-md border text-sm mt-0.5"
+                style={{ borderColor: '#ddeadd', color: '#5a7060' }}>×</button>
+            </div>
+
+            <div className="px-6 py-5 flex flex-col gap-4">
+              <label className="text-xs font-medium" style={{ color: '#5a7060' }}>
+                Correo del destinatario
+                <input
+                  type="email"
+                  value={emailReenvio}
+                  onChange={e => setEmailReenvio(e.target.value)}
+                  className="mt-1 w-full border rounded-xl px-3 py-2.5 text-sm"
+                  style={{ borderColor: '#ddeadd' }}
+                  placeholder="cliente@correo.com"
+                />
+              </label>
+              <label className="flex items-center gap-2 text-sm" style={{ color: '#162016' }}>
+                <input
+                  type="checkbox"
+                  checked={incluirCopiaReenvio}
+                  onChange={e => setIncluirCopiaReenvio(e.target.checked)}
+                />
+                Incluir copia a administración
+              </label>
+              {errorReenviarFactura && (
+                <p className="text-xs" style={{ color: '#b91c1c' }}>{errorReenviarFactura}</p>
+              )}
+            </div>
+
+            <div className="flex gap-2 px-6 pb-5">
+              <button onClick={() => !reenviandoFactura && setModalReenviarFactura(false)}
+                className="flex-1 text-sm font-medium py-2.5 rounded-xl border"
+                style={{ borderColor: '#ddeadd', color: '#5a7060' }}>
+                Volver
+              </button>
+              <button
+                onClick={confirmarReenviarFactura}
+                disabled={reenviandoFactura}
+                className="flex-1 text-sm font-semibold py-2.5 rounded-xl transition-colors disabled:opacity-50"
+                style={{ background: '#16a34a', color: 'white' }}
+              >
+                {reenviandoFactura ? 'Enviando…' : 'Reenviar'}
+              </button>
             </div>
           </div>
         </div>

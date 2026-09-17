@@ -18,6 +18,7 @@ import CrearGasto from './pages/admin/CrearGasto'
 import AdminNominas from './pages/admin/AdminNominas'
 import NuevaNomina from './pages/admin/NuevaNomina'
 import Cotizador from './pages/admin/Cotizador'
+import SolicitudesRegistro from './pages/admin/SolicitudesRegistro'
 import HomeCoordinador from './pages/coordinador/HomeCoordinador'
 import EventoDetalle from './pages/coordinador/EventoDetalle'
 import ListaMaterial from './pages/coordinador/ListaMaterial'
@@ -49,6 +50,8 @@ import NominaCRM from './pages/crm/Nomina'
 import NuevaRentaCRM from './pages/crm/NuevaRenta'
 import EditarRentaCRM from './pages/crm/EditarRenta'
 import CotizadorCRM from './pages/crm/Cotizador'
+import HorasExtraCRM from './pages/crm/HorasExtra'
+import EditarWeb from './pages/crm/EditarWeb'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated)
@@ -129,6 +132,9 @@ export default function App() {
         <Route path="/admin/cotizador" element={
           <PrivateRoute><Cotizador /></PrivateRoute>
         } />
+        <Route path="/admin/solicitudes" element={
+          <PrivateRoute><SolicitudesRegistro /></PrivateRoute>
+        } />
         <Route path="/coordinador" element={
           <PrivateRoute><HomeCoordinador /></PrivateRoute>
         } />
@@ -143,6 +149,9 @@ export default function App() {
         } />
         <Route path="/encargado" element={
           <PrivateRoute><HomeEncargado /></PrivateRoute>
+        } />
+        <Route path="/encargado/catalogo" element={
+          <PrivateRoute><CatalogoMateriales /></PrivateRoute>
         } />
         <Route path="/encargado/listas/:id" element={
           <PrivateRoute><DetalleListaMaterial /></PrivateRoute>
@@ -178,8 +187,10 @@ export default function App() {
           <Route path="rutas" element={<Rutas />} />
           <Route path="empleados" element={<Empleados />} />
           <Route path="nomina" element={<NominaCRM />} />
+          <Route path="horas-extra" element={<HorasExtraCRM />} />
           <Route path="animacion" element={<Animacion />} />
           <Route path="contabilidad" element={<Reportes />} />
+          <Route path="editar-web" element={<EditarWeb />} />
           <Route path="gastos" element={<Gastos />} />
           <Route path="cuentas" element={<Cuentas />} />
         </Route>

@@ -104,6 +104,7 @@ if (PURPOSE === 'cotizacion' || PURPOSE === 'renta_crear') {
     hora_fin: horario.hora_fin,
     productos,
     manteles_regalo: session.manteles_regalo || extras.manteles_regalo || [],
+    omitir_promo_mantel: Boolean(session.omitir_promo_mantel || extras.omitir_promo_mantel),
   };
 }
 
@@ -122,7 +123,7 @@ if (PURPOSE === 'renta_crear') {
     telefono: String(telefono).replace(/\D/g, ''),
     cliente_nombre: session.cliente_nombre || session.nombre || extras.nombre || '',
     calle_y_numero: session.direccion || session.calle_y_numero || extras.direccion || '',
-    colonia: session.colonia || extras.colonia || '',
+    colonia: session.colonia || extras.colonia || 'Por definir',
     ciudad_o_municipio: session.ciudad || session.ciudad_o_municipio || extras.ciudad || '',
     mismo_domicilio: session.mismo_domicilio ?? extras.mismo_domicilio ?? true,
     fecha_renta: horario.fecha_renta,
@@ -132,6 +133,8 @@ if (PURPOSE === 'renta_crear') {
     manteles_regalo: session.manteles_regalo || extras.manteles_regalo || [],
     anticipo: session.anticipo ?? extras.anticipo ?? 0,
     notas: session.notas || extras.notas || '',
+    lat: session.lat ?? session.latitude ?? extras.lat ?? null,
+    lon: session.lon ?? session.longitude ?? extras.lon ?? null,
     accion: 'crear',
   };
 }

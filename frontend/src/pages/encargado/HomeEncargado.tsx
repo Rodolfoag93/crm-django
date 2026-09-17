@@ -83,6 +83,19 @@ export default function HomeEncargado() {
 
       <div className="p-4 max-w-lg mx-auto flex flex-col gap-4">
 
+        <button
+          type="button"
+          onClick={() => navigate('/encargado/catalogo')}
+          className="w-full bg-white rounded-2xl shadow-sm border border-green-100 p-4 flex items-center gap-3 text-left active:scale-[0.99] transition-transform"
+        >
+          <span className="text-2xl">📷</span>
+          <div className="flex-1">
+            <p className="font-semibold text-gray-900 text-sm">Catálogo de materiales</p>
+            <p className="text-xs text-gray-500">Agregar fotos · cámara o biblioteca</p>
+          </div>
+          <span className="text-gray-400">›</span>
+        </button>
+
         {/* Filtros */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-1 flex gap-1 overflow-x-auto">
           {filtros.map(f => (

@@ -40,6 +40,12 @@ const navSections: NavSection[] = [
     ],
   },
   {
+    label: 'Web',
+    items: [
+      { to: '/crm/editar-web', label: 'Editar web', icon: <Icon d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" /> },
+    ],
+  },
+  {
     label: 'Equipo',
     items: [
       { to: '/crm/rankings', label: 'Rankings', icon: <Icon d="M23 6L13.5 15.5 8.5 10.5 1 18M17 6h6v6" /> },
@@ -56,8 +62,10 @@ const BREADCRUMB: Record<string, string> = {
   '/crm/rutas': 'Rutas',
   '/crm/empleados': 'Empleados',
   '/crm/nomina': 'Nómina',
+  '/crm/horas-extra': 'Horas extras',
   '/crm/animacion': 'Animación',
   '/crm/contabilidad': 'Reportes',
+  '/crm/editar-web': 'Editar web',
   '/crm/gastos': 'Gastos',
   '/crm/cuentas': 'Cuentas',
   '/crm/rankings': 'Rankings',

@@ -121,17 +121,30 @@ export default function Home() {
 
         {/* Material (encargado) */}
         {user?.es_encargado_material && (
-          <div
-            onClick={() => navigate('/encargado')}
-            className="bg-white rounded-2xl shadow-sm p-5 flex items-center gap-4 cursor-pointer hover:shadow-md transition-shadow border border-gray-100"
-          >
-            <div className="bg-green-100 p-3 rounded-xl text-2xl">📦</div>
-            <div>
-              <h2 className="font-semibold text-gray-900">Material</h2>
-              <p className="text-gray-500 text-sm">Listas de eventos</p>
+          <>
+            <div
+              onClick={() => navigate('/encargado')}
+              className="bg-white rounded-2xl shadow-sm p-5 flex items-center gap-4 cursor-pointer hover:shadow-md transition-shadow border border-gray-100"
+            >
+              <div className="bg-green-100 p-3 rounded-xl text-2xl">📦</div>
+              <div>
+                <h2 className="font-semibold text-gray-900">Material</h2>
+                <p className="text-gray-500 text-sm">Listas de eventos</p>
+              </div>
+              <div className="ml-auto text-gray-400">›</div>
             </div>
-            <div className="ml-auto text-gray-400">›</div>
-          </div>
+            <div
+              onClick={() => navigate('/encargado/catalogo')}
+              className="bg-white rounded-2xl shadow-sm p-5 flex items-center gap-4 cursor-pointer hover:shadow-md transition-shadow border border-gray-100"
+            >
+              <div className="bg-emerald-100 p-3 rounded-xl text-2xl">📷</div>
+              <div>
+                <h2 className="font-semibold text-gray-900">Fotos del catálogo</h2>
+                <p className="text-gray-500 text-sm">Asignar imágenes a materiales</p>
+              </div>
+              <div className="ml-auto text-gray-400">›</div>
+            </div>
+          </>
         )}
 
         {/* Horas Extra */}

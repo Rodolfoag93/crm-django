@@ -261,13 +261,6 @@ def crear_horas_extra(request):
             horas = form.save(commit=False)
             horas.pago_hora = Decimal('55.0')
             horas.save()
-            if horas.total_pago > 0:
-                Gasto.objects.create(
-                    tipo="NOMINA",
-                    descripcion=f"Horas extra {horas.empleado} ({horas.semana_inicio} - {horas.semana_fin})",
-                    monto=horas.total_pago,
-                    fecha=horas.semana_fin
-                )
             return redirect(f"{reverse('lista_nomina')}?recibo_horas_extra={horas.id}")
     return render(request, 'nomina/horas_extra_form.html', {
         'form': form,
@@ -277,11 +270,23 @@ def crear_horas_extra(request):
 
 @login_required
 def pagar_horas_extra(request, id):
+    from core.services.horas_extra import HorasExtraPagoError, pagar_horas_extra_en_nomina
     horas = get_object_or_404(HorasExtra, id=id)
-    horas.pagado = True
-    horas.fecha_pago = timezone.now().date()
-    horas.save()
-    messages.success(request, "Horas extra pagadas")
+    try:
+        result = pagar_horas_extra_en_nomina(horas)
+        nomina = result.get('nomina')
+        if result.get('ya_pagado'):
+            messages.info(request, 'Estas horas extra ya estaban pagadas.')
+        elif nomina:
+            messages.success(
+                request,
+                f'Horas extra agregadas a la nómina de {horas.empleado} '
+                f'(total nómina ${nomina.total}).',
+            )
+        else:
+            messages.success(request, 'Horas extra marcadas como pagadas.')
+    except HorasExtraPagoError as exc:
+        messages.error(request, exc.message)
     return redirect('lista_horas_extra')
 
 

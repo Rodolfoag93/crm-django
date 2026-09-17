@@ -14,8 +14,20 @@ CALENDAR_ID = os.environ.get('GOOGLE_CALENDAR_ID', '')
 
 def get_calendar_service():
     if not CREDENTIALS_FILE or not os.path.exists(CREDENTIALS_FILE):
-        logger.warning('Google credentials file not found')
+        # ERROR (not warning): missing creds silently drop every pedido from Calendar.
+        # Keep the JSON outside the deploy tree (e.g. /home/trota/secrets/).
+        logger.error(
+            'Google credentials file not found (GOOGLE_CREDENTIALS_FILE=%r). '
+            'Store it outside the app dir so deploys cannot wipe it.',
+            CREDENTIALS_FILE or '',
+        )
         return None
+    if CREDENTIALS_FILE.startswith('/home/trota/crm-django/') or CREDENTIALS_FILE.startswith('./'):
+        logger.warning(
+            'GOOGLE_CREDENTIALS_FILE is inside the app/deploy tree (%s); '
+            'move it to /home/trota/secrets/ to avoid losing it on deploy.',
+            CREDENTIALS_FILE,
+        )
     try:
         credentials = service_account.Credentials.from_service_account_file(
             CREDENTIALS_FILE, scopes=SCOPES
@@ -30,6 +42,8 @@ def crear_evento_renta(renta):
     """Crea o actualiza un evento en Google Calendar para una renta."""
     service = get_calendar_service()
     if not service or not CALENDAR_ID:
+        if not CALENDAR_ID:
+            logger.error('GOOGLE_CALENDAR_ID is empty; cannot create calendar event')
         return None
 
     try:

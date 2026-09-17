@@ -83,16 +83,65 @@ if (resultados.length === 0) {
   }];
 }
 
-function score(nombre) {
-  const n = String(nombre || '')
+function normText(s) {
+  return String(s || '')
     .toLowerCase()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '');
-  let s = 0;
+}
+
+/**
+ * Score estricto: "mini slider" debe preferir Mini Slider sobre Combo Mini Slider.
+ * - exige todos los tokens del query
+ * - boost si la frase aparece
+ * - boost grande si el nombre es exactamente esos tokens
+ * - penaliza palabras extra en el nombre (combo, two, bowl…)
+ */
+function scoreAgainstQuery(nombre, queryTokens) {
+  const tokens = (queryTokens || [])
+    .map((t) => normText(t))
+    .filter((t) => t.length >= 2);
+  if (!tokens.length) return 0;
+
+  const n = normText(nombre);
+  const nameTokens = n.split(/[^a-z0-9]+/).filter((t) => t.length >= 2);
+
   for (const t of tokens) {
-    if (n.includes(t)) s += 2;
+    if (!n.includes(t)) return -1000;
   }
+
+  let s = tokens.length * 2;
+  const phrase = tokens.join(' ');
+  if (n.includes(phrase)) s += 8;
+
+  const exact =
+    nameTokens.length === tokens.length &&
+    tokens.every((t) => nameTokens.includes(t));
+  if (exact) s += 20;
+
+  const extras = nameTokens.filter((t) => !tokens.includes(t));
+  s -= extras.length * 5;
+  s -= Math.max(0, nameTokens.length - tokens.length) * 2;
   return s;
+}
+
+// Con varios nombres (search_parts), cada producto se puntúa vs el mejor grupo
+const partsForScore =
+  Array.isArray(rewrite.search_parts) && rewrite.search_parts.length
+    ? rewrite.search_parts.map((p) =>
+        String(p)
+          .split(/\s+/)
+          .filter(Boolean)
+      )
+    : [tokens];
+
+function score(nombre) {
+  let best = -1000;
+  for (const partTokens of partsForScore) {
+    const s = scoreAgainstQuery(nombre, partTokens.length ? partTokens : tokens);
+    if (s > best) best = s;
+  }
+  return best;
 }
 
 const crmIds = new Set(resultados.map((c) => c.id));
@@ -100,7 +149,36 @@ const crmIds = new Set(resultados.map((c) => c.id));
 const ranked = [...resultados]
   .filter((c) => c && c.id != null && c.disponible !== false)
   .map((c) => ({ ...c, _score: score(c.nombre) }))
-  .sort((a, b) => b._score - a._score || String(a.nombre).localeCompare(String(b.nombre)));
+  .filter((c) => c._score > -1000)
+  .sort(
+    (a, b) =>
+      b._score - a._score ||
+      String(a.nombre).length - String(b.nombre).length ||
+      String(a.nombre).localeCompare(String(b.nombre))
+  );
+
+if (ranked.length === 0) {
+  return [{
+    json: {
+      preferred_order_ids: [],
+      top_n: 5,
+      needs_human: false,
+      reason: 'no_matches',
+      confidence: 0,
+      top: [],
+      menu_whatsapp:
+        `No encontré brincolines con "${userText}".\nPrueba otra palabra (tema, tamaño)\n` +
+        '0. Buscar de nuevo\n9. Hablar con un asesor',
+      search_tokens_rewrite,
+      search_tokens_crm,
+      _debug: {
+        query_crm: rewrite.query_crm || null,
+        http_count: http.count ?? 0,
+        exit: 'business_empty_after_score',
+      },
+    },
+  }];
+}
 
 const topN = 5;
 const top = ranked.slice(0, topN).map(({ _score, ...rest }) => rest);
@@ -118,8 +196,11 @@ const lines = top.map((c, i) => {
 });
 
 const menu = [
-  'Encontré estas opciones:',
+  'Encontré estas opciones en el sistema:',
   ...lines,
+  '',
+  'Escribe el *número* de la que quieres.',
+  'Si quieres *varias*, mándalas juntas: *1 y 3* o *1,2*.',
   '',
   '0. Buscar de nuevo',
   '9. Hablar con un asesor',

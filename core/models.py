@@ -5,6 +5,7 @@ from django.contrib.auth.models import User
 from django.db.models import Sum, Max, F
 from datetime import timedelta
 from django.core.exceptions import ValidationError
+from django.core.validators import MinValueValidator, MaxValueValidator
 from decimal import Decimal, ROUND_HALF_UP
 
 # =============================================
@@ -955,6 +956,68 @@ class AsignacionCoordinador(models.Model):
         return f"{self.renta.folio} ? {self.coordinador}"
     class Meta:
         verbose_name = "Asignacion Coordinador"
+
+
+ENCUESTA_CLIENTE_SCORE_VALIDATORS = [
+    MinValueValidator(1),
+    MaxValueValidator(5),
+]
+
+
+class EncuestaClienteAnimacion(models.Model):
+    """Encuesta de satisfacción del cliente sobre la animación del evento (escala 1–5)."""
+    asignacion = models.OneToOneField(
+        AsignacionCoordinador,
+        on_delete=models.CASCADE,
+        related_name='encuesta_cliente',
+    )
+    comunicacion_previo = models.PositiveSmallIntegerField(
+        validators=ENCUESTA_CLIENTE_SCORE_VALIDATORS,
+        help_text='Coordinador se comunicó a tiempo y resolvió dudas',
+    )
+    atencion_coordinador = models.PositiveSmallIntegerField(
+        validators=ENCUESTA_CLIENTE_SCORE_VALIDATORS,
+        help_text='Atento al staff e invitados',
+    )
+    juegos_aceptacion = models.PositiveSmallIntegerField(
+        validators=ENCUESTA_CLIENTE_SCORE_VALIDATORS,
+        help_text='Juegos con buena aceptación / opciones para todos',
+    )
+    staff_servicio = models.PositiveSmallIntegerField(
+        validators=ENCUESTA_CLIENTE_SCORE_VALIDATORS,
+        help_text='Staff puntual, amable y al pendiente',
+    )
+    material_estado = models.PositiveSmallIntegerField(
+        validators=ENCUESTA_CLIENTE_SCORE_VALIDATORS,
+        help_text='Material en buen estado y listo',
+    )
+    comentario = models.TextField(blank=True)
+    capturada_por = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='encuestas_cliente_capturadas',
+    )
+    fecha = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Encuesta cliente animación'
+
+    @property
+    def promedio(self):
+        campos = [
+            self.comunicacion_previo,
+            self.atencion_coordinador,
+            self.juegos_aceptacion,
+            self.staff_servicio,
+            self.material_estado,
+        ]
+        return round(sum(campos) / len(campos), 2)
+
+    def __str__(self):
+        return f"Encuesta cliente — {self.asignacion.renta.folio}"
+
 
 class MaterialEvento(models.Model):
     asignacion = models.ForeignKey(

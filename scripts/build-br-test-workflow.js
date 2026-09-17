@@ -171,13 +171,15 @@ return [{
   }
 }];`;
 
-const armarPayload = `const s = $input.first().json;
+const armarPayload = `// $input = salida de Session To CRM (solo shapes). Estado conversacional
+// vive en T1b Cargar Search State (telefono, session, producto_elegido).
+const mapped = $input.first().json;
+const state = $('T1b Cargar Search State').item.json;
 
-if (s.skip_motor) {
-  return [{ json: s }];
+if (state.skip_motor) {
+  return [{ json: state }];
 }
 
-const mapped = $('Session To CRM Query (T1b)').item.json;
 const purpose = mapped.purpose;
 let payload;
 
@@ -191,15 +193,26 @@ if (!payload) {
   throw new Error('Armar Payload Motor: body null para purpose=' + purpose);
 }
 
+const telefono = String(
+  state.telefono || state.session?.telefono || payload.telefono || ''
+).replace(/\\D/g, '');
+if (!telefono) {
+  throw new Error(
+    'Armar Payload Motor: falta telefono (Session To CRM no lo pasa en cotizacion_body; debe venir de T1b Cargar Search State)'
+  );
+}
+
+const session = state.session || {};
+
 // Motor trotacrm-crear-plan espera top-level accion + telefono + horario + productos
 const motorBody = {
   ...payload,
   accion: purpose === 'renta_crear' ? 'crear' : 'cotizar',
-  telefono: s.telefono || payload.telefono,
-  nombre: payload.cliente_nombre || s.session?.cliente_nombre || '',
-  direccion: payload.calle_y_numero || s.session?.direccion || '',
-  colonia: payload.colonia || s.session?.colonia || '',
-  ciudad: payload.ciudad_o_municipio || s.session?.ciudad || '',
+  telefono,
+  nombre: payload.cliente_nombre || session.cliente_nombre || '',
+  direccion: payload.calle_y_numero || session.direccion || '',
+  colonia: payload.colonia || session.colonia || '',
+  ciudad: payload.ciudad_o_municipio || session.ciudad || '',
 };
 
 return [{
@@ -207,7 +220,7 @@ return [{
     skip_motor: false,
     purpose,
     motor_body: motorBody,
-    producto_elegido: s.producto_elegido,
+    producto_elegido: state.producto_elegido,
   }
 }];`;
 
@@ -438,6 +451,8 @@ return [{
   staticData: null,
   tags: [{ name: 'TROTA' }, { name: 'BR' }, { name: 'TEST' }],
   meta: { templateCredsSetupCompleted: false },
+  id: 'brTestT1aT1b001',
+  active: true,
 };
 
 const outPath = path.join(n8nDir, 'br-test-t1a-t1b.json');

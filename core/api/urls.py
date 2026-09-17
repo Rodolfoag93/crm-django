@@ -6,8 +6,9 @@ from core.api.views import (
     api_mantenimiento, api_marcar_limpieza, api_dashboard_admin, api_rentas_hoy, api_asistencia_hoy, api_editar_asistencia_admin,
     api_rutas_admin, api_crear_ruta, api_agregar_parada_admin, api_editar_ruta, api_eliminar_parada_admin, api_rentas_disponibles,
     api_nueva_renta, api_buscar_clientes, api_buscar_productos, api_crear_gasto,
-    api_catalogo_pagos_extra, api_crear_pago_extra_nomina, api_eliminar_pago_extra, api_recibo_nomina, api_mapa_entregas, api_mis_eventos, api_evento_detalle,
+    api_catalogo_pagos_extra, api_crear_pago_extra_nomina, api_eliminar_pago_extra, api_recibo_nomina, api_recibos_nomina_semana, api_mapa_entregas, api_mis_eventos, api_evento_detalle,
     api_lista_material_evento, api_agregar_material_evento, api_quitar_material_evento, api_catalogo_materiales,
+    api_materiales_staging_fotos, api_material_subir_foto, api_material_quitar_fondo,
     api_revisar_solicitud_material,
     api_listas_material_encargado, api_lista_material_detalle_encargado, api_surtir_lista, api_confirmar_llegada_coordinador,
     api_recibir_lista_bodega, api_subir_evidencia, api_evidencias_lista, api_enviar_lista_coordinador, api_mis_eventos_animador,
@@ -15,15 +16,21 @@ from core.api.views import (
     api_ranking_coordinadores, api_mi_calificacion_coordinador, api_animadores_disponibles, api_asignar_animador, api_quitar_animador,
     api_calificar_animador, api_ranking_animadores, api_animadores_por_calificar, api_registro_solicitud,
     api_rankings_eventos, api_actualizar_ubicacion,
-    api_eventos_animacion, api_coordinadores_crm, api_asignar_coordinador_crm,
+    api_eventos_animacion, api_encuesta_cliente_animacion,
+    api_coordinadores_crm, api_asignar_coordinador_crm,
     api_calificar_encargado, api_calificar_coordinador_encargado, api_estado_calificaciones_lista,
     api_crm_cotizaciones, api_crm_cotizacion_detalle, api_crm_cotizacion_status,
     api_crm_cotizacion_convertir, api_crm_cotizacion_pdf,
     api_crm_cotizacion_zona_imagen, api_crm_cotizacion_zona_imagen_borrar,
-    api_reporte_negocio, api_reporte_negocio_pdf,
+    api_reporte_negocio, api_reporte_negocio_pdf, api_reporte_productos,
 )
 from core.views.rutas import api_mis_rutas, api_confirmar_entrega, api_confirmar_recogida
 from core.api import bot_views
+from core.api.sitio_web_views import (
+    crm_sitio_web,
+    crm_sitio_web_imagen,
+    crm_sitio_web_imagen_borrar,
+)
 from django.urls import path
 
 
@@ -47,6 +54,7 @@ urlpatterns = [
     path('nomina/<int:nomina_id>/pagos-extra/', api_crear_pago_extra_nomina),
     path('nomina/pagos-extra/<int:pago_id>/eliminar/', api_eliminar_pago_extra),
     path('nomina/<int:nomina_id>/recibo/', api_recibo_nomina),
+    path('nomina/recibos-semana/', api_recibos_nomina_semana),
     path('mapa-entregas/', api_mapa_entregas),
     path('ubicacion/', api_actualizar_ubicacion),
 ] + router.urls + [
@@ -79,6 +87,9 @@ urlpatterns = [
     path('coordinador/eventos/<int:asignacion_id>/material/agregar/', api_agregar_material_evento),
     path('coordinador/material/<int:item_id>/quitar/', api_quitar_material_evento),
     path('coordinador/catalogo-materiales/', api_catalogo_materiales),
+    path('encargado/materiales-staging/', api_materiales_staging_fotos),
+    path('encargado/materiales/<int:material_id>/foto/', api_material_subir_foto),
+    path('encargado/materiales/<int:material_id>/quitar-fondo/', api_material_quitar_fondo),
     path('coordinador/eventos/<int:asignacion_id>/material/enviar/', api_enviar_lista_coordinador),
     path('coordinador/solicitudes-material/<int:solicitud_id>/revisar/', api_revisar_solicitud_material),
     path('encargado/listas/', api_listas_material_encargado),
@@ -102,6 +113,11 @@ urlpatterns = [
     path('registro/', api_registro_solicitud),
     path('crm/rankings/', api_rankings_eventos, name='api_rankings_eventos'),
     path('crm/animacion/eventos/', api_eventos_animacion, name='api_eventos_animacion'),
+    path(
+        'crm/animacion/asignaciones/<int:asignacion_id>/encuesta-cliente/',
+        api_encuesta_cliente_animacion,
+        name='api_encuesta_cliente_animacion',
+    ),
     path('crm/animacion/coordinadores/', api_coordinadores_crm, name='api_coordinadores_crm'),
     path('crm/animacion/asignar-coordinador/', api_asignar_coordinador_crm, name='api_asignar_coordinador_crm'),
     path('crm/cotizaciones/', api_crm_cotizaciones, name='api_crm_cotizaciones'),
@@ -114,6 +130,11 @@ urlpatterns = [
     path('encargado/listas/<int:lista_id>/calificar-coordinador/', api_calificar_coordinador_encargado),
     path('coordinador/listas/<int:lista_id>/calificar-encargado/', api_calificar_encargado),
     path('listas/<int:lista_id>/calificaciones/', api_estado_calificaciones_lista),
+
+    # ── Sitio web público (CRM) ───────────────────────────────────────
+    path('crm/sitio-web/', crm_sitio_web),
+    path('crm/sitio-web/imagenes/', crm_sitio_web_imagen),
+    path('crm/sitio-web/imagenes/<str:clave>/', crm_sitio_web_imagen_borrar),
 
     # ── Bot WhatsApp ──────────────────────────────────────────────────
     path('bot/cliente/', bot_views.bot_cliente),
@@ -135,4 +156,5 @@ urlpatterns = [
     # ── Reportes de negocio ───────────────────────────────────────────
     path('reportes/negocio/', api_reporte_negocio),
     path('reportes/negocio/pdf/', api_reporte_negocio_pdf),
+    path('reportes/productos/', api_reporte_productos),
 ]

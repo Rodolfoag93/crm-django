@@ -1,6 +1,7 @@
 """Emisión de CFDI vía FiscalAPI (https://docs.fiscalapi.com/)."""
 from __future__ import annotations
 
+import base64
 import json
 import logging
 import os
@@ -542,42 +543,13 @@ def facturar_renta(renta: Renta, datos: dict, user=None) -> Factura:
         factura.error_mensaje = ''
         factura.save()
 
-        # Siempre intentar obtener PDF (el create a veces no trae url)
-        if factura.provider_id and not factura.pdf_url:
-            try:
-                pdf_resp = _request('GET', f'/api/v4/invoices/{factura.provider_id}/pdf')
-                pdf_fields = _extract_invoice_fields(pdf_resp)
-                pdf_url = (
-                    pdf_fields.get('pdf_url')
-                    or (pdf_resp.get('data') or {}).get('pdfUrl')
-                    or pdf_resp.get('pdfUrl')
-                    or ''
-                )
-                if pdf_url:
-                    factura.pdf_url = str(pdf_url)
-                    factura.save(update_fields=['pdf_url'])
-            except FacturacionError as exc:
-                logger.warning('No se pudo obtener PDF de factura: %s', exc.message)
+        # El create a veces no trae pdfUrl; el endpoint correcto es POST /invoices/pdf (base64).
+        # No persistimos data-URLs; "Ver factura" obtiene el PDF on-demand.
 
         # Enviar al cliente (si hay) + copia interna (FISCALAPI_COPY_EMAIL)
-        destinos: list[str] = []
-        if receptor.get('email'):
-            destinos.append(receptor['email'].strip())
-        copy_email = (_cfg('FISCALAPI_COPY_EMAIL') or '').strip()
-        if copy_email and '@' in copy_email:
-            destinos.append(copy_email)
-        # dedupe preservando orden
-        seen = set()
-        destinos = [e for e in destinos if e and e.lower() not in seen and not seen.add(e.lower())]
-
-        if factura.provider_id and destinos:
-            for to in destinos:
-                try:
-                    _request('POST', f'/api/v4/invoices/{factura.provider_id}/email', {
-                        'toEmail': to,
-                    })
-                except FacturacionError as exc:
-                    logger.warning('No se pudo enviar factura a %s: %s', to, exc.message)
+        email_meta = _enviar_factura_a_destinos(factura, receptor.get('email') or '')
+        factura._email_enviado_a = email_meta['email_enviado_a']  # type: ignore[attr-defined]
+        factura._email_errores = email_meta['email_errores']  # type: ignore[attr-defined]
 
         return factura
 
@@ -587,6 +559,165 @@ def facturar_renta(renta: Renta, datos: dict, user=None) -> Factura:
         factura.save(update_fields=['estatus', 'error_mensaje'])
         raise
 
+
+def enviar_factura_email(factura: Factura, to_email: str) -> None:
+    """
+    Envía PDF+XML de una factura timbrada vía FiscalAPI.
+    Contrato oficial (SDK): POST /api/v4/invoices/send con invoiceId + toEmail.
+    """
+    to_email = (to_email or '').strip()
+    if not to_email or '@' not in to_email:
+        raise FacturacionError('Correo de destino inválido.')
+    if not factura.provider_id:
+        raise FacturacionError('La factura no tiene ID de FiscalAPI para enviar correo.')
+    if factura.estatus != 'TIMBRADA':
+        raise FacturacionError(
+            f'Solo se puede enviar por correo una factura timbrada (estatus: {factura.estatus}).',
+        )
+    _request('POST', '/api/v4/invoices/send', {
+        'invoiceId': factura.provider_id,
+        'toEmail': to_email,
+    })
+
+
+def _destinos_factura_email(email_cliente: str = '') -> list[str]:
+    destinos: list[str] = []
+    email_cliente = (email_cliente or '').strip()
+    if email_cliente and '@' in email_cliente:
+        destinos.append(email_cliente)
+    copy_email = (_cfg('FISCALAPI_COPY_EMAIL') or '').strip()
+    if copy_email and '@' in copy_email:
+        destinos.append(copy_email)
+    seen: set[str] = set()
+    return [e for e in destinos if e.lower() not in seen and not seen.add(e.lower())]
+
+
+def _enviar_factura_a_destinos(factura: Factura, email_cliente: str = '') -> dict:
+    """Best-effort: no tumba el timbrado si el mail falla."""
+    enviados: list[str] = []
+    errores: list[str] = []
+    destinos = _destinos_factura_email(email_cliente or factura.email or '')
+    if not factura.provider_id:
+        if destinos:
+            errores.append('Sin provider_id de FiscalAPI; no se pudo enviar correo.')
+        return {'email_enviado_a': enviados, 'email_errores': errores}
+    if not destinos:
+        return {'email_enviado_a': enviados, 'email_errores': errores}
+
+    for to in destinos:
+        try:
+            enviar_factura_email(factura, to)
+            enviados.append(to)
+        except FacturacionError as exc:
+            logger.warning('No se pudo enviar factura a %s: %s', to, exc.message)
+            errores.append(f'{to}: {exc.message}')
+    return {'email_enviado_a': enviados, 'email_errores': errores}
+
+
+def email_meta_factura(factura: Factura) -> dict:
+    return {
+        'email_enviado_a': list(getattr(factura, '_email_enviado_a', []) or []),
+        'email_errores': list(getattr(factura, '_email_errores', []) or []),
+    }
+
+
+def _extract_base64_file(resp: dict) -> tuple[bytes, str]:
+    """Extrae bytes y nombre de una FileResponse FiscalAPI."""
+    data = resp.get('data') if isinstance(resp.get('data'), dict) else resp
+    if not isinstance(data, dict):
+        data = resp
+    b64 = (
+        data.get('base64File')
+        or data.get('base64_file')
+        or data.get('Base64File')
+        or ''
+    )
+    if not b64 and isinstance(resp.get('data'), str):
+        b64 = resp['data']
+    if not b64:
+        raise FacturacionError('FiscalAPI no devolvió el PDF en base64.')
+    try:
+        raw = base64.b64decode(b64, validate=False)
+    except Exception as exc:
+        raise FacturacionError('PDF de FiscalAPI inválido (base64).') from exc
+    if not raw:
+        raise FacturacionError('PDF de FiscalAPI vacío.')
+    name = (
+        data.get('fileName')
+        or data.get('file_name')
+        or data.get('FileName')
+        or 'factura.pdf'
+    )
+    if not str(name).lower().endswith('.pdf'):
+        name = f'{name}.pdf'
+    return raw, str(name)
+
+
+def obtener_pdf_factura(factura: Factura) -> tuple[bytes, str]:
+    """
+    Descarga el PDF de una factura timbrada.
+    Contrato oficial: POST /api/v4/invoices/pdf con { invoiceId }.
+    """
+    if factura.estatus != 'TIMBRADA':
+        raise FacturacionError(
+            f'Solo hay PDF para facturas timbradas (estatus: {factura.estatus}).',
+        )
+    if not factura.provider_id:
+        raise FacturacionError('La factura no tiene ID de FiscalAPI para obtener el PDF.')
+    resp = _request('POST', '/api/v4/invoices/pdf', {
+        'invoiceId': factura.provider_id,
+    })
+    return _extract_base64_file(resp)
+
+
+def reenviar_factura(
+    factura: Factura,
+    *,
+    email: str | None = None,
+    incluir_copia: bool = True,
+) -> dict:
+    """
+    Reenvía el CFDI por correo.
+    Si email viene vacío, usa el email guardado en la factura.
+    incluir_copia añade FISCALAPI_COPY_EMAIL (si está configurado).
+    """
+    if factura.estatus != 'TIMBRADA':
+        raise FacturacionError(
+            f'Solo se puede reenviar una factura timbrada (estatus: {factura.estatus}).',
+        )
+    destino = (email if email is not None else factura.email or '').strip()
+    if destino and '@' not in destino:
+        raise FacturacionError('Correo de destino inválido.')
+
+    enviados: list[str] = []
+    errores: list[str] = []
+    destinos: list[str] = []
+    if destino:
+        destinos.append(destino)
+    if incluir_copia:
+        copy_email = (_cfg('FISCALAPI_COPY_EMAIL') or '').strip()
+        if copy_email and '@' in copy_email:
+            destinos.append(copy_email)
+    seen: set[str] = set()
+    destinos = [e for e in destinos if e.lower() not in seen and not seen.add(e.lower())]
+    if not destinos:
+        raise FacturacionError(
+            'Indica un correo o configura FISCALAPI_COPY_EMAIL para reenviar.',
+        )
+
+    for to in destinos:
+        try:
+            enviar_factura_email(factura, to)
+            enviados.append(to)
+        except FacturacionError as exc:
+            logger.warning('No se pudo reenviar factura a %s: %s', to, exc.message)
+            errores.append(f'{to}: {exc.message}')
+
+    if not enviados:
+        raise FacturacionError(
+            'No se pudo reenviar la factura. ' + ('; '.join(errores) if errores else ''),
+        )
+    return {'email_enviado_a': enviados, 'email_errores': errores}
 
 MOTIVOS_CANCELACION = {
     '01': 'Comprobante emitido con errores con relación',
@@ -693,6 +824,7 @@ def factura_resumen(factura: Factura | None) -> dict | None:
         'total': str(factura.total),
         'rfc': factura.rfc,
         'razon_social': factura.razon_social,
+        'email': factura.email or '',
         'pdf_url': factura.pdf_url,
         'xml_url': factura.xml_url,
         'error_mensaje': factura.error_mensaje,
